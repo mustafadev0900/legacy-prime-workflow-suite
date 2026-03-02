@@ -1,14 +1,14 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { useApp } from '@/contexts/AppContext';
-import { Search, Plus, X, Archive, FileText, CheckSquare, FolderOpen, Sparkles, Calendar, Bell, Clock, AlertTriangle } from 'lucide-react-native';
+import { Search, Plus, X, Archive, FileText, CheckSquare, FolderOpen, Sparkles, AlertTriangle } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import Svg, { Circle, G } from 'react-native-svg';
-import { Project, Report, ProjectReportData, DailyTask } from '@/types';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import { Project, Report, ProjectReportData } from '@/types';
 import DailyTaskCard from '@/components/DailyTasks/DailyTaskCard';
+import AddTaskModal from '@/components/DailyTasks/AddTaskModal';
 
 
 export default function DashboardScreen() {
@@ -52,14 +52,6 @@ export default function DashboardScreen() {
   const [showDailyTasksMenu, setShowDailyTasksMenu] = useState<boolean>(false);
   const [showAddTaskModal, setShowAddTaskModal] = useState<boolean>(false);
   const [taskFilter, setTaskFilter] = useState<'today' | 'upcoming' | 'all'>('today');
-  const [newTaskTitle, setNewTaskTitle] = useState<string>('');
-  const [newTaskDateString, setNewTaskDateString] = useState<string>('');
-  const [newTaskReminder, setNewTaskReminder] = useState<boolean>(false);
-  const [newTaskNotes, setNewTaskNotes] = useState<string>('');
-  const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [isAddingTask, setIsAddingTask] = useState<boolean>(false);
-  const [newTaskTime, setNewTaskTime] = useState<string>('09:00');
 
   const activeProjects = projects.filter(p => p.status !== 'archived');
   const archivedProjects = projects.filter(p => p.status === 'archived');
@@ -356,80 +348,20 @@ export default function DashboardScreen() {
     return `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
   };
 
-  const resetTaskForm = () => {
-    setNewTaskTitle('');
-    setNewTaskDateString('');
-    setNewTaskTime('09:00');
-    setNewTaskReminder(false);
-    setNewTaskNotes('');
-    setShowDatePicker(false);
-    setSelectedDate(new Date());
-    setIsAddingTask(false);
-  };
-
-  const handleDateChange = (event: any, date?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-
-    if (date) {
-      setSelectedDate(date);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      setNewTaskDateString(`${year}-${month}-${day}`);
-
-      if (Platform.OS === 'ios') {
-        setShowDatePicker(false);
-      }
-    } else if (Platform.OS === 'android') {
-      // User cancelled on Android
-      setShowDatePicker(false);
-    }
-  };
-
-  const isValidFutureDate = (): boolean => {
-    if (!newTaskDateString || newTaskDateString.length !== 10) return false;
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(newTaskDateString)) return false;
-    const today = new Date().toISOString().split('T')[0];
-    return newTaskDateString >= today;
-  };
-
-  const handleAddTask = async () => {
-    if (!newTaskTitle.trim()) {
-      showAlert('Error', 'Please enter a task title');
-      return;
-    }
-    if (!isValidFutureDate()) {
-      showAlert('Error', 'Please enter a valid date (YYYY-MM-DD format, today or future)');
-      return;
-    }
-
-    // Combine date and time into ISO datetime string
-    const dueDateTime = `${newTaskDateString}T${newTaskTime}:00`;
-
-    setIsAddingTask(true);
-    try {
-      await addDailyTask({
-        title: newTaskTitle.trim(),
-        dueDate: newTaskDateString,
-        dueTime: newTaskTime,
-        dueDateTime: dueDateTime,
-        reminder: newTaskReminder,
-        notes: newTaskNotes.trim(),
-        completed: false,
-        companyId: company?.id || '',
-        userId: user?.id || '',
-      });
-      setShowAddTaskModal(false);
-      resetTaskForm();
-    } catch (error) {
-      console.error('Error adding task:', error);
-      showAlert('Error', 'Failed to add task');
-    } finally {
-      setIsAddingTask(false);
-    }
+  const handleAddTaskSubmit = async (taskData: {
+    title: string;
+    dueDate: string;
+    dueTime: string;
+    dueDateTime: string;
+    reminder: boolean;
+    notes: string;
+  }) => {
+    await addDailyTask({
+      ...taskData,
+      completed: false,
+      companyId: company?.id || '',
+      userId: user?.id || '',
+    });
   };
 
   const handleConvertEstimateToProject = async (estimateId: string) => {
@@ -1946,193 +1878,11 @@ export default function DashboardScreen() {
       </Modal>
 
       {/* ===== ADD TASK MODAL ===== */}
-      <Modal visible={showAddTaskModal} animationType="slide" transparent={true} onRequestClose={() => { if (!isAddingTask) { setShowAddTaskModal(false); resetTaskForm(); } }}>
-        <View style={styles.addTaskOverlay}>
-          <View style={styles.addTaskModal}>
-            {/* Header */}
-            <View style={styles.addTaskHeader}>
-              <Text style={styles.addTaskTitle}>Add New Task</Text>
-              <TouchableOpacity
-                style={[styles.addTaskCloseButton, isAddingTask && { opacity: 0.5 }]}
-                onPress={() => { if (!isAddingTask) { setShowAddTaskModal(false); resetTaskForm(); } }}
-                disabled={isAddingTask}
-              >
-                <X size={20} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-
-            {/* Form */}
-            <ScrollView style={styles.addTaskForm} showsVerticalScrollIndicator={false}>
-              {/* Task Title */}
-              <View style={styles.addTaskField}>
-                <Text style={styles.addTaskLabel}>Task Title <Text style={styles.required}>*</Text></Text>
-                <TextInput
-                  style={styles.addTaskInput}
-                  placeholder="What needs to be done?"
-                  placeholderTextColor="#9CA3AF"
-                  value={newTaskTitle}
-                  onChangeText={setNewTaskTitle}
-                  autoFocus
-                />
-              </View>
-
-              {/* Due Date */}
-              <View style={styles.addTaskField}>
-                <Text style={styles.addTaskLabel}>Due Date <Text style={styles.required}>*</Text></Text>
-                {Platform.OS === 'web' ? (
-                  <View style={styles.dateInputWrapper}>
-                    <Calendar size={20} color="#6B7280" />
-                    <input
-                      type="date"
-                      style={{
-                        flex: 1,
-                        paddingTop: 14,
-                        paddingBottom: 14,
-                        fontSize: 16,
-                        color: '#1F2937',
-                        border: 'none',
-                        outline: 'none',
-                        backgroundColor: 'transparent',
-                        fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                      }}
-                      value={newTaskDateString}
-                      onChange={(e) => {
-                        const value = (e.target as HTMLInputElement).value;
-                        setNewTaskDateString(value);
-                      }}
-                      min={new Date().toISOString().split('T')[0]}
-                    />
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.dateInputWrapper}
-                    onPress={() => setShowDatePicker(true)}
-                    activeOpacity={0.7}
-                  >
-                    <Calendar size={20} color="#6B7280" />
-                    <Text style={[styles.dateInput, !newTaskDateString && styles.dateInputPlaceholder]}>
-                      {newTaskDateString || 'Select a date'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-                <Text style={styles.dateHint}>Must be today or a future date</Text>
-              </View>
-
-              {/* Due Time */}
-              <View style={styles.addTaskField}>
-                <Text style={styles.addTaskLabel}>Due Time</Text>
-                <View style={styles.timeInputWrapper}>
-                  <Clock size={20} color="#6B7280" />
-                  <TextInput
-                    style={styles.timeInput}
-                    placeholder="HH:MM"
-                    placeholderTextColor="#9CA3AF"
-                    value={newTaskTime}
-                    onChangeText={(text) => {
-                      // Format as HH:MM
-                      let cleaned = text.replace(/[^0-9:]/g, '');
-                      if (cleaned.length === 2 && !cleaned.includes(':')) {
-                        cleaned = cleaned + ':';
-                      }
-                      if (cleaned.length <= 5) {
-                        setNewTaskTime(cleaned);
-                      }
-                    }}
-                    keyboardType="numeric"
-                    maxLength={5}
-                  />
-                  <View style={styles.timePresets}>
-                    <TouchableOpacity style={styles.timePresetBtn} onPress={() => setNewTaskTime('09:00')}>
-                      <Text style={styles.timePresetText}>9 AM</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.timePresetBtn} onPress={() => setNewTaskTime('12:00')}>
-                      <Text style={styles.timePresetText}>12 PM</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.timePresetBtn} onPress={() => setNewTaskTime('17:00')}>
-                      <Text style={styles.timePresetText}>5 PM</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                <Text style={styles.dateHint}>24-hour format (e.g., 14:30 for 2:30 PM)</Text>
-              </View>
-
-              {/* Reminder Toggle */}
-              <View style={styles.addTaskField}>
-                <TouchableOpacity
-                  style={styles.reminderToggleRow}
-                  onPress={() => setNewTaskReminder(!newTaskReminder)}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.reminderIconWrapper}>
-                    <Bell size={20} color={newTaskReminder ? '#F59E0B' : '#9CA3AF'} />
-                  </View>
-                  <View style={styles.reminderTextWrapper}>
-                    <Text style={styles.reminderToggleLabel}>Set Reminder</Text>
-                    <Text style={styles.reminderToggleHint}>Get notified when task is due</Text>
-                  </View>
-                  <View style={[styles.toggleSwitch, newTaskReminder && styles.toggleSwitchActive]}>
-                    <View style={[styles.toggleKnob, newTaskReminder && styles.toggleKnobActive]} />
-                  </View>
-                </TouchableOpacity>
-              </View>
-
-              {/* Notes */}
-              <View style={styles.addTaskField}>
-                <Text style={styles.addTaskLabel}>Notes <Text style={styles.optional}>(Optional)</Text></Text>
-                <TextInput
-                  style={styles.addTaskTextArea}
-                  placeholder="Add any additional details..."
-                  placeholderTextColor="#9CA3AF"
-                  value={newTaskNotes}
-                  onChangeText={setNewTaskNotes}
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                />
-              </View>
-            </ScrollView>
-
-            {/* Footer Buttons */}
-            <View style={styles.addTaskFooter}>
-              <TouchableOpacity
-                style={[styles.addTaskCancelBtn, isAddingTask && styles.addTaskSubmitBtnDisabled]}
-                onPress={() => { setShowAddTaskModal(false); resetTaskForm(); }}
-                disabled={isAddingTask}
-              >
-                <Text style={styles.addTaskCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.addTaskSubmitBtn, (!newTaskTitle.trim() || !isValidFutureDate() || isAddingTask) && styles.addTaskSubmitBtnDisabled]}
-                onPress={handleAddTask}
-                disabled={!newTaskTitle.trim() || !isValidFutureDate() || isAddingTask}
-              >
-                {isAddingTask ? (
-                  <>
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                    <Text style={styles.addTaskSubmitText}>Adding...</Text>
-                  </>
-                ) : (
-                  <>
-                    <Plus size={18} color="#FFFFFF" />
-                    <Text style={styles.addTaskSubmitText}>Add Task</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Date Picker - Native Only */}
-      {Platform.OS !== 'web' && showDatePicker && (
-        <DateTimePicker
-          value={selectedDate}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={handleDateChange}
-          minimumDate={new Date()}
-        />
-      )}
+      <AddTaskModal
+        visible={showAddTaskModal}
+        onClose={() => setShowAddTaskModal(false)}
+        onSubmit={handleAddTaskSubmit}
+      />
 
     </View>
   );
