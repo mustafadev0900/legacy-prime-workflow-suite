@@ -11,8 +11,8 @@ import {
   Alert,
 } from 'react-native';
 import { X, Calendar, Bell, Clock, Plus } from 'lucide-react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useDailyTaskResponsive } from './hooks/useDailyTaskResponsive';
+import CustomDatePicker from './CustomDatePicker';
 
 interface AddTaskModalProps {
   visible: boolean;
@@ -27,7 +27,6 @@ interface AddTaskModalProps {
   }) => Promise<void>;
 }
 
-
 export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModalProps) {
   const responsive = useDailyTaskResponsive();
 
@@ -37,14 +36,7 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
   const [time, setTime] = useState('09:00');
   const [reminder, setReminder] = useState(false);
   const [notes, setNotes] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedTime, setSelectedTime] = useState<Date>(() => {
-    const d = new Date();
-    d.setHours(9, 0, 0, 0);
-    return d;
-  });
+  const [showCalendar, setShowCalendar] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const showAlert = (alertTitle: string, message: string) => {
@@ -61,12 +53,7 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
     setTime('09:00');
     setReminder(false);
     setNotes('');
-    setShowDatePicker(false);
-    setShowTimePicker(false);
-    setSelectedDate(new Date());
-    const d = new Date();
-    d.setHours(9, 0, 0, 0);
-    setSelectedTime(d);
+    setShowCalendar(false);
     setIsSubmitting(false);
   };
 
@@ -78,41 +65,24 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
     return dateString >= today;
   };
 
-  const handleDateChange = (_event: any, date?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-    if (date) {
-      setSelectedDate(date);
-      const year = date.getFullYear();
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      setDateString(`${year}-${month}-${day}`);
-      // Android: auto-close (system dialog has its own OK/Cancel)
-      // iOS (iPhone + iPad): user taps the "Done" button to dismiss the spinner
-      if (Platform.OS === 'android') {
-        setShowDatePicker(false);
-      }
-    } else if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
+  const formatDisplayDate = (str: string): string => {
+    if (!str) return '';
+    const d = new Date(str + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  const handleTimeChange = (_event: any, date?: Date) => {
-    if (Platform.OS === 'android') {
-      setShowTimePicker(false);
+  const handleDateSelect = (selectedDate: string) => {
+    setDateString(selectedDate);
+    setShowCalendar(false);
+  };
+
+  const handleTimeChange = (text: string) => {
+    let cleaned = text.replace(/[^0-9:]/g, '');
+    if (cleaned.length === 2 && !cleaned.includes(':')) {
+      cleaned = cleaned + ':';
     }
-    if (date) {
-      setSelectedTime(date);
-      const hours = String(date.getHours()).padStart(2, '0');
-      const minutes = String(date.getMinutes()).padStart(2, '0');
-      setTime(`${hours}:${minutes}`);
-      // Android: auto-close. iOS (iPhone + iPad): user taps "Done" to dismiss.
-      if (Platform.OS === 'android') {
-        setShowTimePicker(false);
-      }
-    } else if (Platform.OS === 'android') {
-      setShowTimePicker(false);
+    if (cleaned.length <= 5) {
+      setTime(cleaned);
     }
   };
 
@@ -122,7 +92,7 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
       return;
     }
     if (!isValidFutureDate()) {
-      showAlert('Error', 'Please enter a valid date (YYYY-MM-DD format, today or future)');
+      showAlert('Error', 'Please select a valid date (today or in the future)');
       return;
     }
 
@@ -141,7 +111,7 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
       onClose();
     } catch (error) {
       console.error('Error adding task:', error);
-      showAlert('Error', 'Failed to add task');
+      showAlert('Error', 'Failed to add task. Please try again.');
       setIsSubmitting(false);
     }
   };
@@ -151,7 +121,7 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
     onClose();
   };
 
-  const isFormValid = title.trim() && isValidFutureDate();
+  const isFormValid = title.trim().length > 0 && isValidFutureDate();
 
   return (
     <Modal
@@ -161,10 +131,11 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
       onRequestClose={handleClose}
     >
       <View style={styles.overlay}>
-        <View style={[styles.content, { maxWidth: responsive.isMobile ? '95%' : 440 }]}>
+        <View style={[styles.content, { maxWidth: responsive.isMobile ? '95%' : 480 }]}>
+
           {/* Header */}
-          <View style={[styles.header, { padding: responsive.sidebarPadding }]}>
-            <Text style={[styles.title, { fontSize: responsive.headerFontSize }]}>
+          <View style={[styles.header, { paddingHorizontal: responsive.sidebarPadding, paddingVertical: 16 }]}>
+            <Text style={[styles.headerTitle, { fontSize: responsive.headerFontSize }]}>
               Add New Task
             </Text>
             <TouchableOpacity style={styles.closeButton} onPress={handleClose} activeOpacity={0.7}>
@@ -172,13 +143,15 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
             </TouchableOpacity>
           </View>
 
-          {/* Form */}
+          {/* Scrollable form body */}
           <ScrollView
             style={styles.body}
-            contentContainerStyle={{ padding: responsive.sidebarPadding }}
+            contentContainerStyle={{ padding: responsive.sidebarPadding, paddingBottom: 8 }}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
           >
-            {/* Task Title */}
+
+            {/* ── Task Title ── */}
             <View style={styles.field}>
               <Text style={styles.label}>
                 Task Title <Text style={styles.required}>*</Text>
@@ -190,196 +163,91 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
                 value={title}
                 onChangeText={setTitle}
                 autoFocus={true}
+                returnKeyType="next"
               />
             </View>
 
-            {/* Due Date */}
+            {/* ── Due Date ── */}
             <View style={styles.field}>
               <Text style={styles.label}>
                 Due Date <Text style={styles.required}>*</Text>
               </Text>
-              {Platform.OS === 'web' ? (
-                <View style={styles.inputWithIcon}>
-                  <Calendar size={20} color="#6B7280" />
-                  <input
-                    type="date"
-                    style={{
-                      flex: 1,
-                      paddingTop: 14,
-                      paddingBottom: 14,
-                      fontSize: 16,
-                      color: '#1F2937',
-                      border: 'none',
-                      outline: 'none',
-                      backgroundColor: 'transparent',
-                      fontFamily:
-                        'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                    }}
-                    value={dateString}
-                    onChange={(e) => {
-                      const value = (e.target as HTMLInputElement).value;
-                      setDateString(value);
-                    }}
-                    min={new Date().toISOString().split('T')[0]}
-                  />
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.inputWithIcon}
-                  onPress={() => {
-                    setShowTimePicker(false);
-                    setShowDatePicker(prev => !prev);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Calendar size={20} color="#6B7280" />
-                  <Text style={[styles.dateText, !dateString && styles.datePlaceholder]}>
-                    {dateString || 'Select a date'}
-                  </Text>
-                </TouchableOpacity>
+
+              {/* Date trigger row */}
+              <TouchableOpacity
+                style={[styles.inputWithIcon, showCalendar && styles.inputWithIconActive]}
+                onPress={() => setShowCalendar(prev => !prev)}
+                activeOpacity={0.7}
+              >
+                <Calendar size={20} color={showCalendar ? '#10B981' : '#6B7280'} />
+                <Text style={[styles.inputText, !dateString && styles.inputPlaceholder]}>
+                  {dateString ? formatDisplayDate(dateString) : 'Select a date'}
+                </Text>
+                {dateString && (
+                  <TouchableOpacity
+                    onPress={() => { setDateString(''); setShowCalendar(false); }}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    activeOpacity={0.7}
+                  >
+                    <X size={16} color="#9CA3AF" />
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+
+              {/* Custom calendar — pure RN, no native bridge, works on iPad */}
+              {showCalendar && (
+                <CustomDatePicker
+                  value={dateString}
+                  onChange={handleDateSelect}
+                  minimumDate={new Date()}
+                />
               )}
 
-              {/* Inline Native Date Picker — rendered inside Modal to work on iPad */}
-              {Platform.OS !== 'web' && showDatePicker && (
-                <View style={styles.inlinePickerWrapper}>
-                  <DateTimePicker
-                    value={selectedDate}
-                    mode="date"
-                    display="spinner"
-                    onChange={handleDateChange}
-                    minimumDate={new Date()}
-                  />
-                  {Platform.OS === 'ios' && (
-                    <TouchableOpacity
-                      style={styles.pickerDoneBtn}
-                      onPress={() => setShowDatePicker(false)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.pickerDoneBtnText}>Done</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+              {!isValidFutureDate() && dateString.length > 0 && (
+                <Text style={styles.fieldError}>Must be today or a future date</Text>
               )}
             </View>
 
-            {/* Due Time */}
+            {/* ── Due Time ── */}
             <View style={styles.field}>
-              <Text style={styles.label}>Due Time</Text>
-              {Platform.OS === 'web' ? (
-                <View style={styles.inputWithIcon}>
-                  <Clock size={20} color="#6B7280" />
-                  <TextInput
-                    style={styles.inputInner}
-                    placeholder="HH:MM"
-                    placeholderTextColor="#9CA3AF"
-                    value={time}
-                    onChangeText={(text) => {
-                      let cleaned = text.replace(/[^0-9:]/g, '');
-                      if (cleaned.length === 2 && !cleaned.includes(':')) {
-                        cleaned = cleaned + ':';
-                      }
-                      if (cleaned.length <= 5) {
-                        setTime(cleaned);
-                      }
-                    }}
-                    keyboardType="numeric"
-                    maxLength={5}
-                  />
-                  <View style={styles.timePresets}>
-                    <TouchableOpacity style={styles.presetBtn} onPress={() => setTime('09:00')} activeOpacity={0.7}>
-                      <Text style={styles.presetText}>9AM</Text>
+              <Text style={styles.label}>Due Time <Text style={styles.optional}>(optional)</Text></Text>
+              <View style={styles.inputWithIcon}>
+                <Clock size={20} color="#6B7280" />
+                <TextInput
+                  style={styles.inputInner}
+                  placeholder="HH:MM"
+                  placeholderTextColor="#9CA3AF"
+                  value={time}
+                  onChangeText={handleTimeChange}
+                  keyboardType="numeric"
+                  maxLength={5}
+                />
+                <View style={styles.presetRow}>
+                  {[
+                    { label: '9AM', value: '09:00' },
+                    { label: '12PM', value: '12:00' },
+                    { label: '5PM', value: '17:00' },
+                  ].map(preset => (
+                    <TouchableOpacity
+                      key={preset.label}
+                      style={[styles.presetBtn, time === preset.value && styles.presetBtnActive]}
+                      onPress={() => setTime(preset.value)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.presetText, time === preset.value && styles.presetTextActive]}>
+                        {preset.label}
+                      </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.presetBtn} onPress={() => setTime('12:00')} activeOpacity={0.7}>
-                      <Text style={styles.presetText}>12PM</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.presetBtn} onPress={() => setTime('17:00')} activeOpacity={0.7}>
-                      <Text style={styles.presetText}>5PM</Text>
-                    </TouchableOpacity>
-                  </View>
+                  ))}
                 </View>
-              ) : (
-                // Native: tappable row that opens a time picker
-                <TouchableOpacity
-                  style={styles.inputWithIcon}
-                  onPress={() => {
-                    setShowDatePicker(false);
-                    setShowTimePicker(prev => !prev);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Clock size={20} color="#6B7280" />
-                  <Text style={styles.timeDisplayText}>{time || '09:00'}</Text>
-                  <View style={styles.timePresets}>
-                    <TouchableOpacity
-                      style={styles.presetBtn}
-                      onPress={() => {
-                        const d = new Date();
-                        d.setHours(9, 0, 0, 0);
-                        setTime('09:00');
-                        setSelectedTime(d);
-                        setShowTimePicker(false);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.presetText}>9AM</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.presetBtn}
-                      onPress={() => {
-                        const d = new Date();
-                        d.setHours(12, 0, 0, 0);
-                        setTime('12:00');
-                        setSelectedTime(d);
-                        setShowTimePicker(false);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.presetText}>12PM</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.presetBtn}
-                      onPress={() => {
-                        const d = new Date();
-                        d.setHours(17, 0, 0, 0);
-                        setTime('17:00');
-                        setSelectedTime(d);
-                        setShowTimePicker(false);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.presetText}>5PM</Text>
-                    </TouchableOpacity>
-                  </View>
-                </TouchableOpacity>
-              )}
-
-              {/* Inline Native Time Picker — rendered inside Modal to work on iPad */}
-              {Platform.OS !== 'web' && showTimePicker && (
-                <View style={styles.inlinePickerWrapper}>
-                  <DateTimePicker
-                    value={selectedTime}
-                    mode="time"
-                    display="spinner"
-                    onChange={handleTimeChange}
-                  />
-                  {Platform.OS === 'ios' && (
-                    <TouchableOpacity
-                      style={styles.pickerDoneBtn}
-                      onPress={() => setShowTimePicker(false)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.pickerDoneBtnText}>Done</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-              )}
+              </View>
             </View>
 
-            {/* Reminder Toggle */}
+            {/* ── Reminder Toggle ── */}
             <View style={styles.field}>
               <TouchableOpacity
                 style={styles.reminderRow}
-                onPress={() => setReminder(!reminder)}
+                onPress={() => setReminder(r => !r)}
                 activeOpacity={0.7}
               >
                 <View style={[styles.reminderIcon, reminder && styles.reminderIconActive]}>
@@ -395,10 +263,10 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
               </TouchableOpacity>
             </View>
 
-            {/* Notes */}
+            {/* ── Notes ── */}
             <View style={styles.field}>
               <Text style={styles.label}>
-                Notes <Text style={styles.optional}>(Optional)</Text>
+                Notes <Text style={styles.optional}>(optional)</Text>
               </Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
@@ -411,6 +279,7 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
                 textAlignVertical="top"
               />
             </View>
+
           </ScrollView>
 
           {/* Footer */}
@@ -435,6 +304,7 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
               </Text>
             </TouchableOpacity>
           </View>
+
         </View>
       </View>
     </Modal>
@@ -453,12 +323,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     width: '100%',
-    maxHeight: '90%',
+    maxHeight: '92%',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowRadius: 16,
+    elevation: 10,
   },
 
   // Header
@@ -467,9 +337,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: '#F3F4F6',
   },
-  title: {
+  headerTitle: {
     fontWeight: '700',
     color: '#1F2937',
   },
@@ -484,18 +354,18 @@ const styles = StyleSheet.create({
 
   // Body
   body: {
-    maxHeight: 500,
+    flexShrink: 1,
   },
 
   // Footer
   footer: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: '#F3F4F6',
     gap: 12,
   },
 
-  // Form Fields
+  // Fields
   field: {
     marginBottom: 20,
   },
@@ -511,7 +381,15 @@ const styles = StyleSheet.create({
   optional: {
     color: '#9CA3AF',
     fontWeight: '400',
+    fontSize: 13,
   },
+  fieldError: {
+    fontSize: 12,
+    color: '#EF4444',
+    marginTop: 4,
+  },
+
+  // Text inputs
   input: {
     backgroundColor: '#F9FAFB',
     borderWidth: 1,
@@ -533,8 +411,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderRadius: 10,
-    paddingHorizontal: 16,
-    gap: 12,
+    paddingHorizontal: 14,
+    gap: 10,
+  },
+  inputWithIconActive: {
+    borderColor: '#10B981',
+    backgroundColor: '#F0FDF4',
+  },
+  inputText: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: '#1F2937',
+  },
+  inputPlaceholder: {
+    color: '#9CA3AF',
   },
   inputInner: {
     flex: 1,
@@ -542,60 +433,32 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#1F2937',
   },
-  dateText: {
-    flex: 1,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: '#1F2937',
-  },
-  datePlaceholder: {
-    color: '#9CA3AF',
-  },
-  timeDisplayText: {
-    flex: 1,
-    paddingVertical: 14,
-    fontSize: 16,
-    color: '#1F2937',
-  },
 
-  // Inline Picker (date + time) — shown inside the Modal for iPad compatibility
-  inlinePickerWrapper: {
-    marginTop: 8,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#F9FAFB',
-  },
-  pickerDoneBtn: {
-    alignSelf: 'flex-end',
-    margin: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#10B981',
-    borderRadius: 8,
-  },
-  pickerDoneBtnText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-
-  // Time Presets
-  timePresets: {
+  // Time presets
+  presetRow: {
     flexDirection: 'row',
     gap: 6,
+    paddingVertical: 8,
   },
   presetBtn: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  presetBtnActive: {
+    backgroundColor: '#D1FAE5',
+    borderColor: '#10B981',
   },
   presetText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: '#4B5563',
+  },
+  presetTextActive: {
+    color: '#059669',
   },
 
   // Reminder
@@ -653,7 +516,7 @@ const styles = StyleSheet.create({
     transform: [{ translateX: 20 }],
   },
 
-  // Buttons
+  // Footer buttons
   cancelBtn: {
     flex: 1,
     paddingVertical: 14,
@@ -677,7 +540,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   submitBtnDisabled: {
-    opacity: 0.5,
+    opacity: 0.45,
   },
   submitBtnText: {
     fontSize: 16,
