@@ -13,6 +13,7 @@ import {
 import { X, Calendar, Bell, Clock, Plus } from 'lucide-react-native';
 import { useDailyTaskResponsive } from './hooks/useDailyTaskResponsive';
 import CustomDatePicker from './CustomDatePicker';
+import CustomTimePicker from './CustomTimePicker';
 
 interface AddTaskModalProps {
   visible: boolean;
@@ -37,6 +38,7 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
   const [reminder, setReminder] = useState(false);
   const [notes, setNotes] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const showAlert = (alertTitle: string, message: string) => {
@@ -54,6 +56,7 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
     setReminder(false);
     setNotes('');
     setShowCalendar(false);
+    setShowTimePicker(false);
     setIsSubmitting(false);
   };
 
@@ -65,6 +68,14 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
     return dateString >= today;
   };
 
+  const formatTimeDisplay = (t: string): string => {
+    if (!t) return '9:00 AM';
+    const [h, m] = t.split(':').map(Number);
+    const ampm = h < 12 ? 'AM' : 'PM';
+    const h12 = h % 12 || 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+  };
+
   const formatDisplayDate = (str: string): string => {
     if (!str) return '';
     const d = new Date(str + 'T00:00:00');
@@ -74,16 +85,6 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
   const handleDateSelect = (selectedDate: string) => {
     setDateString(selectedDate);
     setShowCalendar(false);
-  };
-
-  const handleTimeChange = (text: string) => {
-    let cleaned = text.replace(/[^0-9:]/g, '');
-    if (cleaned.length === 2 && !cleaned.includes(':')) {
-      cleaned = cleaned + ':';
-    }
-    if (cleaned.length <= 5) {
-      setTime(cleaned);
-    }
   };
 
   const handleSubmit = async () => {
@@ -176,7 +177,7 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
               {/* Date trigger row */}
               <TouchableOpacity
                 style={[styles.inputWithIcon, showCalendar && styles.inputWithIconActive]}
-                onPress={() => setShowCalendar(prev => !prev)}
+                onPress={() => { setShowTimePicker(false); setShowCalendar(prev => !prev); }}
                 activeOpacity={0.7}
               >
                 <Calendar size={20} color={showCalendar ? '#10B981' : '#6B7280'} />
@@ -211,36 +212,24 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
             {/* ── Due Time ── */}
             <View style={styles.field}>
               <Text style={styles.label}>Due Time <Text style={styles.optional}>(optional)</Text></Text>
-              <View style={styles.inputWithIcon}>
-                <Clock size={20} color="#6B7280" />
-                <TextInput
-                  style={styles.inputInner}
-                  placeholder="HH:MM"
-                  placeholderTextColor="#9CA3AF"
+
+              {/* Time trigger row */}
+              <TouchableOpacity
+                style={[styles.inputWithIcon, showTimePicker && styles.inputWithIconActive]}
+                onPress={() => { setShowCalendar(false); setShowTimePicker(prev => !prev); }}
+                activeOpacity={0.7}
+              >
+                <Clock size={20} color={showTimePicker ? '#10B981' : '#6B7280'} />
+                <Text style={styles.inputText}>{formatTimeDisplay(time)}</Text>
+              </TouchableOpacity>
+
+              {/* Custom time picker — pure RN, works on iPad */}
+              {showTimePicker && (
+                <CustomTimePicker
                   value={time}
-                  onChangeText={handleTimeChange}
-                  keyboardType="numeric"
-                  maxLength={5}
+                  onChange={setTime}
                 />
-                <View style={styles.presetRow}>
-                  {[
-                    { label: '9AM', value: '09:00' },
-                    { label: '12PM', value: '12:00' },
-                    { label: '5PM', value: '17:00' },
-                  ].map(preset => (
-                    <TouchableOpacity
-                      key={preset.label}
-                      style={[styles.presetBtn, time === preset.value && styles.presetBtnActive]}
-                      onPress={() => setTime(preset.value)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.presetText, time === preset.value && styles.presetTextActive]}>
-                        {preset.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
+              )}
             </View>
 
             {/* ── Reminder Toggle ── */}
