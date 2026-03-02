@@ -18,6 +18,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import * as DocumentPicker from 'expo-document-picker';
 import { ProjectFile, FileCategory } from '@/types';
 import { photoCategories } from '@/mocks/data';
+import { compressImage, uriToBase64 } from '@/lib/upload-utils';
 
 type TabType = 'overview' | 'schedule' | 'estimate' | 'change-orders' | 'clock' | 'expenses' | 'photos' | 'videos' | 'files' | 'reports';
 
@@ -55,6 +56,30 @@ export default function ProjectDetailScreen() {
   }, [id, fetchPayments]);
 
   useEffect(() => {
+    if (!id) return;
+    supabase
+      .from('project_files')
+      .select('*')
+      .eq('project_id', id as string)
+      .order('upload_date', { ascending: false })
+      .then(({ data }) => {
+        if (data) {
+          setDbProjectFiles(data.map((r: any) => ({
+            id: r.id,
+            projectId: r.project_id,
+            name: r.name,
+            category: r.category as FileCategory,
+            fileType: r.file_type,
+            fileSize: r.file_size,
+            uri: r.uri,
+            uploadDate: r.upload_date,
+            notes: r.notes ?? undefined,
+          })));
+        }
+      });
+  }, [id]);
+
+  useEffect(() => {
     if (!company?.id) return;
     supabase.from('inspection_videos').select('*').eq('company_id', company.id).order('created_at', { ascending: false })
       .then(({ data }) => setInspectionVideosData((data || []).map((item: any) => ({
@@ -65,6 +90,8 @@ export default function ProjectDetailScreen() {
         completedAt: item.completed_at, expiresAt: item.expires_at,
       }))));
   }, [company?.id]);
+  const [dbProjectFiles, setDbProjectFiles] = useState<ProjectFile[]>([]);
+  const [isUploadingFile, setIsUploadingFile] = useState<boolean>(false);
   const [uploadModalVisible, setUploadModalVisible] = useState<boolean>(false);
   const [selectedCategory, setSelectedCategory] = useState<FileCategory>('documentation');
   const [fileNotes, setFileNotes] = useState<string>('');
@@ -156,22 +183,26 @@ export default function ProjectDetailScreen() {
   }, [estimates, project?.estimateId]);
 
   const currentProjectFiles = useMemo(() => {
-    let filtered = projectFiles.filter(f => f.projectId === id);
-    
+    // Merge DB-persisted files with local AsyncStorage files.
+    // DB files take precedence; local-only entries (e.g. auto-synced photo stubs) fill in the gaps.
+    const dbIds = new Set(dbProjectFiles.map(f => f.id));
+    const localOnly = projectFiles.filter(f => f.projectId === id && !dbIds.has(f.id));
+    let merged = [...dbProjectFiles, ...localOnly];
+
     if (categoryFilter !== 'all') {
-      filtered = filtered.filter(f => f.category === categoryFilter);
+      merged = merged.filter(f => f.category === categoryFilter);
     }
-    
+
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(f => 
-        f.name.toLowerCase().includes(query) || 
+      merged = merged.filter(f =>
+        f.name.toLowerCase().includes(query) ||
         f.notes?.toLowerCase().includes(query)
       );
     }
-    
-    return filtered;
-  }, [projectFiles, id, categoryFilter, searchQuery]);
+
+    return merged;
+  }, [projectFiles, dbProjectFiles, id, categoryFilter, searchQuery]);
 
   const projectPhotos = useMemo(() => {
     return photos.filter(p => p.projectId === id);
@@ -245,6 +276,11 @@ export default function ProjectDetailScreen() {
   }, [currentProjectFiles, inspectionVideosData, project]);
 
   const handlePickDocument = async () => {
+    if (!company?.id) {
+      Alert.alert('Error', 'Company information not available. Please try again.');
+      return;
+    }
+
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: '*/*',
@@ -253,25 +289,54 @@ export default function ProjectDetailScreen() {
 
       if (!result.canceled && result.assets && result.assets[0]) {
         const asset = result.assets[0];
-        const file: ProjectFile = {
-          id: Date.now().toString(),
-          projectId: id as string,
-          name: asset.name,
-          category: selectedCategory,
-          fileType: asset.mimeType || 'unknown',
-          fileSize: asset.size || 0,
-          uri: asset.uri,
-          uploadDate: new Date().toISOString(),
-          notes: fileNotes,
-        };
 
-        addProjectFile(file);
+        // Close modal immediately so the user sees upload progress feedback
         setUploadModalVisible(false);
-        setFileNotes('');
-        Alert.alert('Success', 'File uploaded successfully!');
+        setIsUploadingFile(true);
+
+        try {
+          const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+
+          // Read the file as base64 (expo-file-system, works on iOS & Android)
+          const base64 = await uriToBase64(asset.uri);
+
+          const uploadResponse = await fetch(`${API_BASE}/api/upload-project-file-direct`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fileData: base64,
+              fileName: asset.name,
+              fileType: asset.mimeType || 'application/octet-stream',
+              fileSize: asset.size || 0,
+              companyId: company.id,
+              projectId: id as string,
+              category: selectedCategory,
+              notes: fileNotes,
+            }),
+          });
+
+          const uploadResult = await uploadResponse.json();
+
+          if (!uploadResponse.ok || !uploadResult.success) {
+            throw new Error(uploadResult.error || 'Upload failed');
+          }
+
+          // Add the DB-persisted file (S3 URL) to local state so it shows immediately
+          addProjectFile(uploadResult.file);
+          // Also add to dbProjectFiles so it survives the next DB refresh
+          setDbProjectFiles(prev => [uploadResult.file, ...prev]);
+
+          setFileNotes('');
+          Alert.alert('Success', 'File uploaded successfully!');
+        } catch (uploadError: any) {
+          console.error('[Files] Upload error:', uploadError);
+          Alert.alert('Error', uploadError.message || 'Failed to upload file. Please try again.');
+        } finally {
+          setIsUploadingFile(false);
+        }
       }
     } catch (error) {
-      console.error('Error picking document:', error);
+      console.error('[Files] Error picking document:', error);
       Alert.alert('Error', 'Failed to pick document. Please try again.');
     }
   };
@@ -1899,31 +1964,33 @@ export default function ProjectDetailScreen() {
           try {
             console.log('[Photos] Uploading photo to S3...');
 
-            // Convert image to blob for upload
+            const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+
+            // Compress the image and get reliable base64 (works on iOS, Android, and Web).
+            // This avoids the unreliable fetch().blob() path on iOS photo-picker URIs.
+            const compressed = await compressImage(selectedPhotoImage, { quality: 0.8 });
+
+            // Build a Blob from base64 for the S3 PUT upload
             let blob: Blob;
             if (Platform.OS === 'web') {
-              const response = await fetch(selectedPhotoImage);
-              blob = await response.blob();
+              const resp = await fetch(compressed.uri);
+              blob = await resp.blob();
             } else {
-              // On mobile, we'll use base64
-              const base64 = await fetch(selectedPhotoImage).then(r => r.blob());
-              blob = base64;
+              const byteArray = Uint8Array.from(atob(compressed.base64), c => c.charCodeAt(0));
+              blob = new Blob([byteArray], { type: 'image/jpeg' });
             }
 
-            // Get pre-signed upload URL
-            const fileName = `photo-${Date.now()}-${photoCategory.toLowerCase()}.jpg`;
-            const urlResponse = await fetch('/api/get-s3-upload-url', {
+            // Get pre-signed upload URL (absolute URL — required on native iOS)
+            const fileName = `photo-${Date.now()}-${photoCategory.toLowerCase().replace(/\s+/g, '-')}.jpg`;
+            const urlResponse = await fetch(`${API_BASE}/api/get-s3-upload-url`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                fileName,
-                fileType: 'image/jpeg',
-              }),
+              body: JSON.stringify({ fileName, fileType: 'image/jpeg' }),
             });
 
             if (!urlResponse.ok) {
-              const error = await urlResponse.json();
-              throw new Error(error.error || 'Failed to get upload URL');
+              const errBody = await urlResponse.json();
+              throw new Error(errBody.error || 'Failed to get upload URL');
             }
 
             const { uploadUrl, fileUrl } = await urlResponse.json();
@@ -1942,16 +2009,16 @@ export default function ProjectDetailScreen() {
 
             console.log('[Photos] Photo uploaded successfully:', fileUrl);
 
-            // Save photo with S3 URL
+            // Save photo metadata — await so we know it persisted before showing success
             const newPhoto = {
-              id: Date.now().toString(),
+              id: generateUUID(),
               projectId: id as string,
               category: photoCategory,
               notes: photoNotes,
               url: fileUrl,
               date: new Date().toISOString(),
             };
-            addPhoto(newPhoto);
+            await addPhoto(newPhoto);
 
             setSelectedPhotoImage(null);
             setPhotoNotes('');
@@ -2371,11 +2438,17 @@ export default function ProjectDetailScreen() {
                       <Text style={styles.cancelButtonText}>Cancel</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.selectFileButton}
+                      style={[styles.selectFileButton, isUploadingFile && { opacity: 0.6 }]}
                       onPress={handlePickDocument}
+                      disabled={isUploadingFile}
                     >
-                      <Upload size={18} color="#FFFFFF" />
-                      <Text style={styles.selectFileButtonText}>Select File</Text>
+                      {isUploadingFile
+                        ? <ActivityIndicator size="small" color="#FFFFFF" />
+                        : <Upload size={18} color="#FFFFFF" />
+                      }
+                      <Text style={styles.selectFileButtonText}>
+                        {isUploadingFile ? 'Uploading...' : 'Select File'}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </TouchableOpacity>
