@@ -10,6 +10,7 @@ import * as Contacts from 'expo-contacts';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { compressImage } from '@/lib/upload-utils';
+import { generateUUID } from '@/utils/uuid';
 
 export default function SubcontractorsScreen() {
   const { subcontractors = [], addSubcontractor, projects, addProjectFile, addNotification, user, company, refreshSubcontractors } = useApp();
@@ -1549,7 +1550,7 @@ ${company?.officePhone || ''}`;
                 }
 
                 const notification = {
-                  id:        crypto.randomUUID(),
+                  id:        generateUUID(),
                   userId:    user?.id || '',
                   companyId: company?.id || '',
                   type:      'general' as const,

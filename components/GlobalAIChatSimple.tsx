@@ -15,6 +15,7 @@ import { useApp } from '@/contexts/AppContext';
 import { sendEstimate } from '@/utils/sendEstimate';
 import { mockPhotos } from '@/mocks/data';
 import * as pdfjsLib from 'pdfjs-dist';
+import { generateUUID } from '@/utils/uuid';
 
 // Configure PDF.js worker (only on web)
 if (Platform.OS === 'web') {
@@ -1865,7 +1866,7 @@ Generate appropriate line items from the price list that fit this scope of work$
           case 'send_notification':
             if (addNotification && pendingAction.data) {
               const notification = {
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 userId: user?.id || '',
                 read: false,
                 createdAt: new Date().toISOString(),

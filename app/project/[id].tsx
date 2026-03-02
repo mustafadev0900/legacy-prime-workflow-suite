@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { ArrowLeft, FileText, Clock, DollarSign, Camera, Ruler, Plus, Archive, TrendingUp, Calendar, Users, AlertCircle, UserCheck, CreditCard, Wallet, Coffee, File, FolderOpen, Upload, Folder, Download, Trash2, X, Search, Image as ImageIcon } from 'lucide-react-native';
 import ClockInOutComponent from '@/components/ClockInOutComponent';
 import CustomDatePicker from '@/components/DailyTasks/CustomDatePicker';
+import { generateUUID } from '@/utils/uuid';
 import RequestEstimateComponent from '@/components/RequestEstimate';
 import GlobalAIChatSimple from '@/components/GlobalAIChatSimple';
 import { Image } from 'expo-image';
@@ -3073,7 +3074,7 @@ export default function ProjectDetailScreen() {
                     }
                     const saved = await res.json().catch(() => ({}));
                     addNotification({
-                      id:        crypto.randomUUID(),
+                      id:        generateUUID(),
                       userId:    user?.id || '',
                       companyId: company?.id || '',
                       type:      'payment-received',

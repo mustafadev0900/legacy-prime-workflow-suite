@@ -8,6 +8,7 @@ import { mockProjects, mockClients, mockExpenses, mockPhotos, mockTasks } from '
 import { checkAndSeedData, getDefaultCompany, getDefaultUser } from '@/lib/seed-data';
 import { fixtureClockEntries } from '@/mocks/fixtures';
 import { supabase } from '@/lib/supabase';
+import { generateUUID } from '@/utils/uuid';
 
 /**
  * Get the correct API base URL
@@ -2057,7 +2058,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     }
 
     addNotification({
-      id:        crypto.randomUUID(),
+      id:        generateUUID(),
       userId:    user?.id || '',
       companyId: company?.id || '',
       type:      'payment-received',
@@ -2218,7 +2219,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     }
 
     addNotification({
-      id:        crypto.randomUUID(),
+      id:        generateUUID(),
       userId:    user?.id || '',
       companyId: company?.id || '',
       type:      'change-order',
@@ -2265,7 +2266,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
 
     if (isBeingApproved) {
       addNotification({
-        id:        crypto.randomUUID(),
+        id:        generateUUID(),
         userId:    user?.id || '',
         companyId: company?.id || '',
         type:      'change-order',
@@ -2277,7 +2278,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
       });
     } else if (isBeingRejected) {
       addNotification({
-        id:        crypto.randomUUID(),
+        id:        generateUUID(),
         userId:    user?.id || '',
         companyId: company?.id || '',
         type:      'change-order',
@@ -2398,7 +2399,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     console.log('[Storage] Proposal saved successfully');
 
     const notification: Notification = {
-      id:        crypto.randomUUID(),
+      id:        generateUUID(),
       userId:    user?.id || '',
       companyId: company?.id || '',
       type:      'estimate-received',
@@ -2421,7 +2422,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     // Non-UUID ids (e.g. notif_${Date.now()}) cause a silent PG type error.
     const notif = notification.id && /^[0-9a-f-]{36}$/i.test(notification.id)
       ? notification
-      : { ...notification, id: crypto.randomUUID() };
+      : { ...notification, id: generateUUID() };
     const updated = [notif, ...notifications];
     setNotifications(updated);
     await AsyncStorage.setItem('notifications', JSON.stringify(updated));

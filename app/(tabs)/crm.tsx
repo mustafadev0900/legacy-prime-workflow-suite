@@ -13,6 +13,7 @@ import { sendEstimate as sendEstimateUtil } from '@/utils/sendEstimate';
 import { z } from 'zod';
 import { useTwilioSMS, useTwilioCalls } from '@/components/TwilioIntegration';
 import { supabase } from '@/lib/supabase';
+import { generateUUID } from '@/utils/uuid';
 
 // Phone validation helpers
 const isValidUSPhone = (phone: string): boolean => {
@@ -1144,7 +1145,7 @@ export default function CRMScreen() {
       console.log('[CRM] Creating video inspection link for:', client.name);
 
       // Generate token client-side for immediate use
-      const token = crypto.randomUUID();
+      const token = generateUUID();
       const baseUrl = process.env.EXPO_PUBLIC_APP_URL || 'https://legacy-prime-workflow-suite.vercel.app';
       const inspectionUrl = `${baseUrl}/inspection-video/${token}`;
 

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, TextInput,
 import { Send, X, FileText } from 'lucide-react-native';
 import { Subcontractor, EstimateRequest, Notification } from '@/types';
 import { useApp } from '@/contexts/AppContext';
+import { generateUUID } from '@/utils/uuid';
 
 interface RequestEstimateProps {
   projectId: string;
@@ -42,7 +43,7 @@ export default function RequestEstimateComponent({ projectId, projectName }: Req
     };
 
     const notification: Notification = {
-      id:        crypto.randomUUID(),
+      id:        generateUUID(),
       userId:    user?.id || '',
       companyId: company?.id || '',
       type:      'general',

@@ -10,6 +10,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as MailComposer from 'expo-mail-composer';
 import { generateChangeOrderHtml } from '@/utils/generateChangeOrderPdf';
+import { generateUUID } from '@/utils/uuid';
 
 export default function ChangeOrdersScreen() {
   const { id } = useLocalSearchParams();
@@ -103,7 +104,7 @@ export default function ChangeOrdersScreen() {
       });
       if (error) throw error;
       addNotification({
-        id:        crypto.randomUUID(),
+        id:        generateUUID(),
         userId:    user?.id || '',
         companyId: company?.id || '',
         type:      'change-order',
@@ -154,7 +155,7 @@ export default function ChangeOrdersScreen() {
     const doApprove = () => {
       updateChangeOrder(changeOrder.id, { status: 'approved', approvedDate: new Date().toISOString() });
       addNotification({
-        id:        crypto.randomUUID(),
+        id:        generateUUID(),
         userId:    user?.id || '',
         companyId: company?.id || '',
         type:      'change-order',
@@ -211,7 +212,7 @@ export default function ChangeOrdersScreen() {
           onPress: () => {
             updateChangeOrder(changeOrder.id, { status: 'rejected' });
             addNotification({
-              id:        crypto.randomUUID(),
+              id:        generateUUID(),
               userId:    user?.id || '',
               companyId: company?.id || '',
               type:      'change-order',
