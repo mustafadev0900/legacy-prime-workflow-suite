@@ -27,8 +27,6 @@ interface AddTaskModalProps {
   }) => Promise<void>;
 }
 
-// iPad detection — Platform.isPad is only defined on the iOS static variant
-const isIPad = Platform.OS === 'ios' && !!(Platform as any).isPad;
 
 export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModalProps) {
   const responsive = useDailyTaskResponsive();
@@ -90,9 +88,9 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
       setDateString(`${year}-${month}-${day}`);
-      // iPhone: auto-close spinner after selection
-      // iPad: user taps the "Done" button to dismiss the inline calendar
-      if (!isIPad) {
+      // Android: auto-close (system dialog has its own OK/Cancel)
+      // iOS (iPhone + iPad): user taps the "Done" button to dismiss the spinner
+      if (Platform.OS === 'android') {
         setShowDatePicker(false);
       }
     } else if (Platform.OS === 'android') {
@@ -109,8 +107,8 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
       const hours = String(date.getHours()).padStart(2, '0');
       const minutes = String(date.getMinutes()).padStart(2, '0');
       setTime(`${hours}:${minutes}`);
-      // iPhone: auto-close spinner. iPad: user taps "Done" to dismiss.
-      if (!isIPad) {
+      // Android: auto-close. iOS (iPhone + iPad): user taps "Done" to dismiss.
+      if (Platform.OS === 'android') {
         setShowTimePicker(false);
       }
     } else if (Platform.OS === 'android') {
@@ -247,11 +245,11 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
                   <DateTimePicker
                     value={selectedDate}
                     mode="date"
-                    display={isIPad ? 'inline' : 'spinner'}
+                    display="spinner"
                     onChange={handleDateChange}
                     minimumDate={new Date()}
                   />
-                  {isIPad && (
+                  {Platform.OS === 'ios' && (
                     <TouchableOpacity
                       style={styles.pickerDoneBtn}
                       onPress={() => setShowDatePicker(false)}
@@ -364,7 +362,7 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
                     display="spinner"
                     onChange={handleTimeChange}
                   />
-                  {isIPad && (
+                  {Platform.OS === 'ios' && (
                     <TouchableOpacity
                       style={styles.pickerDoneBtn}
                       onPress={() => setShowTimePicker(false)}
