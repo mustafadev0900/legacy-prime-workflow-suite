@@ -1299,6 +1299,54 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     };
   }, [user?.id]);
 
+  // ─── Realtime: clock entry sync ──────────────────────────────────────────────
+  // Listens for INSERT (clock-in) and UPDATE (clock-out, lunch) on clock_entries
+  // scoped to this company so the admin sees live worker status without polling.
+  useEffect(() => {
+    if (!company?.id) return;
+
+    const channel = supabase
+      .channel(`clock-entries:${company.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'clock_entries',
+          filter: `company_id=eq.${company.id}`,
+        },
+        (payload) => {
+          const incoming = mapClockEntry(payload.new);
+          console.log('[Realtime] Clock entry INSERT:', incoming.id);
+          setClockEntries(prev => {
+            if (prev.some(e => e.id === incoming.id)) return prev;
+            return [incoming, ...prev];
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'clock_entries',
+          filter: `company_id=eq.${company.id}`,
+        },
+        (payload) => {
+          const updated = mapClockEntry(payload.new);
+          console.log('[Realtime] Clock entry UPDATE:', updated.id, 'clockOut:', updated.clockOut);
+          setClockEntries(prev => prev.map(e => e.id === updated.id ? { ...e, ...updated } : e));
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Clock-entries channel status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [company?.id]);
+
   // Load daily logs when company is available
   useEffect(() => {
     if (company?.id) {
