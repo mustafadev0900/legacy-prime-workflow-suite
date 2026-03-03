@@ -54,6 +54,10 @@ export default function ProjectExpensesScreen() {
   const [viewingReceiptUrl, setViewingReceiptUrl] = useState<string | null>(null);
   const [showReceiptViewer, setShowReceiptViewer] = useState<boolean>(false);
 
+  // Expense detail modal state
+  const [selectedExpense, setSelectedExpense] = useState<any>(null);
+  const [showExpenseDetail, setShowExpenseDetail] = useState<boolean>(false);
+
   // Duplicate detection state
   const [duplicateCheckResult, setDuplicateCheckResult] = useState<any>(null);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState<boolean>(false);
@@ -911,7 +915,12 @@ export default function ProjectExpensesScreen() {
                   const isLaborExpense = expense.type === 'Labor' && expense.clockEntryId;
 
                   return (
-                    <View key={expense.id} style={styles.expenseCard}>
+                    <TouchableOpacity
+                      key={expense.id}
+                      style={styles.expenseCard}
+                      activeOpacity={0.75}
+                      onPress={() => { setSelectedExpense(expense); setShowExpenseDetail(true); }}
+                    >
                       {/* 🎯 CLIENT DESIGN: Avatar + Name + Amount on first row */}
                       <View style={styles.expenseMainRow}>
                         {/* Left: Avatar + Name + Category */}
@@ -971,7 +980,7 @@ export default function ProjectExpensesScreen() {
                       </View>
                       <Text style={styles.expenseStore}>{expense.store}</Text>
                       <Text style={styles.expenseDate}>{new Date(expense.date).toLocaleDateString()}</Text>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })
               )}
@@ -1360,6 +1369,119 @@ export default function ProjectExpensesScreen() {
                     contentFit="contain"
                   />
                 )
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {/* Expense Detail Modal */}
+        <Modal
+          visible={showExpenseDetail}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowExpenseDetail(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.detailSheet}>
+              {/* Header */}
+              <View style={styles.detailHeader}>
+                <Text style={styles.detailTitle}>Expense Details</Text>
+                <TouchableOpacity onPress={() => setShowExpenseDetail(false)} style={styles.iconBtn}>
+                  <X size={22} color="#1F2937" />
+                </TouchableOpacity>
+              </View>
+
+              {selectedExpense && (
+                <ScrollView style={styles.detailBody} showsVerticalScrollIndicator={false}>
+                  {/* Amount */}
+                  <View style={styles.detailAmountRow}>
+                    <Text style={styles.detailAmount}>${Number(selectedExpense.amount).toLocaleString()}</Text>
+                    {selectedExpense.receiptUrl && (
+                      <TouchableOpacity
+                        style={styles.detailReceiptBtn}
+                        onPress={() => { setShowExpenseDetail(false); handleViewReceipt(selectedExpense.receiptUrl!); }}
+                      >
+                        <ImageIcon size={14} color="#10B981" />
+                        <Text style={styles.detailReceiptBtnText}>View Receipt</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  {/* Added by */}
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Added by</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {selectedExpense.uploader ? (
+                        selectedExpense.uploader.avatar ? (
+                          <Image source={{ uri: selectedExpense.uploader.avatar }} style={styles.detailAvatar} contentFit="cover" />
+                        ) : (
+                          <View style={[styles.detailAvatar, { backgroundColor: '#2563EB', justifyContent: 'center', alignItems: 'center' }]}>
+                            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
+                              {selectedExpense.uploader.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                            </Text>
+                          </View>
+                        )
+                      ) : null}
+                      <Text style={styles.detailValue}>
+                        {selectedExpense.uploader?.name ?? 'Unknown'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Store */}
+                  {selectedExpense.store ? (
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Store / Invoice</Text>
+                      <Text style={styles.detailValue}>{selectedExpense.store}</Text>
+                    </View>
+                  ) : null}
+
+                  {/* Date */}
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Date</Text>
+                    <Text style={styles.detailValue}>
+                      {selectedExpense.date ? new Date(selectedExpense.date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : '—'}
+                    </Text>
+                  </View>
+
+                  {/* Type */}
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Type</Text>
+                    <Text style={styles.detailValue}>{selectedExpense.type}</Text>
+                  </View>
+
+                  {/* Category */}
+                  {selectedExpense.subcategory && selectedExpense.subcategory !== selectedExpense.type ? (
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Category</Text>
+                      <Text style={styles.detailValue}>{selectedExpense.subcategory}</Text>
+                    </View>
+                  ) : null}
+
+                  {/* Notes */}
+                  {selectedExpense.notes ? (
+                    <View style={[styles.detailRow, { alignItems: 'flex-start' }]}>
+                      <Text style={styles.detailLabel}>Notes</Text>
+                      <Text style={[styles.detailValue, { flex: 1 }]}>{selectedExpense.notes}</Text>
+                    </View>
+                  ) : null}
+
+                  {/* Receipt image preview */}
+                  {selectedExpense.receiptUrl && !selectedExpense.receiptUrl.toLowerCase().includes('.pdf') && (
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => { setShowExpenseDetail(false); handleViewReceipt(selectedExpense.receiptUrl!); }}
+                    >
+                      <Image
+                        source={{ uri: selectedExpense.receiptUrl }}
+                        style={styles.detailReceiptPreview}
+                        contentFit="cover"
+                      />
+                    </TouchableOpacity>
+                  )}
+
+                  <View style={{ height: 32 }} />
+                </ScrollView>
               )}
             </View>
           </View>
@@ -2017,5 +2139,95 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 4,
     fontStyle: 'italic' as const,
+  },
+
+  // ── Expense detail bottom sheet ─────────────────────────
+  detailSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '88%',
+  },
+  detailHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  detailTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: '#1F2937',
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  detailBody: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  detailAmountRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: 20,
+  },
+  detailAmount: {
+    fontSize: 32,
+    fontWeight: '700' as const,
+    color: '#2563EB',
+  },
+  detailReceiptBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    backgroundColor: '#D1FAE5',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  detailReceiptBtnText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#065F46',
+  },
+  detailRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    gap: 12,
+  },
+  detailLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    flexShrink: 0,
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: '#1F2937',
+    textAlign: 'right' as const,
+    flexShrink: 1,
+  },
+  detailAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  detailReceiptPreview: {
+    width: '100%',
+    height: 200,
+    borderRadius: 10,
+    marginTop: 20,
+    backgroundColor: '#F3F4F6',
   },
 });

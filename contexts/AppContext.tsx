@@ -65,6 +65,26 @@ const mapPhoto = (row: any) => ({
   uploader: row.uploader ?? null,
 });
 
+const mapExpense = (row: any) => ({
+  id: row.id,
+  projectId: row.project_id ?? row.projectId ?? '',
+  companyId: row.company_id ?? row.companyId ?? '',
+  type: row.type ?? '',
+  subcategory: row.subcategory ?? '',
+  amount: Number(row.amount ?? 0),
+  store: row.store ?? '',
+  date: row.date ?? '',
+  notes: row.notes ?? '',
+  receiptUrl: row.receipt_url ?? row.receiptUrl,
+  imageHash: row.image_hash ?? row.imageHash,
+  ocrFingerprint: row.ocr_fingerprint ?? row.ocrFingerprint,
+  imageSizeBytes: row.image_size_bytes ?? row.imageSizeBytes,
+  uploadedBy: row.uploaded_by ?? row.uploadedBy,
+  clockEntryId: row.clock_entry_id ?? row.clockEntryId,
+  createdAt: row.created_at ?? row.createdAt,
+  uploader: row.uploader ?? null,
+});
+
 const mapTask = (row: any) => ({
   id: row.id, name: row.name ?? '', date: row.date ?? '',
   reminder: row.reminder ?? '', completed: row.completed ?? false,
@@ -342,8 +362,8 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
 
           // Load expenses
           try {
-            const { data: expenseRows } = await supabase.from('expenses').select('*').eq('company_id', company.id).order('date', { ascending: false });
-            setExpenses(expenseRows ?? []);
+            const { data: expenseRows } = await supabase.from('expenses').select('*, uploader:uploaded_by(id,name,email,avatar)').eq('company_id', company.id).order('date', { ascending: false });
+            setExpenses((expenseRows ?? []).map(mapExpense));
             console.log('[App] ✅ Loaded', expenseRows?.length ?? 0, 'expenses');
           } catch (error: any) {
             console.error('[App] Error loading expenses:', error?.message || error);
@@ -661,8 +681,8 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
 
           // Load expenses
           try {
-            const { data: expenseRows } = await supabase.from('expenses').select('*').eq('company_id', parsedCompany.id).order('date', { ascending: false });
-            setExpenses(expenseRows?.length ? expenseRows : mockExpenses);
+            const { data: expenseRows } = await supabase.from('expenses').select('*, uploader:uploaded_by(id,name,email,avatar)').eq('company_id', parsedCompany.id).order('date', { ascending: false });
+            setExpenses(expenseRows?.length ? expenseRows.map(mapExpense) : mockExpenses);
             console.log('[App] Loaded', expenseRows?.length ?? 0, 'expenses');
           } catch (error) {
             console.error('[App] Error loading expenses:', error);
