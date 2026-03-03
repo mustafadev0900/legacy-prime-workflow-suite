@@ -62,6 +62,7 @@ export default function DocumentScannerModal({
   const [flash, setFlash] = useState<'off' | 'on'>('off');
   const [isCameraReady, setIsCameraReady] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+  const readyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Reset when modal re-opens / closes
   useEffect(() => {
@@ -71,6 +72,10 @@ export default function DocumentScannerModal({
       setIsCameraReady(false);
     } else {
       setIsCameraReady(false);
+      if (readyTimerRef.current) {
+        clearTimeout(readyTimerRef.current);
+        readyTimerRef.current = null;
+      }
     }
   }, [visible]);
 
@@ -203,7 +208,14 @@ export default function DocumentScannerModal({
               style={StyleSheet.absoluteFill}
               facing="back"
               flash={flash}
-              onCameraReady={() => setIsCameraReady(true)}
+              onCameraReady={() => {
+                // AVCaptureSession fires sessionDidStartRunning before
+                // AVCaptureConnection is fully active. Delay 750ms so the
+                // video connection stabilises before we allow capture.
+                readyTimerRef.current = setTimeout(() => {
+                  setIsCameraReady(true);
+                }, 750);
+              }}
             />
 
             {/* Dark overlay with document cutout */}
