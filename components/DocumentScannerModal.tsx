@@ -60,18 +60,22 @@ export default function DocumentScannerModal({
   const [phase, setPhase] = useState<Phase>('scanning');
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
   const [flash, setFlash] = useState<'off' | 'on'>('off');
+  const [isCameraReady, setIsCameraReady] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
-  // Reset when modal re-opens
+  // Reset when modal re-opens / closes
   useEffect(() => {
     if (visible) {
       setPhase('scanning');
       setCapturedUri(null);
+      setIsCameraReady(false);
+    } else {
+      setIsCameraReady(false);
     }
   }, [visible]);
 
   const handleCapture = async () => {
-    if (!cameraRef.current || phase !== 'scanning') return;
+    if (!cameraRef.current || phase !== 'scanning' || !isCameraReady) return;
     setPhase('processing');
     try {
       const photo = await cameraRef.current.takePictureAsync({
@@ -199,6 +203,7 @@ export default function DocumentScannerModal({
               style={StyleSheet.absoluteFill}
               facing="back"
               flash={flash}
+              onCameraReady={() => setIsCameraReady(true)}
             />
 
             {/* Dark overlay with document cutout */}
@@ -228,14 +233,15 @@ export default function DocumentScannerModal({
               </View>
             </View>
 
-            {/* Shutter button */}
+            {/* Shutter button — disabled until AVCaptureSession is live */}
             <View style={styles.shutterBar}>
               <TouchableOpacity
-                style={styles.shutterOuter}
+                style={[styles.shutterOuter, !isCameraReady && styles.shutterDisabled]}
                 onPress={handleCapture}
                 activeOpacity={0.75}
+                disabled={!isCameraReady}
               >
-                <View style={styles.shutterInner} />
+                <View style={[styles.shutterInner, !isCameraReady && styles.shutterInnerDisabled]} />
               </TouchableOpacity>
             </View>
           </>
@@ -347,6 +353,12 @@ const styles = StyleSheet.create({
     height: 62,
     borderRadius: 31,
     backgroundColor: '#FFFFFF',
+  },
+  shutterDisabled: {
+    borderColor: 'rgba(255,255,255,0.35)',
+  },
+  shutterInnerDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.35)',
   },
 
   // ── Preview ────────────────────────────────────────
