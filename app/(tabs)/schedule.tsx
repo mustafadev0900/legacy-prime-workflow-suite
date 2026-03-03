@@ -206,6 +206,8 @@ export default function ScheduleScreen() {
   });
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
+  const [ganttStartOverride, setGanttStartOverride] = useState<Date | null>(null);
+  const pendingScrollTargetRef = useRef<{ year: number; month: number } | null>(null);
 
   const dateHeaderRef = useRef<ScrollView>(null);
   const gridHRef = useRef<ScrollView>(null);
@@ -271,8 +273,14 @@ export default function ScheduleScreen() {
     today.setHours(0, 0, 0, 0);
 
     // Start: earliest task startDate (with 7-day lead buffer), min 14 days back
+    // Also respect any user-selected ganttStartOverride (e.g. navigating to a past month)
     let start = new Date(today);
     start.setDate(today.getDate() - 14);
+    if (ganttStartOverride) {
+      const ov = new Date(ganttStartOverride);
+      ov.setHours(0, 0, 0, 0);
+      if (ov < start) start = ov;
+    }
     projectTasks.forEach(t => {
       const s = new Date(t.startDate);
       s.setHours(0, 0, 0, 0);
@@ -297,7 +305,7 @@ export default function ScheduleScreen() {
       cur.setDate(cur.getDate() + 1);
     }
     return result;
-  }, [projectTasks]);
+  }, [projectTasks, ganttStartOverride]);
 
   // Auto-scroll to today after dates recompute (placed after dates/dayWidth declarations to avoid TDZ)
   useEffect(() => {
@@ -404,12 +412,40 @@ export default function ScheduleScreen() {
     ? colXOffsets[colXOffsets.length - 1]
     : GRID_WIDTH;
 
+  // After colXOffsets recomputes (due to ganttStartOverride expanding dates), execute any
+  // pending scroll target that was deferred because the range hadn't been expanded yet.
+  useEffect(() => {
+    if (!pendingScrollTargetRef.current || dates.length === 0) return;
+    const { year, month } = pendingScrollTargetRef.current;
+    const idx = dates.findIndex(d => d.getFullYear() === year && d.getMonth() === month);
+    if (idx < 0) return;
+    pendingScrollTargetRef.current = null;
+    const x = colXOffsets[idx] ?? 0;
+    // Small timeout to let the layout settle after the dates array expansion re-render
+    const timer = setTimeout(() => {
+      gridHRef.current?.scrollTo({ x, animated: false });
+      dateHeaderRef.current?.scrollTo({ x, animated: false });
+      currentScrollXRef.current = x;
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [colXOffsets]);
+
   const scrollToMonth = useCallback((year: number, month: number) => {
-    let idx = dates.findIndex(d => d.getFullYear() === year && d.getMonth() === month);
-    if (idx < 0) {
-      const targetMs = new Date(year, month, 1).getTime();
-      idx = targetMs < (dates[0]?.getTime() ?? Infinity) ? 0 : dates.length - 1;
+    const targetFirst = new Date(year, month, 1);
+    targetFirst.setHours(0, 0, 0, 0);
+    const rangeStart = dates[0] ? new Date(dates[0]) : new Date();
+
+    if (targetFirst < rangeStart) {
+      // Target month is before the current dates range — expand range, then scroll after rerender
+      setGanttStartOverride(targetFirst);
+      pendingScrollTargetRef.current = { year, month };
+      setVisibleMonth({ year, month });
+      setShowMonthPicker(false);
+      return;
     }
+
+    let idx = dates.findIndex(d => d.getFullYear() === year && d.getMonth() === month);
+    if (idx < 0) idx = dates.length - 1; // future month beyond range end, clamp to last
     const x = colXOffsets[idx] ?? 0;
     gridHRef.current?.scrollTo({ x, animated: true });
     dateHeaderRef.current?.scrollTo({ x, animated: true });
