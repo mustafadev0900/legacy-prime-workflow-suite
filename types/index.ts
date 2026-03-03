@@ -180,6 +180,7 @@ export interface DailyLogReminder {
 export interface ClockEntry {
   id: string;
   employeeId: string;
+  employeeName?: string;
   projectId: string;
   clockIn: string;
   clockOut?: string;

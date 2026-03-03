@@ -94,6 +94,7 @@ const mapTask = (row: any) => ({
 const mapClockEntry = (row: any) => ({
   id: row.id,
   employeeId: row.employee_id ?? row.employeeId ?? '',
+  employeeName: row.employee?.name ?? row.employeeName ?? '',
   projectId: row.project_id ?? row.projectId ?? '',
   clockIn: row.clock_in ?? row.clockIn ?? '',
   clockOut: row.clock_out ?? row.clockOut,
@@ -402,7 +403,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
 
           // Load clock entries
           try {
-            const { data: clockRows } = await supabase.from('clock_entries').select('*').eq('company_id', company.id).order('clock_in', { ascending: false });
+            const { data: clockRows } = await supabase.from('clock_entries').select('*, employee:employee_id(id,name,email)').eq('company_id', company.id).order('clock_in', { ascending: false });
             setClockEntries((clockRows ?? []).map(mapClockEntry));
             console.log('[App] ✅ Loaded', clockRows?.length ?? 0, 'clock entries');
           } catch (error: any) {
@@ -711,7 +712,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
 
           // Load clock entries from database
           try {
-            const { data: clockRows } = await supabase.from('clock_entries').select('*').eq('company_id', parsedCompany.id).order('clock_in', { ascending: false });
+            const { data: clockRows } = await supabase.from('clock_entries').select('*, employee:employee_id(id,name,email)').eq('company_id', parsedCompany.id).order('clock_in', { ascending: false });
             setClockEntries((clockRows ?? []).map(mapClockEntry));
             console.log('[App] Loaded', clockRows?.length ?? 0, 'clock entries from database');
           } catch (error) {

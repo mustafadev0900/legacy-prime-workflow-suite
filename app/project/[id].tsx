@@ -164,17 +164,6 @@ export default function ProjectDetailScreen() {
     return projectExpenses.reduce((sum, expense) => sum + expense.amount, 0);
   }, [projectExpenses]);
 
-  const laborCosts = useMemo(() => {
-    return projectExpenses
-      .filter(exp => exp.type === 'Labor')
-      .reduce((sum, exp) => sum + exp.amount, 0);
-  }, [projectExpenses]);
-
-  const materialCosts = useMemo(() => {
-    return projectExpenses
-      .filter(exp => exp.type !== 'Labor')
-      .reduce((sum, exp) => sum + exp.amount, 0);
-  }, [projectExpenses]);
 
   // Get estimate linked to this project via project.estimateId
   const projectEstimates = useMemo(() => {
@@ -444,8 +433,15 @@ export default function ProjectDetailScreen() {
   const totalLaborHours = useMemo(() => {
     return projectClockEntries.reduce((sum, entry) => {
       if (!entry.clockOut) return sum;
-      const hours = (new Date(entry.clockOut).getTime() - new Date(entry.clockIn).getTime()) / (1000 * 60 * 60);
-      return sum + hours;
+      let totalMs = new Date(entry.clockOut).getTime() - new Date(entry.clockIn).getTime();
+      if (entry.lunchBreaks) {
+        entry.lunchBreaks.forEach(lunch => {
+          const lunchStart = new Date(lunch.startTime).getTime();
+          const lunchEnd = lunch.endTime ? new Date(lunch.endTime).getTime() : new Date(entry.clockOut!).getTime();
+          totalMs -= (lunchEnd - lunchStart);
+        });
+      }
+      return sum + Math.max(0, totalMs / (1000 * 60 * 60));
     }, 0);
   }, [projectClockEntries]);
 
@@ -479,17 +475,17 @@ export default function ProjectDetailScreen() {
   }, [adjustedProjectTotal, totalJobCost]);
 
   const estimatedHoursRemaining = useMemo(() => {
-    if (!project) return 0;
-    if (project.progress === 0) return project.hoursWorked;
-    return Math.ceil((project.hoursWorked / project.progress) * (100 - project.progress));
-  }, [project]);
+    if (!project || project.progress === 0) return 0;
+    return Math.ceil((totalLaborHours / project.progress) * (100 - project.progress));
+  }, [project, totalLaborHours]);
   
   const activeClockEntries = useMemo(() => {
     if (!project) return [];
     return clockEntries.filter(entry => entry.projectId === project.id && !entry.clockOut);
   }, [project, clockEntries]);
   
-  const getEmployeeName = (employeeId: string) => {
+  const getEmployeeName = (employeeId: string, employeeName?: string) => {
+    if (employeeName) return employeeName;
     if (user?.id === employeeId) return user.name;
     return `Employee ${employeeId.slice(0, 4)}`;
   };
@@ -743,7 +739,7 @@ export default function ProjectDetailScreen() {
                     </View>
                     <Text style={styles.balanceLabel}>Other Costs</Text>
                     <Text style={[styles.balanceValue, { color: '#9333EA', fontSize: 16 }]}>
-                      ${((expensesByType['Office'] || 0) + (expensesByType['Others'] || 0)).toLocaleString()}
+                      ${Math.max(0, totalJobCost - totalSubcontractorCost - totalLaborCost - totalMaterialCost).toLocaleString()}
                     </Text>
                   </View>
                 </View>
@@ -970,12 +966,12 @@ export default function ProjectDetailScreen() {
                       <View key={entry.id} style={styles.clockedInItem}>
                         <View style={styles.clockedInEmployeeAvatar}>
                           <Text style={styles.clockedInEmployeeAvatarText}>
-                            {getEmployeeName(entry.employeeId).charAt(0).toUpperCase()}
+                            {getEmployeeName(entry.employeeId, entry.employeeName).charAt(0).toUpperCase()}
                           </Text>
                         </View>
                         <View style={styles.clockedInItemInfo}>
                           <Text style={styles.clockedInEmployeeName} numberOfLines={1}>
-                            {getEmployeeName(entry.employeeId)}
+                            {getEmployeeName(entry.employeeId, entry.employeeName)}
                           </Text>
                           <Text style={styles.clockedInClockTime}>
                             {clockInTime.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
@@ -1026,7 +1022,7 @@ export default function ProjectDetailScreen() {
                 </View>
                 <View style={styles.progressDetailItem}>
                   <Text style={styles.progressDetailLabel}>Hours</Text>
-                  <Text style={styles.progressDetailValue}>{project.hoursWorked}h logged</Text>
+                  <Text style={styles.progressDetailValue}>{totalLaborHours.toFixed(1)}h logged</Text>
                 </View>
                 <View style={styles.progressDetailItem}>
                   <Text style={styles.progressDetailLabel}>Remaining</Text>
@@ -1091,7 +1087,7 @@ export default function ProjectDetailScreen() {
               <View style={styles.statBox}>
                 <Users size={20} color="#3B82F6" />
                 <Text style={styles.statLabel}>Hours Logged</Text>
-                <Text style={styles.statValue}>{project.hoursWorked}h</Text>
+                <Text style={styles.statValue}>{totalLaborHours.toFixed(1)}h</Text>
               </View>
               <View style={styles.statBox}>
                 <View style={[styles.statusDot, { backgroundColor: project.status === 'active' ? '#10B981' : '#F59E0B' }]} />
@@ -1108,15 +1104,15 @@ export default function ProjectDetailScreen() {
                     </View>
                     <View style={styles.quickStatsGrid}>
                       <View style={styles.quickStat}>
-                        <Text style={styles.quickStatValue}>{project.hoursWorked > 0 ? `$${(project.expenses / project.hoursWorked).toFixed(2)}` : '—'}</Text>
+                        <Text style={styles.quickStatValue}>{totalLaborHours > 0 ? `$${(totalJobCost / totalLaborHours).toFixed(2)}` : '—'}</Text>
                         <Text style={styles.quickStatLabel}>Cost per Hour</Text>
                       </View>
                       <View style={styles.quickStat}>
-                        <Text style={styles.quickStatValue}>{((project.budget - project.expenses) / (100 - project.progress)).toFixed(0)}</Text>
+                        <Text style={styles.quickStatValue}>{project.progress < 100 ? `$${(budgetRemaining / (100 - project.progress)).toFixed(0)}` : '—'}</Text>
                         <Text style={styles.quickStatLabel}>Budget per % Left</Text>
                       </View>
                       <View style={styles.quickStat}>
-                        <Text style={styles.quickStatValue}>{daysElapsed > 0 && project.hoursWorked > 0 ? (project.hoursWorked / daysElapsed).toFixed(1) : '—'}</Text>
+                        <Text style={styles.quickStatValue}>{daysElapsed > 0 && totalLaborHours > 0 ? (totalLaborHours / daysElapsed).toFixed(1) : '—'}</Text>
                         <Text style={styles.quickStatLabel}>Avg Hours/Day</Text>
                       </View>
                     </View>
@@ -1250,7 +1246,7 @@ export default function ProjectDetailScreen() {
                     </View>
                     <Text style={styles.balanceLabel}>Other Costs</Text>
                     <Text style={[styles.balanceValue, { color: '#9333EA', fontSize: 16 }]}>
-                      ${((expensesByType['Office'] || 0) + (expensesByType['Others'] || 0)).toLocaleString()}
+                      ${Math.max(0, totalJobCost - totalSubcontractorCost - totalLaborCost - totalMaterialCost).toLocaleString()}
                     </Text>
                   </View>
                 </View>
@@ -1424,7 +1420,7 @@ export default function ProjectDetailScreen() {
                 </View>
                 <View style={styles.progressDetailItem}>
                   <Text style={styles.progressDetailLabel}>Hours</Text>
-                  <Text style={styles.progressDetailValue}>{project.hoursWorked}h logged</Text>
+                  <Text style={styles.progressDetailValue}>{totalLaborHours.toFixed(1)}h logged</Text>
                 </View>
                 <View style={styles.progressDetailItem}>
                   <Text style={styles.progressDetailLabel}>Remaining</Text>
@@ -1491,7 +1487,7 @@ export default function ProjectDetailScreen() {
               <View style={styles.statBox}>
                 <Users size={20} color="#3B82F6" />
                 <Text style={styles.statLabel}>Hours Logged</Text>
-                <Text style={styles.statValue}>{project.hoursWorked}h</Text>
+                <Text style={styles.statValue}>{totalLaborHours.toFixed(1)}h</Text>
               </View>
               <View style={styles.statBox}>
                 <View style={[styles.statusDot, { backgroundColor: project.status === 'active' ? '#10B981' : '#F59E0B' }]} />
@@ -1509,15 +1505,15 @@ export default function ProjectDetailScreen() {
                 </View>
                 <View style={styles.quickStatsGrid}>
                   <View style={styles.quickStat}>
-                    <Text style={styles.quickStatValue}>${(project.expenses / project.hoursWorked).toFixed(2)}</Text>
+                    <Text style={styles.quickStatValue}>{totalLaborHours > 0 ? `$${(totalJobCost / totalLaborHours).toFixed(2)}` : '—'}</Text>
                     <Text style={styles.quickStatLabel}>Cost per Hour</Text>
                   </View>
                   <View style={styles.quickStat}>
-                    <Text style={styles.quickStatValue}>{((project.budget - project.expenses) / (100 - project.progress)).toFixed(0)}</Text>
+                    <Text style={styles.quickStatValue}>{project.progress < 100 ? `$${(budgetRemaining / (100 - project.progress)).toFixed(0)}` : '—'}</Text>
                     <Text style={styles.quickStatLabel}>Budget per % Left</Text>
                   </View>
                   <View style={styles.quickStat}>
-                    <Text style={styles.quickStatValue}>{(project.hoursWorked / daysElapsed).toFixed(1)}</Text>
+                    <Text style={styles.quickStatValue}>{daysElapsed > 0 && totalLaborHours > 0 ? (totalLaborHours / daysElapsed).toFixed(1) : '—'}</Text>
                     <Text style={styles.quickStatLabel}>Avg Hours/Day</Text>
                   </View>
                 </View>
