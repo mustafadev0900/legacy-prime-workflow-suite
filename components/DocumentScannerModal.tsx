@@ -1,17 +1,17 @@
 /**
  * DocumentScannerModal
  *
- * A full-screen camera modal that mimics a document-scanner UX:
- *   • Document-frame overlay with corner brackets guides alignment
- *   • Flash toggle
- *   • High-quality capture → review screen → "Retake" or "Use Scan"
- *   • Post-processing via expo-image-manipulator (resize to 2048px for
- *     better OCR accuracy, JPEG at 0.92 quality)
+ * Document-scanner UX using the system camera (ImagePicker) to avoid
+ * AVCaptureSession initialization crashes present in expo-camera's CameraView
+ * when FigCaptureSourceRemote fails with -17281 on certain devices/OS states.
  *
- * Uses only packages already in the project (expo-camera, expo-image-manipulator).
- * No new native dependencies needed — works with the current EAS build.
+ * Flow:
+ *   Ready screen (decorative frame guide + shutter)
+ *   → launchCameraAsync (system camera — stable, no AVFoundation race)
+ *   → Review screen ("Retake" or "Use Scan")
+ *   → Post-process via expo-image-manipulator (resize 2048px, JPEG 0.92, base64)
  */
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,11 +21,12 @@ import {
   Platform,
   ActivityIndicator,
   Dimensions,
+  Alert,
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Image } from 'expo-image';
-import { X, RotateCcw, Check, Zap, ZapOff } from 'lucide-react-native';
+import { X, RotateCcw, Check, ScanLine } from 'lucide-react-native';
 
 export interface DocumentScanResult {
   /** local file:// URI of the processed scan */
@@ -41,12 +42,12 @@ interface Props {
   title?: string;
 }
 
-type Phase = 'scanning' | 'preview' | 'processing';
+type Phase = 'ready' | 'preview' | 'processing';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const FRAME_W = SW * 0.82;
 const FRAME_H = FRAME_W * 1.35; // Portrait receipt ratio
-const FRAME_TOP = (SH - FRAME_H) / 2 - 40; // slightly above centre to leave room for shutter
+const FRAME_TOP = (SH - FRAME_H) / 2 - 40;
 const CORNER = 22;
 const CORNER_THICK = 3;
 
@@ -56,43 +57,42 @@ export default function DocumentScannerModal({
   onClose,
   title = 'Scan Receipt',
 }: Props) {
-  const [permission, requestPermission] = useCameraPermissions();
-  const [phase, setPhase] = useState<Phase>('scanning');
+  const [phase, setPhase] = useState<Phase>('ready');
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
-  const [flash, setFlash] = useState<'off' | 'on'>('off');
-  const [isCameraReady, setIsCameraReady] = useState(false);
-  const cameraRef = useRef<CameraView>(null);
-  const readyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Reset when modal re-opens / closes
+  // Reset state every time the modal opens
   useEffect(() => {
     if (visible) {
-      setPhase('scanning');
+      setPhase('ready');
       setCapturedUri(null);
-      setIsCameraReady(false);
-    } else {
-      setIsCameraReady(false);
-      if (readyTimerRef.current) {
-        clearTimeout(readyTimerRef.current);
-        readyTimerRef.current = null;
-      }
     }
   }, [visible]);
 
   const handleCapture = async () => {
-    if (!cameraRef.current || phase !== 'scanning' || !isCameraReady) return;
-    setPhase('processing');
     try {
-      const photo = await cameraRef.current.takePictureAsync({
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Camera Permission Required',
+          'Camera access is required to scan receipts. Please allow it in Settings.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        allowsEditing: false,
         quality: 1,
-        base64: false,
-        exif: false,
       });
-      setCapturedUri(photo.uri);
-      setPhase('preview');
+
+      if (!result.canceled && result.assets[0]) {
+        setCapturedUri(result.assets[0].uri);
+        setPhase('preview');
+      }
     } catch (e) {
-      console.error('[DocScanner] Capture error:', e);
-      setPhase('scanning');
+      console.error('[DocScanner] Camera error:', e);
+      Alert.alert('Error', 'Failed to open camera. Please try again.');
     }
   };
 
@@ -100,7 +100,7 @@ export default function DocumentScannerModal({
     if (!capturedUri) return;
     setPhase('processing');
     try {
-      // Resize to 2048px wide — keeps file manageable while preserving OCR accuracy
+      // Resize to 2048px wide — manageable size with good OCR accuracy
       const processed = await ImageManipulator.manipulateAsync(
         capturedUri,
         [{ resize: { width: 2048 } }],
@@ -109,42 +109,12 @@ export default function DocumentScannerModal({
       onCapture({ uri: processed.uri, base64: processed.base64 ?? '' });
     } catch (e) {
       console.error('[DocScanner] Processing error:', e);
-      // Fall back to original URI, let caller handle base64 conversion
+      // Fall back to original URI; let caller handle conversion
       onCapture({ uri: capturedUri, base64: '' });
     }
   };
 
   if (!visible) return null;
-
-  // Permission not yet determined
-  if (!permission) {
-    return (
-      <Modal visible animationType="slide" statusBarTranslucent>
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#2563EB" />
-        </View>
-      </Modal>
-    );
-  }
-
-  // Permission denied
-  if (!permission.granted) {
-    return (
-      <Modal visible animationType="slide" statusBarTranslucent>
-        <View style={styles.center}>
-          <Text style={styles.permText}>
-            Camera access is required to scan receipts.
-          </Text>
-          <TouchableOpacity style={styles.permBtn} onPress={requestPermission}>
-            <Text style={styles.permBtnText}>Allow Camera</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} style={styles.cancelLinkWrap}>
-            <Text style={styles.cancelLink}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
-    );
-  }
 
   return (
     <Modal visible animationType="slide" statusBarTranslucent>
@@ -154,7 +124,11 @@ export default function DocumentScannerModal({
         {phase === 'preview' && capturedUri ? (
           <>
             <View style={styles.previewHeader}>
+              <TouchableOpacity style={styles.iconBtn} onPress={() => { setCapturedUri(null); setPhase('ready'); }}>
+                <X size={22} color="#FFFFFF" />
+              </TouchableOpacity>
               <Text style={styles.headerTitle}>Review Scan</Text>
+              <View style={styles.iconBtn} />
             </View>
             <Image
               source={{ uri: capturedUri }}
@@ -164,7 +138,7 @@ export default function DocumentScannerModal({
             <View style={styles.previewActions}>
               <TouchableOpacity
                 style={styles.retakeBtn}
-                onPress={() => { setCapturedUri(null); setPhase('scanning'); }}
+                onPress={() => { setCapturedUri(null); setPhase('ready'); }}
               >
                 <RotateCcw size={18} color="#1F2937" />
                 <Text style={styles.retakeTxt}>Retake</Text>
@@ -184,41 +158,19 @@ export default function DocumentScannerModal({
           </View>
 
         ) : (
-          /* ── Live camera / scanning ───────────────────── */
+          /* ── Ready / viewfinder ────────────────────────── */
           <>
-            {/* Floating header */}
+            {/* Header */}
             <View style={styles.scannerHeader}>
               <TouchableOpacity style={styles.iconBtn} onPress={onClose}>
                 <X size={22} color="#FFFFFF" />
               </TouchableOpacity>
               <Text style={styles.headerTitle}>{title}</Text>
-              <TouchableOpacity
-                style={styles.iconBtn}
-                onPress={() => setFlash(f => f === 'off' ? 'on' : 'off')}
-              >
-                {flash === 'on'
-                  ? <Zap size={22} color="#FACC15" />
-                  : <ZapOff size={22} color="#FFFFFF" />}
-              </TouchableOpacity>
+              {/* Spacer to keep title centred */}
+              <View style={styles.iconBtn} />
             </View>
 
-            {/* Camera */}
-            <CameraView
-              ref={cameraRef}
-              style={StyleSheet.absoluteFill}
-              facing="back"
-              flash={flash}
-              onCameraReady={() => {
-                // AVCaptureSession fires sessionDidStartRunning before
-                // AVCaptureConnection is fully active. Delay 750ms so the
-                // video connection stabilises before we allow capture.
-                readyTimerRef.current = setTimeout(() => {
-                  setIsCameraReady(true);
-                }, 750);
-              }}
-            />
-
-            {/* Dark overlay with document cutout */}
+            {/* Decorative viewfinder — visual guide for receipt alignment */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
               {/* Top band */}
               <View style={[styles.overlayBand, { height: FRAME_TOP }]} />
@@ -229,7 +181,6 @@ export default function DocumentScannerModal({
 
                 {/* Transparent document frame with corner brackets */}
                 <View style={[styles.docFrame, { width: FRAME_W, height: FRAME_H }]}>
-                  {/* Corners */}
                   <View style={[styles.corner, styles.cTL]} />
                   <View style={[styles.corner, styles.cTR]} />
                   <View style={[styles.corner, styles.cBL]} />
@@ -239,21 +190,22 @@ export default function DocumentScannerModal({
                 <View style={[styles.overlayBand, { width: (SW - FRAME_W) / 2, height: FRAME_H }]} />
               </View>
 
-              {/* Bottom band + hint */}
+              {/* Bottom band + instructions */}
               <View style={[styles.overlayBand, styles.bottomBand]}>
-                <Text style={styles.hint}>Align receipt within the frame</Text>
+                <ScanLine size={20} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.hint}>Tap the button to open camera</Text>
+                <Text style={styles.hintSub}>Align receipt within the frame when prompted</Text>
               </View>
             </View>
 
-            {/* Shutter button — disabled until AVCaptureSession is live */}
+            {/* Shutter button */}
             <View style={styles.shutterBar}>
               <TouchableOpacity
-                style={[styles.shutterOuter, !isCameraReady && styles.shutterDisabled]}
+                style={styles.shutterOuter}
                 onPress={handleCapture}
                 activeOpacity={0.75}
-                disabled={!isCameraReady}
               >
-                <View style={[styles.shutterInner, !isCameraReady && styles.shutterInnerDisabled]} />
+                <View style={styles.shutterInner} />
               </TouchableOpacity>
             </View>
           </>
@@ -277,7 +229,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
 
-  // ── Scanner header (floating over camera) ──────────
+  // ── Scanner header ──────────────────────────────────
   scannerHeader: {
     position: 'absolute' as const,
     top: 0,
@@ -308,7 +260,7 @@ const styles = StyleSheet.create({
 
   // ── Overlay bands ──────────────────────────────────
   overlayBand: {
-    backgroundColor: 'rgba(0,0,0,0.62)',
+    backgroundColor: 'rgba(0,0,0,0.72)',
   },
   overlayMiddle: {
     flexDirection: 'row' as const,
@@ -316,15 +268,25 @@ const styles = StyleSheet.create({
   bottomBand: {
     flex: 1,
     alignItems: 'center' as const,
-    paddingTop: 14,
+    paddingTop: 16,
+    gap: 6,
   },
   hint: {
     color: '#FFFFFF',
-    fontSize: 13,
-    opacity: 0.85,
+    fontSize: 14,
+    fontWeight: '500' as const,
+    opacity: 0.9,
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
+    marginTop: 4,
+  },
+  hintSub: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    opacity: 0.65,
+    textAlign: 'center' as const,
+    paddingHorizontal: 24,
   },
 
   // ── Document frame ─────────────────────────────────
@@ -366,19 +328,16 @@ const styles = StyleSheet.create({
     borderRadius: 31,
     backgroundColor: '#FFFFFF',
   },
-  shutterDisabled: {
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  shutterInnerDisabled: {
-    backgroundColor: 'rgba(255,255,255,0.35)',
-  },
 
   // ── Preview ────────────────────────────────────────
   previewHeader: {
     backgroundColor: '#000',
     paddingTop: Platform.OS === 'ios' ? 56 : 16,
     paddingBottom: 14,
+    paddingHorizontal: 12,
+    flexDirection: 'row' as const,
     alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
   },
   previewImage: {
     flex: 1,
@@ -429,26 +388,4 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: 4,
   },
-
-  // ── Permission ─────────────────────────────────────
-  permText: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    textAlign: 'center' as const,
-    lineHeight: 24,
-  },
-  permBtn: {
-    marginTop: 8,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    borderRadius: 10,
-  },
-  permBtnText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#FFFFFF',
-  },
-  cancelLinkWrap: { marginTop: 16 },
-  cancelLink: { fontSize: 15, color: '#9CA3AF' },
 });
