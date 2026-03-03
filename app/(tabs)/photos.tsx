@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Modal, ActivityIndicator, Pressable, Alert, RefreshControl } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Camera, Upload, Edit2, X, Check, Plus, Trash2, Settings } from 'lucide-react-native';
 import { Image } from 'expo-image';
@@ -10,7 +10,21 @@ import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { supabase } from '@/lib/supabase';
 
 export default function PhotosScreen() {
-  const { photos, addPhoto, updatePhoto, photoCategories, addPhotoCategory, updatePhotoCategory, deletePhotoCategory, company, projects, refreshPhotos } = useApp();
+  const { photos, addPhoto, updatePhoto, photoCategories, priceListCategories, addPhotoCategory, updatePhotoCategory, deletePhotoCategory, company, projects, refreshPhotos } = useApp();
+
+  // Merge price-list categories with photo-specific categories (deduped, price list first).
+  const allCategories = useMemo(() => {
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const cat of [...priceListCategories, ...photoCategories]) {
+      const key = cat.trim().toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(cat);
+      }
+    }
+    return merged;
+  }, [priceListCategories, photoCategories]);
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -483,7 +497,7 @@ export default function PhotosScreen() {
 
             <Text style={styles.modalLabel}>Select Category</Text>
             <ScrollView style={styles.categoryList} showsVerticalScrollIndicator={false}>
-              {photoCategories.map((cat) => (
+              {allCategories.map((cat) => (
                 <TouchableOpacity
                   key={cat}
                   style={[
@@ -650,12 +664,12 @@ export default function PhotosScreen() {
                 />
                 
                 <Text style={styles.previewLabel}>Quick Select</Text>
-                <ScrollView 
-                  horizontal 
+                <ScrollView
+                  horizontal
                   showsHorizontalScrollIndicator={false}
                   style={styles.quickCategoriesScroll}
                 >
-                  {photoCategories.map((cat) => (
+                  {allCategories.map((cat) => (
                     <TouchableOpacity
                       key={cat}
                       style={[
