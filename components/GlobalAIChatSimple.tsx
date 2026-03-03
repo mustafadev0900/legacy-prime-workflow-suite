@@ -17,6 +17,9 @@ import { mockPhotos } from '@/mocks/data';
 import * as pdfjsLib from 'pdfjs-dist';
 import { generateUUID } from '@/utils/uuid';
 
+// Absolute base URL — required on native iOS where relative paths fail
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+
 // Configure PDF.js worker (only on web)
 if (Platform.OS === 'web') {
   (pdfjsLib as any).GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
@@ -182,9 +185,7 @@ function useOpenAIChat(appData: {
       setIsLoadingHistory(true);
       console.log('[AI Chat] Loading chat history for user:', appData.userId);
 
-      const baseUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL ||
-        (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8081');
-      const response = await fetch(`${baseUrl}/api/get-chat-history?userId=${appData.userId}&limit=200`);
+      const response = await fetch(`${API_BASE}/api/get-chat-history?userId=${appData.userId}&limit=200`);
 
       if (response.ok) {
         const data = await response.json();
@@ -223,7 +224,7 @@ function useOpenAIChat(appData: {
         size: f.size,
       })).filter(f => f.uri || f.hasImage);
 
-      await fetch('/api/save-chat-message', {
+      await fetch(`${API_BASE}/api/save-chat-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -258,7 +259,7 @@ function useOpenAIChat(appData: {
       }));
 
       // Call AI Assistant API with all business data
-      const response = await fetch('/api/ai-assistant', {
+      const response = await fetch(`${API_BASE}/api/ai-assistant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -362,7 +363,7 @@ function useOpenAIChat(appData: {
       }));
 
       // Call AI Assistant API with all business data
-      const response = await fetch('/api/ai-assistant', {
+      const response = await fetch(`${API_BASE}/api/ai-assistant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -458,7 +459,7 @@ function useOpenAIChat(appData: {
 
         console.log('[AI Chat] Saving message to DB:', { role: message.role, hasMetadata: Object.keys(metadata).length > 0, metadata });
 
-        const saveResponse = await fetch('/api/save-chat-message', {
+        const saveResponse = await fetch(`${API_BASE}/api/save-chat-message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -521,7 +522,7 @@ function useOpenAIChat(appData: {
     // Save to database
     if (appData.userId) {
       try {
-        await fetch('/api/save-chat-message', {
+        await fetch(`${API_BASE}/api/save-chat-message`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -548,7 +549,7 @@ function useOpenAIChat(appData: {
 
       // Delete messages from database
       if (appData.userId) {
-        const response = await fetch('/api/clear-chat-history', {
+        const response = await fetch(`${API_BASE}/api/clear-chat-history`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -781,7 +782,7 @@ ${budget ? `Budget: $${budget} (MUST stay within this amount)` : ''}
 Generate appropriate line items from the price list that fit this scope of work${budget ? ` and budget` : ''}.`;
 
                 // Call OpenAI API
-                const openaiResponse = await fetch('/api/generate-estimate-items', {
+                const openaiResponse = await fetch(`${API_BASE}/api/generate-estimate-items`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
@@ -1281,7 +1282,7 @@ Generate appropriate line items from the price list that fit this scope of work$
               console.log('[AI Action] Creating project via direct API...');
               const projectName = estimateName.replace(' Estimate', '').replace(' - ' + clientName, '');
 
-              const response = await fetch('/api/add-project', {
+              const response = await fetch(`${API_BASE}/api/add-project`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1337,7 +1338,7 @@ Generate appropriate line items from the price list that fit this scope of work$
                 // Upload base64 data to S3
                 try {
                   console.log('[AI Action] Uploading receipt image to S3...');
-                  const uploadResponse = await fetch('/api/upload-to-s3', {
+                  const uploadResponse = await fetch(`${API_BASE}/api/upload-to-s3`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1507,7 +1508,7 @@ Generate appropriate line items from the price list that fit this scope of work$
             console.log('[AI Action] Opening email client for subcontractor invitation');
             try {
               // Call the invitation API
-              const response = await fetch('/api/send-subcontractor-invitation', {
+              const response = await fetch(`${API_BASE}/api/send-subcontractor-invitation`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -2321,7 +2322,7 @@ Generate appropriate line items from the price list that fit this scope of work$
     try {
       console.log('[STT] Transcribing audio via OpenAI Whisper...');
 
-      const response = await fetch('/api/speech-to-text', {
+      const response = await fetch(`${API_BASE}/api/speech-to-text`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ audioBase64: base64 }),
@@ -2375,7 +2376,7 @@ Generate appropriate line items from the price list that fit this scope of work$
       }
       const base64 = btoa(binary);
 
-      const response = await fetch('/api/speech-to-text', {
+      const response = await fetch(`${API_BASE}/api/speech-to-text`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ audioBase64: base64 }),
@@ -2490,7 +2491,7 @@ Generate appropriate line items from the price list that fit this scope of work$
         window.speechSynthesis.speak(utterance);
       } else {
         // Fallback to OpenAI TTS for mobile or if browser doesn't support speech synthesis
-        const response = await fetch('/api/text-to-speech', {
+        const response = await fetch(`${API_BASE}/api/text-to-speech`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2719,7 +2720,7 @@ Generate appropriate line items from the price list that fit this scope of work$
             console.log('[Attachment] Uploading PDF to S3...');
 
             // Get presigned upload URL
-            const urlResponse = await fetch('/api/get-s3-upload-url', {
+            const urlResponse = await fetch(`${API_BASE}/api/get-s3-upload-url`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -2901,7 +2902,7 @@ Generate appropriate line items from the price list that fit this scope of work$
       console.log('[Attachment] Uploading image to S3...', fileName);
 
       // Get presigned upload URL
-      const urlResponse = await fetch('/api/get-s3-upload-url', {
+      const urlResponse = await fetch(`${API_BASE}/api/get-s3-upload-url`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2928,31 +2929,28 @@ Generate appropriate line items from the price list that fit this scope of work$
           headers: { 'Content-Type': asset.mimeType || 'image/jpeg' },
         });
       } else {
-        const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-          encoding: 'base64' as any,
-        });
-        const buffer = Buffer.from(base64, 'base64');
-        uploadResponse = await fetch(uploadUrl, {
-          method: 'PUT',
-          body: buffer,
+        // Native: FileSystem.uploadAsync streams raw bytes directly — avoids
+        // Buffer/ArrayBuffer which are not supported in Hermes (React Native).
+        const uploadResult = await FileSystem.uploadAsync(uploadUrl, asset.uri, {
+          httpMethod: 'PUT',
           headers: { 'Content-Type': asset.mimeType || 'image/jpeg' },
+          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
         });
+        if (uploadResult.status < 200 || uploadResult.status >= 300) {
+          throw new Error(`Upload failed with status: ${uploadResult.status}`);
+        }
       }
 
-      if (uploadResponse.ok) {
-        console.log('[Attachment] Image uploaded successfully to S3:', fileUrl);
+      console.log('[Attachment] Image uploaded successfully to S3:', fileUrl);
 
-        // Update the attached file with S3 URL and remove uploading flag
-        setAttachedFiles(prev =>
-          prev.map(f =>
-            f.name === fileName
-              ? { ...f, uri: fileUrl, uploading: false, s3Url: fileUrl }
-              : f
-          )
-        );
-      } else {
-        throw new Error(`Upload failed with status: ${uploadResponse.status}`);
-      }
+      // Update the attached file with S3 URL and remove uploading flag
+      setAttachedFiles(prev =>
+        prev.map(f =>
+          f.name === fileName
+            ? { ...f, uri: fileUrl, uploading: false, s3Url: fileUrl }
+            : f
+        )
+      );
     } catch (uploadError: any) {
       console.error('[Attachment] Error uploading image to S3:', uploadError);
       alert(`Failed to upload image: ${uploadError.message}`);
@@ -3210,7 +3208,7 @@ Generate appropriate line items from the price list that fit this scope of work$
           });
 
           try {
-            const response = await fetch('/api/analyze-receipt', {
+            const response = await fetch(`${API_BASE}/api/analyze-receipt`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -3231,7 +3229,7 @@ Generate appropriate line items from the price list that fit this scope of work$
               let receiptS3Url: string | undefined;
               try {
                 console.log('[Send] Uploading receipt to S3...');
-                const uploadResponse = await fetch('/api/upload-to-s3', {
+                const uploadResponse = await fetch(`${API_BASE}/api/upload-to-s3`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
