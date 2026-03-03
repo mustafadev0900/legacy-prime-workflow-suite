@@ -3802,6 +3802,8 @@ Generate appropriate line items from the price list that fit this scope of work$
         transparent
         onRequestClose={() => setIsOpen(false)}
       >
+        {/* Extra View wrapper enables absolute-positioned overlays inside this Modal */}
+        <View style={{ flex: 1 }}>
         <KeyboardAvoidingView
           style={styles.modalContainer}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -4230,57 +4232,56 @@ Generate appropriate line items from the price list that fit this scope of work$
             </View>
           </View>
         </KeyboardAvoidingView>
-      </Modal>
 
-      <Modal
-        visible={showAttachMenu}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowAttachMenu(false)}
-      >
-        <TouchableOpacity 
-          style={styles.attachModalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowAttachMenu(false)}
-        >
-          <TouchableOpacity 
-            style={styles.attachMenu}
+        {/* Attach menu rendered as an absolute overlay inside this Modal —
+            avoids the iOS nested-modal limitation where a second Modal
+            presented on top of an open Modal is silently ignored. */}
+        {showAttachMenu && (
+          <TouchableOpacity
+            style={styles.attachMenuAbsoluteOverlay}
             activeOpacity={1}
-            onPress={(e) => e.stopPropagation()}
+            onPress={() => setShowAttachMenu(false)}
           >
-            <View style={styles.attachMenuHandle} />
-            
-            <Text style={styles.attachMenuTitle}>Attach File</Text>
-            
-            <TouchableOpacity style={styles.attachOption} onPress={handleTakePhoto}>
-              <View style={[styles.attachIconContainer, { backgroundColor: '#EF4444' }]}>
-                <ImageIcon size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.attachOptionText}>Take Photo</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.attachOption} onPress={handlePickImage}>
-              <View style={[styles.attachIconContainer, { backgroundColor: '#8B5CF6' }]}>
-                <ImageIcon size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.attachOptionText}>Photo Library</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity style={styles.attachOption} onPress={handlePickFile}>
-              <View style={[styles.attachIconContainer, { backgroundColor: '#3B82F6' }]}>
-                <Paperclip size={24} color="#FFFFFF" />
-              </View>
-              <Text style={styles.attachOptionText}>Document / PDF</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.attachCancelButton}
-              onPress={() => setShowAttachMenu(false)}
+            <TouchableOpacity
+              style={styles.attachMenu}
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
             >
-              <Text style={styles.attachCancelText}>Cancel</Text>
+              <View style={styles.attachMenuHandle} />
+
+              <Text style={styles.attachMenuTitle}>Attach File</Text>
+
+              <TouchableOpacity style={styles.attachOption} onPress={handleTakePhoto}>
+                <View style={[styles.attachIconContainer, { backgroundColor: '#EF4444' }]}>
+                  <ImageIcon size={24} color="#FFFFFF" />
+                </View>
+                <Text style={styles.attachOptionText}>Take Photo</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.attachOption} onPress={handlePickImage}>
+                <View style={[styles.attachIconContainer, { backgroundColor: '#8B5CF6' }]}>
+                  <ImageIcon size={24} color="#FFFFFF" />
+                </View>
+                <Text style={styles.attachOptionText}>Photo Library</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.attachOption} onPress={handlePickFile}>
+                <View style={[styles.attachIconContainer, { backgroundColor: '#3B82F6' }]}>
+                  <Paperclip size={24} color="#FFFFFF" />
+                </View>
+                <Text style={styles.attachOptionText}>Document / PDF</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.attachCancelButton}
+                onPress={() => setShowAttachMenu(false)}
+              >
+                <Text style={styles.attachCancelText}>Cancel</Text>
+              </TouchableOpacity>
             </TouchableOpacity>
           </TouchableOpacity>
-        </TouchableOpacity>
+        )}
+        </View>
       </Modal>
     </>
   );
@@ -4656,6 +4657,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
+  },
+  // Used in modal mode — absolutely positioned so it sits inside the existing
+  // Modal without requiring a second (nested) Modal which iOS cannot show.
+  attachMenuAbsoluteOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end' as const,
   },
   attachMenu: {
     backgroundColor: '#FFFFFF',
