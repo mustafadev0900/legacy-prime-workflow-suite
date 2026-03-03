@@ -18,7 +18,7 @@ import CustomDatePicker from '@/components/DailyTasks/CustomDatePicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { Calendar, X, BookOpen, Plus, Trash2, Check, Users, History, Download, Camera, ImageIcon, ChevronDown, ChevronRight, CheckSquare, Bell, FileText, Shovel, Mountain, Home, Droplets, Hammer, Triangle, DoorOpen, Shield, Wrench, Zap, Wind, Snowflake, Layers, Paintbrush, Bath, Lightbulb, Fan, Trees, Sparkles, ClipboardCheck, Pencil, Share2, Link, Copy, RefreshCw, Eye, EyeOff, Lock, ShieldOff, Printer, CircleCheck } from 'lucide-react-native';
+import { Calendar, X, BookOpen, Plus, Trash2, Check, Users, History, Download, Camera, ImageIcon, ChevronDown, ChevronLeft, ChevronRight, CheckSquare, Bell, FileText, Shovel, Mountain, Home, Droplets, Hammer, Triangle, DoorOpen, Shield, Wrench, Zap, Wind, Snowflake, Layers, Paintbrush, Bath, Lightbulb, Fan, Trees, Sparkles, ClipboardCheck, Pencil, Share2, Link, Copy, RefreshCw, Eye, EyeOff, Lock, ShieldOff, Printer, CircleCheck } from 'lucide-react-native';
 import { ScheduledTask, DailyLog, DailyLogTask, DailyLogPhoto, DailyTaskReminder } from '@/types';
 import * as Clipboard from 'expo-clipboard';
 import { Gesture, GestureDetector, ScrollView as GHScrollView } from 'react-native-gesture-handler';
@@ -199,6 +199,13 @@ export default function ScheduleScreen() {
   const [isExportingPdf, setIsExportingPdf] = useState<boolean>(false);
   const [hoveredTask, setHoveredTask] = useState<ScheduledTask | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null);
+
+  const [visibleMonth, setVisibleMonth] = useState<{ year: number; month: number }>(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() };
+  });
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
 
   const dateHeaderRef = useRef<ScrollView>(null);
   const gridHRef = useRef<ScrollView>(null);
@@ -396,6 +403,33 @@ export default function ScheduleScreen() {
   const effectiveGridWidth = colXOffsets.length > 1
     ? colXOffsets[colXOffsets.length - 1]
     : GRID_WIDTH;
+
+  const scrollToMonth = useCallback((year: number, month: number) => {
+    let idx = dates.findIndex(d => d.getFullYear() === year && d.getMonth() === month);
+    if (idx < 0) {
+      const targetMs = new Date(year, month, 1).getTime();
+      idx = targetMs < (dates[0]?.getTime() ?? Infinity) ? 0 : dates.length - 1;
+    }
+    const x = colXOffsets[idx] ?? 0;
+    gridHRef.current?.scrollTo({ x, animated: true });
+    dateHeaderRef.current?.scrollTo({ x, animated: true });
+    currentScrollXRef.current = x;
+    setVisibleMonth({ year, month });
+    setShowMonthPicker(false);
+  }, [dates, colXOffsets]);
+
+  const scrollToToday = useCallback(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const idx = dates.findIndex(d => d.getTime() === today.getTime());
+    if (idx >= 0) {
+      const x = Math.max(0, (colXOffsets[idx] ?? 0) - 200);
+      gridHRef.current?.scrollTo({ x, animated: true });
+      dateHeaderRef.current?.scrollTo({ x, animated: true });
+      currentScrollXRef.current = x;
+      setVisibleMonth({ year: today.getFullYear(), month: today.getMonth() });
+    }
+  }, [dates, colXOffsets]);
 
   // ── Lane system: stack overlapping tasks in the same phase row ─────────────
   // For each task, assign it the lowest lane (0-based) that doesn't conflict.
@@ -1325,6 +1359,43 @@ ${pdfDates.length > 0 ? `
         </ScrollView>
       </View>
 
+      {selectedProject && (
+        <View style={styles.monthNavBar}>
+          <TouchableOpacity
+            style={styles.monthNavBtn}
+            onPress={() => {
+              const newMonth = visibleMonth.month === 0 ? 11 : visibleMonth.month - 1;
+              const newYear = visibleMonth.month === 0 ? visibleMonth.year - 1 : visibleMonth.year;
+              scrollToMonth(newYear, newMonth);
+            }}
+          >
+            <ChevronLeft size={16} color="#1E3A5F" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.monthNavLabel}
+            onPress={() => { setPickerYear(visibleMonth.year); setShowMonthPicker(true); }}
+          >
+            <Text style={styles.monthNavLabelText}>
+              {new Date(visibleMonth.year, visibleMonth.month, 1).toLocaleString('default', { month: 'long', year: 'numeric' })}
+            </Text>
+            <ChevronDown size={13} color="#64748B" style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.monthNavBtn}
+            onPress={() => {
+              const newMonth = visibleMonth.month === 11 ? 0 : visibleMonth.month + 1;
+              const newYear = visibleMonth.month === 11 ? visibleMonth.year + 1 : visibleMonth.year;
+              scrollToMonth(newYear, newMonth);
+            }}
+          >
+            <ChevronRight size={16} color="#1E3A5F" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.monthNavTodayBtn} onPress={scrollToToday}>
+            <Text style={styles.monthNavTodayText}>Today</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {!selectedProject ? (
         <View style={styles.emptyState}>
           <Calendar size={48} color="#9CA3AF" />
@@ -1501,6 +1572,17 @@ ${pdfDates.length > 0 ? `
                     const x = e.nativeEvent.contentOffset.x;
                     currentScrollXRef.current = x;
                     dateHeaderRef.current?.scrollTo({ x, animated: false });
+                    // Track which month is visible at the center of the viewport
+                    const centerX = x + 200;
+                    const idx = colXOffsets.findIndex((ox, i) => ox <= centerX && (colXOffsets[i + 1] ?? Infinity) > centerX);
+                    if (idx >= 0 && idx < dates.length) {
+                      const d = dates[idx];
+                      setVisibleMonth(prev =>
+                        prev.year === d.getFullYear() && prev.month === d.getMonth()
+                          ? prev
+                          : { year: d.getFullYear(), month: d.getMonth() }
+                      );
+                    }
                   }}
                   style={styles.gridScroll}
                   nestedScrollEnabled
@@ -3076,6 +3158,39 @@ ${pdfDates.length > 0 ? `
           ) : null}
         </View>
       )}
+
+      {/* Month / Year Picker Modal */}
+      <Modal visible={showMonthPicker} transparent animationType="fade" onRequestClose={() => setShowMonthPicker(false)}>
+        <Pressable style={styles.monthPickerOverlay} onPress={() => setShowMonthPicker(false)}>
+          <Pressable style={styles.monthPickerCard} onPress={e => e.stopPropagation()}>
+            {/* Year row */}
+            <View style={styles.monthPickerYearRow}>
+              <TouchableOpacity onPress={() => setPickerYear(y => y - 1)} style={styles.monthPickerYearBtn}>
+                <ChevronLeft size={18} color="#1E3A5F" />
+              </TouchableOpacity>
+              <Text style={styles.monthPickerYearText}>{pickerYear}</Text>
+              <TouchableOpacity onPress={() => setPickerYear(y => y + 1)} style={styles.monthPickerYearBtn}>
+                <ChevronRight size={18} color="#1E3A5F" />
+              </TouchableOpacity>
+            </View>
+            {/* Month grid 3 × 4 */}
+            <View style={styles.monthPickerGrid}>
+              {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => {
+                const isSelected = pickerYear === visibleMonth.year && i === visibleMonth.month;
+                return (
+                  <TouchableOpacity
+                    key={m}
+                    style={[styles.monthPickerCell, isSelected && styles.monthPickerCellActive]}
+                    onPress={() => scrollToMonth(pickerYear, i)}
+                  >
+                    <Text style={[styles.monthPickerCellText, isSelected && styles.monthPickerCellTextActive]}>{m}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -4830,5 +4945,113 @@ const styles = StyleSheet.create({
     color: '#15803D',
     fontWeight: '700' as const,
     marginLeft: 2,
+  },
+  // ── Month navigation bar ─────────────────────────────────────────────────
+  monthNavBar: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  monthNavBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  monthNavLabel: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  monthNavLabelText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#1E3A5F',
+  },
+  monthNavTodayBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#0EA5E9',
+  },
+  monthNavTodayText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
+  },
+  // ── Month picker modal ───────────────────────────────────────────────────
+  monthPickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  monthPickerCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    width: 280,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  monthPickerYearRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: 16,
+  },
+  monthPickerYearBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+  },
+  monthPickerYearText: {
+    fontSize: 17,
+    fontWeight: '700' as const,
+    color: '#1E3A5F',
+  },
+  monthPickerGrid: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: 8,
+  },
+  monthPickerCell: {
+    width: '22%' as any,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center' as const,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  monthPickerCellActive: {
+    backgroundColor: '#0EA5E9',
+    borderColor: '#0EA5E9',
+  },
+  monthPickerCellText: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: '#374151',
+  },
+  monthPickerCellTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700' as const,
   },
 });
