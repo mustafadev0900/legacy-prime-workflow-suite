@@ -2919,15 +2919,17 @@ Generate appropriate line items from the price list that fit this scope of work$
       console.log('[Attachment] Got presigned URL, uploading image to S3...');
 
       // Upload file directly to S3
-      let uploadResponse;
       if (Platform.OS === 'web') {
         const response = await fetch(asset.uri);
         const blob = await response.blob();
-        uploadResponse = await fetch(uploadUrl, {
+        const uploadResponse = await fetch(uploadUrl, {
           method: 'PUT',
           body: blob,
           headers: { 'Content-Type': asset.mimeType || 'image/jpeg' },
         });
+        if (!uploadResponse.ok) {
+          throw new Error(`Upload failed with status: ${uploadResponse.status}`);
+        }
       } else {
         // Native: FileSystem.uploadAsync streams raw bytes directly — avoids
         // Buffer/ArrayBuffer which are not supported in Hermes (React Native).
