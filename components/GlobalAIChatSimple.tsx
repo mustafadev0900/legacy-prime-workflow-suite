@@ -4668,6 +4668,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end' as const,
+    zIndex: 10000,
   },
   attachMenu: {
     backgroundColor: '#FFFFFF',
