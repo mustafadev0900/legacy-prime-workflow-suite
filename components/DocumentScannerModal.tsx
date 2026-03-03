@@ -1,17 +1,25 @@
 /**
  * DocumentScannerModal
  *
- * Document-scanner UX using the system camera (ImagePicker) to avoid
- * AVCaptureSession initialization crashes present in expo-camera's CameraView
- * when FigCaptureSourceRemote fails with -17281 on certain devices/OS states.
+ * Wraps react-native-document-scanner-plugin which uses:
+ *   iOS  → VNDocumentCameraViewController (Apple VisionKit)
+ *   Android → Google ML Kit Document Scanner
  *
- * Flow:
- *   Ready screen (decorative frame guide + shutter)
- *   → launchCameraAsync (system camera — stable, no AVFoundation race)
- *   → Review screen ("Retake" or "Use Scan")
- *   → Post-process via expo-image-manipulator (resize 2048px, JPEG 0.92, base64)
+ * Both give the full Adobe / Dropbox scanner experience:
+ *   • Live camera with real-time document edge detection
+ *   • Auto-capture when document is flat & stable
+ *   • Perspective correction applied automatically
+ *   • Output is a clean "scanned" image, not a raw photo
+ *
+ * After the native scanner closes we show our review screen so the user
+ * can confirm or retake before the image is sent to OCR / AI analysis.
+ * We also run expo-image-manipulator to resize to 2048 px and extract
+ * base64 (needed by the OCR pipeline).
+ *
+ * ⚠️  Requires an EAS build — the native document scanner module is not
+ *     available in Expo Go.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,7 +31,7 @@ import {
   Dimensions,
   Alert,
 } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+import DocumentScanner from 'react-native-document-scanner-plugin';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Image } from 'expo-image';
 import { X, RotateCcw, Check, ScanLine } from 'lucide-react-native';
@@ -42,13 +50,13 @@ interface Props {
   title?: string;
 }
 
-type Phase = 'ready' | 'preview' | 'processing';
+type Phase = 'opening' | 'preview' | 'processing' | 'error';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const FRAME_W = SW * 0.82;
-const FRAME_H = FRAME_W * 1.35; // Portrait receipt ratio
+const FRAME_H = FRAME_W * 1.35;
 const FRAME_TOP = (SH - FRAME_H) / 2 - 40;
-const CORNER = 22;
+const CORNER = 24;
 const CORNER_THICK = 3;
 
 export default function DocumentScannerModal({
@@ -57,50 +65,69 @@ export default function DocumentScannerModal({
   onClose,
   title = 'Scan Receipt',
 }: Props) {
-  const [phase, setPhase] = useState<Phase>('ready');
+  const [phase, setPhase] = useState<Phase>('opening');
   const [capturedUri, setCapturedUri] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string>('');
+  const hasLaunched = useRef(false);
 
-  // Reset state every time the modal opens
   useEffect(() => {
     if (visible) {
-      setPhase('ready');
+      setPhase('opening');
       setCapturedUri(null);
+      setErrorMsg('');
+      hasLaunched.current = false;
+      // Small delay so the modal animates in before we open the native scanner
+      const t = setTimeout(() => {
+        if (!hasLaunched.current) {
+          hasLaunched.current = true;
+          launchScanner();
+        }
+      }, 250);
+      return () => clearTimeout(t);
     }
   }, [visible]);
 
-  const handleCapture = async () => {
+  const launchScanner = async () => {
     try {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert(
-          'Camera Permission Required',
-          'Camera access is required to scan receipts. Please allow it in Settings.',
-          [{ text: 'OK' }]
-        );
+      const { scannedImages } = await DocumentScanner.scanDocument({
+        croppedImageQuality: 100,
+        maxNumDocuments: 1,
+      });
+
+      if (!scannedImages || scannedImages.length === 0) {
+        // User cancelled the native scanner
+        onClose();
         return;
       }
 
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        quality: 1,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        setCapturedUri(result.assets[0].uri);
-        setPhase('preview');
-      }
-    } catch (e) {
-      console.error('[DocScanner] Camera error:', e);
-      Alert.alert('Error', 'Failed to open camera. Please try again.');
+      setCapturedUri(scannedImages[0]);
+      setPhase('preview');
+    } catch (e: any) {
+      console.error('[DocScanner] Native scanner error:', e);
+      const msg = e?.message || 'Failed to open scanner';
+      setErrorMsg(msg);
+      setPhase('error');
     }
+  };
+
+  const handleRetake = () => {
+    setCapturedUri(null);
+    setPhase('opening');
+    hasLaunched.current = false;
+    // Launch again immediately
+    setTimeout(() => {
+      if (!hasLaunched.current) {
+        hasLaunched.current = true;
+        launchScanner();
+      }
+    }, 150);
   };
 
   const handleUse = async () => {
     if (!capturedUri) return;
     setPhase('processing');
     try {
-      // Resize to 2048px wide — manageable size with good OCR accuracy
+      // Resize to 2048 px wide for OCR accuracy; extract base64
       const processed = await ImageManipulator.manipulateAsync(
         capturedUri,
         [{ resize: { width: 2048 } }],
@@ -109,7 +136,6 @@ export default function DocumentScannerModal({
       onCapture({ uri: processed.uri, base64: processed.base64 ?? '' });
     } catch (e) {
       console.error('[DocScanner] Processing error:', e);
-      // Fall back to original URI; let caller handle conversion
       onCapture({ uri: capturedUri, base64: '' });
     }
   };
@@ -120,26 +146,25 @@ export default function DocumentScannerModal({
     <Modal visible animationType="slide" statusBarTranslucent>
       <View style={styles.container}>
 
-        {/* ── Preview phase ──────────────────────────────── */}
+        {/* ── Preview — review the scanned doc ─────────── */}
         {phase === 'preview' && capturedUri ? (
           <>
             <View style={styles.previewHeader}>
-              <TouchableOpacity style={styles.iconBtn} onPress={() => { setCapturedUri(null); setPhase('ready'); }}>
+              <TouchableOpacity style={styles.iconBtn} onPress={onClose}>
                 <X size={22} color="#FFFFFF" />
               </TouchableOpacity>
               <Text style={styles.headerTitle}>Review Scan</Text>
               <View style={styles.iconBtn} />
             </View>
+
             <Image
               source={{ uri: capturedUri }}
               style={styles.previewImage}
               contentFit="contain"
             />
+
             <View style={styles.previewActions}>
-              <TouchableOpacity
-                style={styles.retakeBtn}
-                onPress={() => { setCapturedUri(null); setPhase('ready'); }}
-              >
+              <TouchableOpacity style={styles.retakeBtn} onPress={handleRetake}>
                 <RotateCcw size={18} color="#1F2937" />
                 <Text style={styles.retakeTxt}>Retake</Text>
               </TouchableOpacity>
@@ -151,62 +176,55 @@ export default function DocumentScannerModal({
           </>
 
         ) : phase === 'processing' ? (
-          /* ── Processing ───────────────────────────────── */
+          /* ── Processing ─────────────────────────────── */
           <View style={styles.center}>
             <ActivityIndicator size="large" color="#2563EB" />
             <Text style={styles.processingTxt}>Processing scan…</Text>
           </View>
 
+        ) : phase === 'error' ? (
+          /* ── Error fallback ──────────────────────────── */
+          <View style={styles.center}>
+            <ScanLine size={48} color="rgba(255,255,255,0.4)" />
+            <Text style={styles.errorTitle}>Scanner unavailable</Text>
+            <Text style={styles.errorMsg}>{errorMsg}</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={handleRetake}>
+              <Text style={styles.retryTxt}>Try Again</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={styles.cancelWrap}>
+              <Text style={styles.cancelTxt}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+
         ) : (
-          /* ── Ready / viewfinder ────────────────────────── */
+          /* ── Opening — native scanner is active ──────── */
           <>
-            {/* Header */}
+            {/* Header stays visible behind the native scanner sheet */}
             <View style={styles.scannerHeader}>
               <TouchableOpacity style={styles.iconBtn} onPress={onClose}>
                 <X size={22} color="#FFFFFF" />
               </TouchableOpacity>
               <Text style={styles.headerTitle}>{title}</Text>
-              {/* Spacer to keep title centred */}
               <View style={styles.iconBtn} />
             </View>
 
-            {/* Decorative viewfinder — visual guide for receipt alignment */}
+            {/* Decorative frame shown briefly while scanner opens */}
             <View style={StyleSheet.absoluteFill} pointerEvents="none">
-              {/* Top band */}
-              <View style={[styles.overlayBand, { height: FRAME_TOP }]} />
-
-              {/* Middle row: side | frame | side */}
-              <View style={styles.overlayMiddle}>
-                <View style={[styles.overlayBand, { width: (SW - FRAME_W) / 2, height: FRAME_H }]} />
-
-                {/* Transparent document frame with corner brackets */}
+              <View style={[styles.band, { height: FRAME_TOP }]} />
+              <View style={styles.middleRow}>
+                <View style={[styles.band, { width: (SW - FRAME_W) / 2, height: FRAME_H }]} />
                 <View style={[styles.docFrame, { width: FRAME_W, height: FRAME_H }]}>
                   <View style={[styles.corner, styles.cTL]} />
                   <View style={[styles.corner, styles.cTR]} />
                   <View style={[styles.corner, styles.cBL]} />
                   <View style={[styles.corner, styles.cBR]} />
                 </View>
-
-                <View style={[styles.overlayBand, { width: (SW - FRAME_W) / 2, height: FRAME_H }]} />
+                <View style={[styles.band, { width: (SW - FRAME_W) / 2, height: FRAME_H }]} />
               </View>
-
-              {/* Bottom band + instructions */}
-              <View style={[styles.overlayBand, styles.bottomBand]}>
-                <ScanLine size={20} color="rgba(255,255,255,0.7)" />
-                <Text style={styles.hint}>Tap the button to open camera</Text>
-                <Text style={styles.hintSub}>Align receipt within the frame when prompted</Text>
+              <View style={[styles.band, styles.bottomBand]}>
+                <ActivityIndicator color="#FFFFFF" style={{ marginBottom: 10 }} />
+                <Text style={styles.hint}>Opening document scanner…</Text>
               </View>
-            </View>
-
-            {/* Shutter button */}
-            <View style={styles.shutterBar}>
-              <TouchableOpacity
-                style={styles.shutterOuter}
-                onPress={handleCapture}
-                activeOpacity={0.75}
-              >
-                <View style={styles.shutterInner} />
-              </TouchableOpacity>
             </View>
           </>
         )}
@@ -225,7 +243,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#000',
-    gap: 16,
+    gap: 12,
     paddingHorizontal: 32,
   },
 
@@ -258,41 +276,29 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
   },
 
-  // ── Overlay bands ──────────────────────────────────
-  overlayBand: {
+  // ── Decorative viewfinder ───────────────────────────
+  band: {
     backgroundColor: 'rgba(0,0,0,0.72)',
   },
-  overlayMiddle: {
+  middleRow: {
     flexDirection: 'row' as const,
   },
   bottomBand: {
     flex: 1,
     alignItems: 'center' as const,
-    paddingTop: 16,
+    justifyContent: 'center' as const,
+    paddingTop: 20,
     gap: 6,
   },
   hint: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '500' as const,
-    opacity: 0.9,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-    marginTop: 4,
-  },
-  hintSub: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    opacity: 0.65,
+    opacity: 0.8,
     textAlign: 'center' as const,
-    paddingHorizontal: 24,
   },
-
-  // ── Document frame ─────────────────────────────────
   docFrame: {
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   corner: {
     position: 'absolute' as const,
@@ -304,30 +310,6 @@ const styles = StyleSheet.create({
   cTR: { top: -1, right: -1, borderTopWidth: CORNER_THICK, borderRightWidth: CORNER_THICK },
   cBL: { bottom: -1, left: -1, borderBottomWidth: CORNER_THICK, borderLeftWidth: CORNER_THICK },
   cBR: { bottom: -1, right: -1, borderBottomWidth: CORNER_THICK, borderRightWidth: CORNER_THICK },
-
-  // ── Shutter ────────────────────────────────────────
-  shutterBar: {
-    position: 'absolute' as const,
-    bottom: Platform.OS === 'ios' ? 52 : 36,
-    left: 0,
-    right: 0,
-    alignItems: 'center' as const,
-  },
-  shutterOuter: {
-    width: 78,
-    height: 78,
-    borderRadius: 39,
-    borderWidth: 4,
-    borderColor: '#FFFFFF',
-    justifyContent: 'center' as const,
-    alignItems: 'center' as const,
-  },
-  shutterInner: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: '#FFFFFF',
-  },
 
   // ── Preview ────────────────────────────────────────
   previewHeader: {
@@ -357,14 +339,14 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     gap: 8,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#1F2937',
     borderRadius: 12,
     paddingVertical: 14,
   },
   retakeTxt: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: '#1F2937',
+    color: '#F3F4F6',
   },
   useBtn: {
     flex: 2,
@@ -388,4 +370,32 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: 4,
   },
+
+  // ── Error ──────────────────────────────────────────
+  errorTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
+    marginTop: 8,
+  },
+  errorMsg: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center' as const,
+    lineHeight: 20,
+  },
+  retryBtn: {
+    marginTop: 8,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 32,
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+  retryTxt: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
+  },
+  cancelWrap: { marginTop: 8 },
+  cancelTxt: { fontSize: 15, color: '#9CA3AF' },
 });

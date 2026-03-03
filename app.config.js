@@ -33,6 +33,9 @@ module.exports = {
       favicon: "./assets/images/favicon.png",
       bundler: "metro"
     },
+    plugins: [
+      "react-native-document-scanner-plugin"
+    ],
     extra: {
       // Make environment variables available to the app
       openaiApiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY,
