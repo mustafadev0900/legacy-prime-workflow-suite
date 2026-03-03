@@ -31,6 +31,7 @@ export default function PhotosScreen() {
   const [previewNotes, setPreviewNotes] = useState<string>('');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showProjectPickerModal, setShowProjectPickerModal] = useState<boolean>(false);
+  const [isPickingMedia, setIsPickingMedia] = useState<boolean>(false);
 
   // Upload progress state
   const uploadProgress = useUploadProgress();
@@ -51,21 +52,28 @@ export default function PhotosScreen() {
       return;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 1,
-    });
+    setIsPickingMedia(true);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        quality: 1,
+      });
 
-    if (!result.canceled) {
-      const imageUri = result.assets[0].uri;
-      setSelectedImage(imageUri);
-      setPreviewNotes('');
-      setTempCategory(category);
-      // iOS needs a tick after the native picker dismisses before we can
-      // present another Modal — without this the modal is silently dropped.
-      await new Promise(resolve => setTimeout(resolve, 350));
-      setShowPreviewModal(true);
+      setIsPickingMedia(false);
+
+      if (!result.canceled) {
+        const imageUri = result.assets[0].uri;
+        setSelectedImage(imageUri);
+        setPreviewNotes('');
+        setTempCategory(category);
+        // iOS needs a tick after the native picker dismisses before we can
+        // present another Modal — without this the modal is silently dropped.
+        await new Promise(resolve => setTimeout(resolve, 350));
+        setShowPreviewModal(true);
+      }
+    } catch (e) {
+      setIsPickingMedia(false);
     }
   };
 
@@ -80,26 +88,34 @@ export default function PhotosScreen() {
       return;
     }
 
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      console.log('Camera permission denied');
-      return;
-    }
+    setIsPickingMedia(true);
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        console.log('Camera permission denied');
+        setIsPickingMedia(false);
+        return;
+      }
 
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      quality: 1,
-    });
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        quality: 1,
+      });
 
-    if (!result.canceled) {
-      const imageUri = result.assets[0].uri;
-      setSelectedImage(imageUri);
-      setPreviewNotes('');
-      setTempCategory(category);
-      // iOS needs a tick after the native camera sheet dismisses before we
-      // can present another Modal — without this the modal is silently dropped.
-      await new Promise(resolve => setTimeout(resolve, 350));
-      setShowPreviewModal(true);
+      setIsPickingMedia(false);
+
+      if (!result.canceled) {
+        const imageUri = result.assets[0].uri;
+        setSelectedImage(imageUri);
+        setPreviewNotes('');
+        setTempCategory(category);
+        // iOS needs a tick after the native camera sheet dismisses before we
+        // can present another Modal — without this the modal is silently dropped.
+        await new Promise(resolve => setTimeout(resolve, 350));
+        setShowPreviewModal(true);
+      }
+    } catch (e) {
+      setIsPickingMedia(false);
     }
   };
 
@@ -317,12 +333,24 @@ export default function PhotosScreen() {
         <View style={styles.header}>
           <Text style={styles.title}>Photos</Text>
           <View style={styles.headerButtons}>
-            <TouchableOpacity style={styles.headerButton} onPress={takePhoto}>
-              <Camera size={20} color="#FFFFFF" />
+            <TouchableOpacity
+              style={[styles.headerButton, isPickingMedia && styles.headerButtonDisabled]}
+              onPress={takePhoto}
+              disabled={isPickingMedia}
+            >
+              {isPickingMedia
+                ? <ActivityIndicator size="small" color="#FFFFFF" />
+                : <Camera size={20} color="#FFFFFF" />}
               <Text style={styles.headerButtonText}>Take Photo</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.headerButton} onPress={pickImage}>
-              <Upload size={20} color="#FFFFFF" />
+            <TouchableOpacity
+              style={[styles.headerButton, isPickingMedia && styles.headerButtonDisabled]}
+              onPress={pickImage}
+              disabled={isPickingMedia}
+            >
+              {isPickingMedia
+                ? <ActivityIndicator size="small" color="#FFFFFF" />
+                : <Upload size={20} color="#FFFFFF" />}
               <Text style={styles.headerButtonText}>Upload Photo</Text>
             </TouchableOpacity>
           </View>
@@ -350,7 +378,7 @@ export default function PhotosScreen() {
         </View>
 
         <View style={styles.projectSection}>
-          <Text style={styles.sectionLabel}>Project</Text>
+          <Text style={styles.label}>Project</Text>
           <TouchableOpacity
             style={styles.projectPicker}
             onPress={() => setShowProjectPickerModal(true)}
@@ -660,19 +688,41 @@ export default function PhotosScreen() {
             </ScrollView>
 
             <View style={styles.previewModalActions}>
-              <TouchableOpacity 
-                style={styles.previewCancelButton}
+              <TouchableOpacity
+                style={[styles.previewCancelButton, uploadProgress.isUploading && styles.previewButtonDisabled]}
                 onPress={handleCancelPreview}
+                disabled={uploadProgress.isUploading}
               >
                 <Text style={styles.previewCancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.previewSaveButton}
+              <TouchableOpacity
+                style={[styles.previewSaveButton, uploadProgress.isUploading && styles.previewButtonDisabled]}
                 onPress={handleSaveFromPreview}
+                disabled={uploadProgress.isUploading}
               >
-                <Text style={styles.previewSaveButtonText}>Save Photo</Text>
+                {uploadProgress.isUploading
+                  ? <ActivityIndicator size="small" color="#FFFFFF" />
+                  : <Text style={styles.previewSaveButtonText}>Save Photo</Text>}
               </TouchableOpacity>
             </View>
+
+            {/* Inline upload progress — rendered inside the preview Modal to avoid
+                iOS nested-Modal constraints (a second Modal cannot be presented
+                while this one is open; iOS silently drops it). */}
+            {uploadProgress.isUploading && (
+              <View style={styles.savingOverlay}>
+                <View style={styles.savingCard}>
+                  <ActivityIndicator size="large" color="#2563EB" />
+                  <Text style={styles.savingTitle}>
+                    {uploadProgress.phase === 'compressing' ? 'Compressing image…' : 'Uploading to cloud…'}
+                  </Text>
+                  <Text style={styles.savingPercent}>{uploadProgress.progress}%</Text>
+                  <View style={styles.savingBar}>
+                    <View style={[styles.savingBarFill, { width: `${uploadProgress.progress}%` as any }]} />
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -794,6 +844,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     gap: 6,
+  },
+  headerButtonDisabled: {
+    opacity: 0.6,
   },
   headerButtonText: {
     color: '#FFFFFF',
@@ -1323,6 +1376,53 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  previewButtonDisabled: {
+    opacity: 0.5,
+  },
+  // Inline save overlay — lives inside the preview Modal to avoid iOS nested-Modal issues
+  savingOverlay: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  savingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 28,
+    alignItems: 'center' as const,
+    width: '80%',
+    gap: 12,
+  },
+  savingTitle: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#1F2937',
+    textAlign: 'center' as const,
+  },
+  savingPercent: {
+    fontSize: 24,
+    fontWeight: '700' as const,
+    color: '#2563EB',
+  },
+  savingBar: {
+    width: '100%',
+    height: 6,
+    backgroundColor: '#E5E7EB',
+    borderRadius: 3,
+    overflow: 'hidden' as const,
+  },
+  savingBarFill: {
+    height: '100%',
+    backgroundColor: '#2563EB',
+    borderRadius: 3,
   },
   // Upload Progress Modal Styles
   uploadOverlay: {
