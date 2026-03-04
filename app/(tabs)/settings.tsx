@@ -462,7 +462,7 @@ export default function SettingsScreen() {
         }
       } else {
         // For native, use FileSystem
-        const FileSystem = require('expo-file-system');
+        const FileSystem = require('expo-file-system/legacy');
         const uploadResult = await FileSystem.uploadAsync(uploadUrl, selectedImage.uri, {
           httpMethod: 'PUT',
           headers: { 'Content-Type': selectedImage.mimeType || 'image/jpeg' },
