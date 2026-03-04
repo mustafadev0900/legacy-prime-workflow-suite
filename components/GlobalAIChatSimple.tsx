@@ -2737,24 +2737,24 @@ Generate appropriate line items from the price list that fit this scope of work$
             console.log('[Attachment] Got presigned URL, uploading PDF directly to S3...');
 
             // Upload file directly to S3 using presigned URL
-            let uploadResponse;
+            let uploadResponse: { ok: boolean; status: number };
             if (Platform.OS === 'web') {
               const response = await fetch(file.uri);
               const blob = await response.blob();
-              uploadResponse = await fetch(uploadUrl, {
+              const fetchResponse = await fetch(uploadUrl, {
                 method: 'PUT',
                 body: blob,
                 headers: { 'Content-Type': 'application/pdf' },
               });
+              uploadResponse = { ok: fetchResponse.ok, status: fetchResponse.status };
             } else {
-              const dataUri = await convertFileToDataUri(newFile);
-              const base64Data = dataUri.replace(/^data:.+;base64,/, '');
-              const buffer = Buffer.from(base64Data, 'base64');
-              uploadResponse = await fetch(uploadUrl, {
-                method: 'PUT',
-                body: buffer,
+              // Native: FileSystem.uploadAsync streams raw bytes — Buffer is not available in Hermes
+              const uploadResult = await FileSystem.uploadAsync(uploadUrl, file.uri, {
+                httpMethod: 'PUT',
                 headers: { 'Content-Type': 'application/pdf' },
+                uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
               });
+              uploadResponse = { ok: uploadResult.status >= 200 && uploadResult.status < 300, status: uploadResult.status };
             }
 
             if (uploadResponse.ok) {
