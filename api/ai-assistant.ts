@@ -9,9 +9,14 @@ import OpenAI from 'openai';
 async function extractPdfText(pdfUrl: string, fileName: string): Promise<string> {
   try {
     console.log('[AI Assistant] Requesting PDF text extraction for:', fileName);
-    const base = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : (process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app');
+    // VERCEL_PROJECT_PRODUCTION_URL is the stable production alias (no hash suffix).
+    // VERCEL_URL is per-deployment and may include a hash for preview builds.
+    const rawUrl =
+      process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+      process.env.VERCEL_URL ||
+      process.env.EXPO_PUBLIC_API_URL ||
+      'legacy-prime-workflow-suite.vercel.app';
+    const base = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
 
     const response = await fetch(`${base}/api/extract-pdf-text`, {
       method: 'POST',
@@ -6252,7 +6257,12 @@ When the user says "this project", "this client", "this estimate", etc., they ar
                   });
                   console.log('[AI Assistant] PDF text injected, chars:', pdfText.length);
                 } else {
-                  console.log('[AI Assistant] PDF text extraction returned empty for:', file.name);
+                  // Always inject a notice so the AI knows the PDF is present even if unreadable
+                  contentParts.push({
+                    type: 'text',
+                    text: `\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based or could not be parsed for text. If possible, please describe its contents or ask a specific question about it.)\n`,
+                  });
+                  console.log('[AI Assistant] PDF text extraction empty for:', file.name, '— injecting fallback notice');
                 }
               } else {
                 console.log('[AI Assistant] No URL available for PDF:', file.name);
