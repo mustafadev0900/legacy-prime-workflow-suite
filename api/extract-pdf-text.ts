@@ -73,6 +73,41 @@ function extractTextFromStream(stream: string): string {
   return parts.join('');
 }
 
+// ----- PDF metadata (title) extraction -----
+
+function extractPdfTitle(raw: string): string {
+  // Parenthesis form: /Title (My Document)
+  const parenMatch = raw.match(/\/Title\s*\(([^)\\]*(?:\\.[^)\\]*)*)\)/);
+  if (parenMatch) {
+    const t = decodePdfStr(parenMatch[1]).trim();
+    if (t && t.length > 0 && t.length < 200) return t;
+  }
+  // Hex form: /Title <FFFE...> (UTF-16BE BOM common in modern PDFs)
+  const hexMatch = raw.match(/\/Title\s*<([0-9A-Fa-f\s]+)>/);
+  if (hexMatch) {
+    const h = hexMatch[1].replace(/\s/g, '');
+    // UTF-16BE: starts with FFFE or FEFF BOM — decode as UTF-16
+    if (h.startsWith('fffe') || h.startsWith('FFFE') || h.startsWith('feff') || h.startsWith('FEFF')) {
+      let t = '';
+      const startAt = 4; // skip BOM
+      for (let i = startAt; i < h.length - 3; i += 4) {
+        const hi = parseInt(h.slice(i, i + 2), 16);
+        const lo = parseInt(h.slice(i + 2, i + 4), 16);
+        const cp = h.startsWith('fffe') || h.startsWith('FFFE')
+          ? lo * 256 + hi  // little-endian
+          : hi * 256 + lo; // big-endian
+        if (cp > 0) t += String.fromCodePoint(cp);
+      }
+      const title = t.trim();
+      if (title && title.length > 0 && title.length < 200) return title;
+    }
+    // Plain ASCII hex
+    const t = hexToString(h).trim();
+    if (t && t.length > 0 && t.length < 200) return t;
+  }
+  return '';
+}
+
 // ----- positional stream scanner (avoids nested-dict regex failures) -----
 
 function extractTextFromPdf(data: Buffer): { text: string; pages: number; streamsFound: number } {
@@ -177,13 +212,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('[ExtractPdfText] PDF size:', data.length, 'bytes');
 
     const { text, pages, streamsFound } = extractTextFromPdf(data);
-    console.log('[ExtractPdfText] Streams found:', streamsFound, '— extracted chars:', text.length, '— pages:', pages);
+    const title = extractPdfTitle(data.toString('binary'));
+    console.log('[ExtractPdfText] Streams found:', streamsFound, '— extracted chars:', text.length, '— pages:', pages, '— title:', title || '(none)');
 
     return res.status(200).json({
       success: true,
       text: text || '',
       pages,
-      streamsFound, // diagnostic: lets us see what was found
+      streamsFound,
+      title: title || '',
     });
   } catch (err: any) {
     console.error('[ExtractPdfText] Error:', err.message);

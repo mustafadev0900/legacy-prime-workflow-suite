@@ -3292,65 +3292,50 @@ Generate appropriate line items from the price list that fit this scope of work$
           });
         }
 
-        // Extract PDF text client-side and embed in message (avoids pdfjs in serverless)
+        // Run text extraction + image conversion in parallel for every PDF.
+        // Vision handles encoded/scanned fonts; text gives extra context.
         for (const file of filesWithS3Urls.filter(f => f.mimeType === 'application/pdf')) {
           const pdfUrl = file.s3Url || (file.uri?.startsWith('http') ? file.uri : null);
-          if (pdfUrl) {
-            try {
-              console.log('[Send] Extracting PDF text client-side:', file.name);
-              const pdfResp = await fetch(`${API_BASE}/api/extract-pdf-text`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pdfUrl, fileName: file.name }),
+          if (!pdfUrl) continue;
+
+          console.log('[Send] Processing PDF (text+vision in parallel):', file.name);
+          const [textResult, imageResult] = await Promise.all([
+            fetch(`${API_BASE}/api/extract-pdf-text`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pdfUrl, fileName: file.name }),
+            }).then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch(`${API_BASE}/api/convert-pdf-to-image`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pdfUrl, fileName: file.name, maxPages: 3 }),
+            }).then(r => r.ok ? r.json() : null).catch(() => null),
+          ]);
+
+          // Prefer PDF's internal /Title over the (often generic) file system name
+          const displayName = textResult?.title || file.name || 'document.pdf';
+          console.log('[Send] PDF — text chars:', textResult?.text?.length ?? 0, 'pages rendered:', imageResult?.convertedPages ?? 0, 'title:', textResult?.title || '(none)');
+
+          // Always add converted page images — vision reads encoded/scanned fonts correctly
+          if (imageResult?.imageUrls?.length) {
+            imageResult.imageUrls.forEach((url: string, i: number) => {
+              filesForAI.push({
+                type: 'file',
+                mimeType: 'image/png',
+                uri: url,
+                name: `${displayName}-page${i + 1}.png`,
+                s3Url: url,
               });
-              if (pdfResp.ok) {
-                const pdfResult = await pdfResp.json();
-                console.log('[Send] PDF extraction result — streams:', pdfResult.streamsFound, 'chars:', pdfResult.text?.length ?? 0, 'pages:', pdfResult.pages);
-                if (pdfResult.text) {
-                  userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n${pdfResult.text}`;
-                  console.log('[Send] PDF text embedded in message, chars:', pdfResult.text.length);
-                } else {
-                  // Image-based PDF — fall back to vision by converting pages to images
-                  console.log('[Send] No text extracted, trying PDF-to-image conversion...');
-                  try {
-                    const imgResp = await fetch(`${API_BASE}/api/convert-pdf-to-image`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ pdfUrl, fileName: file.name, maxPages: 3 }),
-                    });
-                    if (imgResp.ok) {
-                      const imgResult = await imgResp.json();
-                      if (imgResult.imageUrls?.length) {
-                        console.log('[Send] PDF→image: got', imgResult.imageUrls.length, 'page(s), adding to vision');
-                        imgResult.imageUrls.forEach((url: string, i: number) => {
-                          filesForAI.push({
-                            type: 'file',
-                            mimeType: 'image/png',
-                            uri: url,
-                            name: `${file.name || 'document'}-page${i + 1}.png`,
-                            s3Url: url,
-                          });
-                        });
-                        userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(Scanned PDF — ${imgResult.convertedPages} page(s) rendered for visual analysis.)`;
-                      } else {
-                        userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based with no extractable text.)`;
-                      }
-                    } else {
-                      userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based — no extractable text layer found.)`;
-                    }
-                  } catch {
-                    userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based — no extractable text layer found.)`;
-                  }
-                }
-              } else {
-                const errBody = await pdfResp.json().catch(() => ({}));
-                console.warn('[Send] PDF extraction 500 error body:', errBody);
-                userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(PDF text extraction failed — status ${pdfResp.status}.)`;
-              }
-            } catch (pdfErr) {
-              console.warn('[Send] PDF text extraction error:', pdfErr);
-              userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(PDF text extraction failed.)`;
-            }
+            });
+          }
+
+          // Embed extracted text for additional context (even if partially garbled)
+          if (textResult?.text) {
+            userMessage += `\n\n[PDF Attachment: ${displayName}]\n${textResult.text}`;
+          } else if (imageResult?.imageUrls?.length) {
+            userMessage += `\n\n[PDF Attachment: ${displayName}]\n(Image-based PDF — ${imageResult.convertedPages} page(s) rendered for visual analysis.)`;
+          } else {
+            userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(Could not process this PDF.)`;
           }
         }
 
@@ -3362,81 +3347,63 @@ Generate appropriate line items from the price list that fit this scope of work$
           files: filesForAI as any,
         });
       } else if (hasPDFs) {
-        // PDFs only (no images) — extract text client-side and embed in message
-        console.log('[Send] Extracting PDF text before sending');
+        // PDFs only — run text extraction + image conversion in parallel for best accuracy
+        console.log('[Send] Processing PDF(s) with text+vision pipeline');
 
-        const convertedPdfImages: { type: string; mimeType: string; uri: string; name: string; s3Url: string; }[] = [];
+        const pdfPageImages: { type: string; mimeType: string; uri: string; name: string; s3Url: string; }[] = [];
 
         for (const file of filesWithS3Urls.filter(f => f.mimeType === 'application/pdf')) {
           const pdfUrl = file.s3Url || (file.uri?.startsWith('http') ? file.uri : null);
-          if (pdfUrl) {
-            try {
-              console.log('[Send] Extracting PDF text client-side:', file.name);
-              const pdfResp = await fetch(`${API_BASE}/api/extract-pdf-text`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pdfUrl, fileName: file.name }),
+          if (!pdfUrl) continue;
+
+          console.log('[Send] Processing PDF (text+vision in parallel):', file.name);
+          const [textResult, imageResult] = await Promise.all([
+            fetch(`${API_BASE}/api/extract-pdf-text`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pdfUrl, fileName: file.name }),
+            }).then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch(`${API_BASE}/api/convert-pdf-to-image`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ pdfUrl, fileName: file.name, maxPages: 3 }),
+            }).then(r => r.ok ? r.json() : null).catch(() => null),
+          ]);
+
+          // Prefer PDF's internal /Title over the (often generic) file system name
+          const displayName = textResult?.title || file.name || 'document.pdf';
+          console.log('[Send] PDF — text chars:', textResult?.text?.length ?? 0, 'pages rendered:', imageResult?.convertedPages ?? 0, 'title:', textResult?.title || '(none)');
+
+          // Always add converted page images — vision reads encoded/scanned fonts correctly
+          if (imageResult?.imageUrls?.length) {
+            imageResult.imageUrls.forEach((url: string, i: number) => {
+              pdfPageImages.push({
+                type: 'file',
+                mimeType: 'image/png',
+                uri: url,
+                name: `${displayName}-page${i + 1}.png`,
+                s3Url: url,
               });
-              if (pdfResp.ok) {
-                const pdfResult = await pdfResp.json();
-                console.log('[Send] PDF extraction result — streams:', pdfResult.streamsFound, 'chars:', pdfResult.text?.length ?? 0, 'pages:', pdfResult.pages);
-                if (pdfResult.text) {
-                  userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n${pdfResult.text}`;
-                  console.log('[Send] PDF text embedded in message, chars:', pdfResult.text.length);
-                } else {
-                  // Image-based PDF — fall back to vision by converting pages to images
-                  console.log('[Send] No text extracted, trying PDF-to-image conversion...');
-                  try {
-                    const imgResp = await fetch(`${API_BASE}/api/convert-pdf-to-image`, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ pdfUrl, fileName: file.name, maxPages: 3 }),
-                    });
-                    if (imgResp.ok) {
-                      const imgResult = await imgResp.json();
-                      if (imgResult.imageUrls?.length) {
-                        console.log('[Send] PDF→image: got', imgResult.imageUrls.length, 'page(s), adding to vision');
-                        imgResult.imageUrls.forEach((url: string, i: number) => {
-                          convertedPdfImages.push({
-                            type: 'file',
-                            mimeType: 'image/png',
-                            uri: url,
-                            name: `${file.name || 'document'}-page${i + 1}.png`,
-                            s3Url: url,
-                          });
-                        });
-                        userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(Scanned PDF — ${imgResult.convertedPages} page(s) rendered for visual analysis.)`;
-                      } else {
-                        userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based with no extractable text.)`;
-                      }
-                    } else {
-                      userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based — no extractable text layer found.)`;
-                    }
-                  } catch {
-                    userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based — no extractable text layer found.)`;
-                  }
-                }
-              } else {
-                const errBody = await pdfResp.json().catch(() => ({}));
-                console.warn('[Send] PDF extraction 500 error body:', errBody);
-                userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(PDF text extraction failed — status ${pdfResp.status}.)`;
-              }
-            } catch (pdfErr) {
-              console.warn('[Send] PDF text extraction error:', pdfErr);
-              userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(PDF text extraction failed.)`;
-            }
+            });
+          }
+
+          // Embed extracted text for additional context (even if partially garbled)
+          if (textResult?.text) {
+            userMessage += `\n\n[PDF Attachment: ${displayName}]\n${textResult.text}`;
+          } else if (imageResult?.imageUrls?.length) {
+            userMessage += `\n\n[PDF Attachment: ${displayName}]\n(Image-based PDF — ${imageResult.convertedPages} page(s) rendered for visual analysis.)`;
+          } else {
+            userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(Could not process this PDF.)`;
           }
         }
 
-        if (convertedPdfImages.length > 0) {
-          // Scanned PDF(s) — send converted page images for vision analysis
-          console.log('[Send] Sending with', convertedPdfImages.length, 'converted PDF page image(s)');
+        if (pdfPageImages.length > 0) {
+          console.log('[Send] Sending with', pdfPageImages.length, 'PDF page image(s) for vision');
           await sendMessage({
             text: userMessage,
-            files: convertedPdfImages as any,
+            files: pdfPageImages as any,
           });
         } else {
-          // Text-based PDF(s) — embed extracted text, no file objects needed
           await sendMessage(userMessage);
         }
       } else {
