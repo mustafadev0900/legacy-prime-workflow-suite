@@ -2,22 +2,17 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { inflateSync } from 'zlib';
 
 // Pure Node.js PDF text extraction — zero external dependencies.
-// Uses only built-in `zlib` + `Buffer`:
-//  - pdfjs-dist/legacy/build/pdf.mjs doesn't exist in the installed package
-//  - pdf-parse v2 requires @napi-rs/canvas (native binary, wrong platform on Vercel)
-// This handles FlateDecode-compressed streams and BT/ET text blocks,
-// covering the vast majority of standard text-based PDFs.
+// Handles: FlateDecode-compressed streams, parenthesis strings (Tj/TJ),
+// hex-encoded strings <AABB> (common with CID/Type2 fonts), and uses a
+// positional stream scanner (not regex) to avoid nested-dict parsing failures.
 
 export const config = {
   maxDuration: 30,
-  api: {
-    bodyParser: {
-      sizeLimit: '20mb',
-    },
-  },
+  api: { bodyParser: { sizeLimit: '20mb' } },
 };
 
-// Decode PDF string escape sequences into readable characters
+// ----- string decoders -----
+
 function decodePdfStr(s: string): string {
   return s
     .replace(/\\n/g, '\n')
@@ -29,7 +24,19 @@ function decodePdfStr(s: string): string {
     .replace(/\\(\d{3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)));
 }
 
-// Extract visible text from a single decompressed PDF content stream
+function hexToString(hex: string): string {
+  const h = hex.replace(/\s/g, '');
+  let result = '';
+  for (let i = 0; i < h.length - 1; i += 2) {
+    const code = parseInt(h.slice(i, i + 2), 16);
+    if (code > 31 && code < 128) result += String.fromCharCode(code);
+    else if (code > 127) result += String.fromCharCode(code); // keep non-ASCII too
+  }
+  return result;
+}
+
+// ----- text extraction from a single decompressed content stream -----
+
 function extractTextFromStream(stream: string): string {
   const parts: string[] = [];
 
@@ -38,20 +45,25 @@ function extractTextFromStream(stream: string): string {
   let btMatch: RegExpExecArray | null;
   while ((btMatch = btEtRe.exec(stream)) !== null) {
     const block = btMatch[0];
-
-    // TJ operator: [(string) kerning (string) ...] TJ — most common in modern PDFs
-    const tjArrRe = /\[([\s\S]*?)\]\s*TJ/g;
     let m: RegExpExecArray | null;
+
+    // TJ array: [(string) kern <hex>] TJ  — most common in modern PDFs
+    const tjArrRe = /\[([\s\S]*?)\]\s*TJ/g;
     while ((m = tjArrRe.exec(block)) !== null) {
-      const strItems = m[1].match(/\(([^)\\]*(?:\\.[^)\\]*)*)\)/g) ?? [];
-      const text = strItems.map((s: string) => decodePdfStr(s.slice(1, -1))).join('');
+      // Match paren strings AND hex strings inside the array
+      const items = m[1].match(/(\([^)\\]*(?:\\.[^)\\]*)*\)|<[0-9A-Fa-f\s]+>)/g) ?? [];
+      const text = (items as string[]).map(item =>
+        item.startsWith('(')
+          ? decodePdfStr(item.slice(1, -1))
+          : hexToString(item.slice(1, -1))
+      ).join('');
       if (text.trim()) parts.push(text);
     }
 
-    // Tj operator: (string) Tj — also common
-    const tjRe = /\(([^)\\]*(?:\\.[^)\\]*)*)\)\s*(?:Tj|'|")/g;
+    // Tj / ' / " operator: (string) Tj  or  <hex> Tj
+    const tjRe = /(?:\(([^)\\]*(?:\\.[^)\\]*)*)\)|<([0-9A-Fa-f\s]+)>)\s*(?:Tj|'|")/g;
     while ((m = tjRe.exec(block)) !== null) {
-      const text = decodePdfStr(m[1]);
+      const text = m[1] !== undefined ? decodePdfStr(m[1]) : hexToString(m[2]);
       if (text.trim()) parts.push(text);
     }
 
@@ -61,49 +73,87 @@ function extractTextFromStream(stream: string): string {
   return parts.join('');
 }
 
-function extractTextFromPdf(data: Buffer): { text: string; pages: number } {
-  const content = data.toString('binary');
+// ----- positional stream scanner (avoids nested-dict regex failures) -----
+
+function extractTextFromPdf(data: Buffer): { text: string; pages: number; streamsFound: number } {
+  const raw = data.toString('binary');
   const streamTexts: string[] = [];
+  let streamsFound = 0;
 
-  // Walk every object stream in the PDF
-  const streamRe = /<<([^>]*)>>\s*stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let m: RegExpExecArray | null;
+  let searchPos = 0;
+  while (searchPos < raw.length) {
+    // Find the next 'stream' keyword
+    const streamKeyPos = raw.indexOf('stream', searchPos);
+    if (streamKeyPos === -1) break;
 
-  while ((m = streamRe.exec(content)) !== null) {
-    const dict = m[1];
-    const streamBytes = Buffer.from(m[2], 'binary');
+    // 'stream' must be followed by \r\n or \n (PDF spec requirement)
+    const afterKeyword = raw[streamKeyPos + 6];
+    const afterKeyword2 = raw[streamKeyPos + 7];
+    let dataStart: number;
+    if (afterKeyword === '\r' && afterKeyword2 === '\n') {
+      dataStart = streamKeyPos + 8;
+    } else if (afterKeyword === '\n') {
+      dataStart = streamKeyPos + 7;
+    } else {
+      searchPos = streamKeyPos + 6;
+      continue;
+    }
 
-    // Skip image data and cross-reference streams — no text there
-    if (/\/Subtype\s*\/Image/.test(dict)) continue;
-    if (/\/Type\s*\/XRef/.test(dict)) continue;
+    // Find the matching endstream
+    const endStreamPos = raw.indexOf('\nendstream', dataStart);
+    if (endStreamPos === -1) {
+      searchPos = dataStart;
+      continue;
+    }
+
+    streamsFound++;
+
+    // Look back up to 512 bytes before 'stream' to find filter / subtype info
+    const lookback = raw.slice(Math.max(0, streamKeyPos - 512), streamKeyPos);
+    const isFlateDecode = lookback.includes('FlateDecode');
+    const isImage = /\/Subtype\s*\/Image/.test(lookback);
+
+    searchPos = endStreamPos + 10; // advance past endstream
+
+    // Skip image streams — no text there
+    if (isImage) continue;
+
+    const streamBytes = Buffer.from(raw.slice(dataStart, endStreamPos), 'binary');
 
     let streamText: string;
-    try {
-      if (dict.includes('FlateDecode')) {
+    if (isFlateDecode) {
+      try {
         streamText = inflateSync(streamBytes).toString('latin1');
-      } else {
+      } catch {
+        // Decompression failed — still try raw in case FlateDecode flag is misleading
         streamText = streamBytes.toString('latin1');
       }
-    } catch {
-      // Stream may be truncated or use a different compression; try raw
+    } else {
       streamText = streamBytes.toString('latin1');
     }
 
-    const text = extractTextFromStream(streamText);
+    // Try text extraction; also try uncompressed if flat gave nothing
+    let text = extractTextFromStream(streamText);
+    if (!text.trim() && isFlateDecode) {
+      text = extractTextFromStream(streamBytes.toString('latin1'));
+    }
+
     if (text.trim()) streamTexts.push(text);
   }
 
-  // Count page objects as a simple page number heuristic
-  const pageCount = (content.match(/\/Type\s*\/Page(?:[^s]|$)/g) ?? []).length;
+  // Count page objects for the page number field
+  const pageCount = (raw.match(/\/Type\s*\/Page(?:[^s]|$)/g) ?? []).length;
 
   const fullText = streamTexts
     .join('\n')
-    .replace(/\s{3,}/g, ' ')
+    .replace(/[ \t]{3,}/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  return { text: fullText, pages: Math.max(pageCount, 1) };
+  return { text: fullText, pages: Math.max(pageCount, 1), streamsFound };
 }
+
+// ----- handler -----
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -126,13 +176,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const data = Buffer.from(await response.arrayBuffer());
     console.log('[ExtractPdfText] PDF size:', data.length, 'bytes');
 
-    const { text, pages } = extractTextFromPdf(data);
-    console.log('[ExtractPdfText] Extracted chars:', text.length, '— pages:', pages);
+    const { text, pages, streamsFound } = extractTextFromPdf(data);
+    console.log('[ExtractPdfText] Streams found:', streamsFound, '— extracted chars:', text.length, '— pages:', pages);
 
     return res.status(200).json({
       success: true,
       text: text || '',
       pages,
+      streamsFound, // diagnostic: lets us see what was found
     });
   } catch (err: any) {
     console.error('[ExtractPdfText] Error:', err.message);

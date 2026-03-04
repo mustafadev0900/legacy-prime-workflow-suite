@@ -3305,11 +3305,12 @@ Generate appropriate line items from the price list that fit this scope of work$
               });
               if (pdfResp.ok) {
                 const pdfResult = await pdfResp.json();
+                console.log('[Send] PDF extraction result — streams:', pdfResult.streamsFound, 'chars:', pdfResult.text?.length ?? 0, 'pages:', pdfResult.pages);
                 if (pdfResult.text) {
                   userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n${pdfResult.text}`;
                   console.log('[Send] PDF text embedded in message, chars:', pdfResult.text.length);
                 } else {
-                  userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based and could not be parsed for text.)`;
+                  userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based — no extractable text layer found. Streams scanned: ${pdfResult.streamsFound ?? 0}.)`;
                 }
               } else {
                 const errBody = await pdfResp.json().catch(() => ({}));
@@ -3346,11 +3347,12 @@ Generate appropriate line items from the price list that fit this scope of work$
               });
               if (pdfResp.ok) {
                 const pdfResult = await pdfResp.json();
+                console.log('[Send] PDF extraction result — streams:', pdfResult.streamsFound, 'chars:', pdfResult.text?.length ?? 0, 'pages:', pdfResult.pages);
                 if (pdfResult.text) {
                   userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n${pdfResult.text}`;
                   console.log('[Send] PDF text embedded in message, chars:', pdfResult.text.length);
                 } else {
-                  userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based and could not be parsed for text.)`;
+                  userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based — no extractable text layer found. Streams scanned: ${pdfResult.streamsFound ?? 0}.)`;
                 }
               } else {
                 const errBody = await pdfResp.json().catch(() => ({}));
