@@ -3311,6 +3311,8 @@ Generate appropriate line items from the price list that fit this scope of work$
                   userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based and could not be parsed for text.)`;
                 }
               } else {
+                const errBody = await pdfResp.json().catch(() => ({}));
+                console.warn('[Send] PDF extraction 500 error body:', errBody);
                 userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(PDF text extraction failed — status ${pdfResp.status}.)`;
               }
             } catch (pdfErr) {
@@ -3350,6 +3352,8 @@ Generate appropriate line items from the price list that fit this scope of work$
                   userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(This PDF appears to be image-based and could not be parsed for text.)`;
                 }
               } else {
+                const errBody = await pdfResp.json().catch(() => ({}));
+                console.warn('[Send] PDF extraction 500 error body:', errBody);
                 userMessage += `\n\n[PDF Attachment: ${file.name || 'document.pdf'}]\n(PDF text extraction failed — status ${pdfResp.status}.)`;
               }
             } catch (pdfErr) {

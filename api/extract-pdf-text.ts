@@ -1,8 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-// Configure PDF.js worker (same setup as convert-pdf-to-image.ts)
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-dist/legacy/build/pdf.worker.mjs';
+// In Node.js serverless environments, do NOT set workerSrc to a file path.
+// Doing so causes Node.js to try spawning a Worker thread, which fails in
+// restricted serverless sandboxes. Leaving workerSrc as the default empty
+// string makes pdfjs run in fake-worker (single-thread) mode — correct for
+// Vercel/Lambda-style runtimes.
+// pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-dist/legacy/build/pdf.worker.mjs'; // intentionally omitted
 
 export const config = {
   maxDuration: 30,
