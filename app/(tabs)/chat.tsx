@@ -39,6 +39,10 @@ export default function ChatScreen() {
   const [isLoadingConversations, setIsLoadingConversations] = useState<boolean>(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
   const [audioProgress, setAudioProgress] = useState<{ [key: string]: number }>({});
+  // Tracks the latest lastMessageAt per conversation (from fetchConversations API).
+  // Used to detect new messages in non-selected conversations and show unread dots.
+  const conversationLastMsgAtRef = useRef<Map<string, string>>(new Map());
+  const [unreadConversations, setUnreadConversations] = useState<Set<string>>(new Set());
 
   // Function to clear AI chat history
   const handleClearAIChat = async () => {
@@ -175,13 +179,11 @@ export default function ChatScreen() {
     fetchTeamMembers();
   }, [user?.id, user?.role]);
 
-  // Fetch conversations from database
+  // Fetch conversations from database — runs on mount and every 30s to discover
+  // new conversations created by other users while the app is open.
   useEffect(() => {
     const fetchConversations = async () => {
-      if (!user?.id) {
-        console.log('[Chat] User not loaded yet, skipping conversation fetch');
-        return;
-      }
+      if (!user?.id) return;
 
       setIsLoadingConversations(true);
       try {
@@ -196,23 +198,28 @@ export default function ChatScreen() {
         if (result.success) {
           console.log('[Chat] Fetched', result.conversations.length, 'conversations');
 
-          // Transform and add each conversation to context
           result.conversations.forEach((conv: any) => {
-            // Check if conversation already exists in local context
-            const existingConv = conversations.find(c => c.id === conv.id);
+            // Always upsert the conversation — addConversation now deduplicates
+            // via functional update so calling it for existing convs is safe.
+            const localConversation = {
+              id: conv.id,
+              name: conv.name,
+              type: conv.type as 'individual' | 'group',
+              participants: conv.participants.map((p: any) => p.id),
+              messages: conversationsRef.current.find(c => c.id === conv.id)?.messages || [],
+              createdAt: conv.createdAt,
+              avatar: conv.avatar,
+            };
+            addConversation(localConversation);
 
-            if (!existingConv) {
-              const localConversation = {
-                id: conv.id,
-                name: conv.name,
-                type: conv.type as 'individual' | 'group',
-                participants: conv.participants.map((p: any) => p.id),
-                messages: [], // Messages will be fetched when conversation is opened
-                createdAt: conv.createdAt,
-                avatar: conv.avatar,
-              };
-
-              addConversation(localConversation);
+            // Detect new messages in non-selected conversations → unread dot
+            if (conv.lastMessageAt) {
+              const knownAt = conversationLastMsgAtRef.current.get(conv.id);
+              const isSelected = conv.id === selectedChat;
+              if (!isSelected && knownAt && conv.lastMessageAt > knownAt) {
+                setUnreadConversations(prev => new Set(prev).add(conv.id));
+              }
+              conversationLastMsgAtRef.current.set(conv.id, conv.lastMessageAt);
             }
           });
         } else {
@@ -226,6 +233,8 @@ export default function ChatScreen() {
     };
 
     fetchConversations();
+    const pollInterval = setInterval(fetchConversations, 30000);
+    return () => clearInterval(pollInterval);
   }, [user?.id]);
 
   // Fetch messages when a team conversation is selected and poll for new messages
@@ -263,10 +272,9 @@ export default function ChatScreen() {
                 id: msg.id,
                 senderId: msg.senderId,
                 type: msg.type,
-                content: msg.content,
+                content: msg.content, // S3 URL for file/image/voice; text content for text msgs
                 text: msg.text,
                 fileName: msg.fileName,
-                fileUrl: msg.fileUrl,
                 duration: msg.duration,
                 timestamp: msg.timestamp,
               };
@@ -1305,6 +1313,16 @@ export default function ChatScreen() {
     }
   };
 
+  // Clear unread dot when a conversation is opened
+  const handleSelectChat = (convId: string) => {
+    setSelectedChat(convId);
+    setUnreadConversations(prev => {
+      const next = new Set(prev);
+      next.delete(convId);
+      return next;
+    });
+  };
+
   const individualChats = conversations.filter(c => c.type === 'individual');
   const groupChats = conversations.filter(c => c.type === 'group');
 
@@ -1389,26 +1407,30 @@ export default function ChatScreen() {
                 <Text style={styles.sectionTitle}>Direct Messages</Text>
                 {individualChats
                   .filter(conv => !searchQuery || conv.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((conv) => (
-                    <TouchableOpacity
-                      key={conv.id}
-                      style={[styles.contactItem, selectedChat === conv.id && styles.contactItemActive]}
-                      onPress={() => setSelectedChat(conv.id)}
-                    >
-                      {conv.avatar ? (
-                        <Image
-                          source={{ uri: conv.avatar }}
-                          style={styles.contactAvatar}
-                          contentFit="cover"
-                        />
-                      ) : (
-                        <View style={styles.contactAvatarPlaceholder}>
-                          <Text style={styles.contactAvatarInitials}>{getInitials(conv.name)}</Text>
-                        </View>
-                      )}
-                      <Text style={styles.contactName}>{conv.name}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  .map((conv) => {
+                    const hasUnread = unreadConversations.has(conv.id);
+                    return (
+                      <TouchableOpacity
+                        key={conv.id}
+                        style={[styles.contactItem, selectedChat === conv.id && styles.contactItemActive]}
+                        onPress={() => handleSelectChat(conv.id)}
+                      >
+                        {conv.avatar ? (
+                          <Image
+                            source={{ uri: conv.avatar }}
+                            style={styles.contactAvatar}
+                            contentFit="cover"
+                          />
+                        ) : (
+                          <View style={styles.contactAvatarPlaceholder}>
+                            <Text style={styles.contactAvatarInitials}>{getInitials(conv.name)}</Text>
+                          </View>
+                        )}
+                        <Text style={[styles.contactName, hasUnread && { fontWeight: '700' }]}>{conv.name}</Text>
+                        {hasUnread && <View style={styles.unreadDot} />}
+                      </TouchableOpacity>
+                    );
+                  })}
               </View>
             )}
 
@@ -1417,16 +1439,20 @@ export default function ChatScreen() {
                 <Text style={styles.sectionTitle}>Groups</Text>
                 {groupChats
                   .filter(conv => !searchQuery || conv.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((group) => (
-                    <TouchableOpacity
-                      key={group.id}
-                      style={[styles.groupItem, selectedChat === group.id && styles.groupItemActive]}
-                      onPress={() => setSelectedChat(group.id)}
-                    >
-                      <Users size={20} color="#2563EB" />
-                      <Text style={styles.groupName}>{group.name}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  .map((group) => {
+                    const hasUnread = unreadConversations.has(group.id);
+                    return (
+                      <TouchableOpacity
+                        key={group.id}
+                        style={[styles.groupItem, selectedChat === group.id && styles.groupItemActive]}
+                        onPress={() => handleSelectChat(group.id)}
+                      >
+                        <Users size={20} color="#2563EB" />
+                        <Text style={[styles.groupName, hasUnread && { fontWeight: '700' }]}>{group.name}</Text>
+                        {hasUnread && <View style={styles.unreadDot} />}
+                      </TouchableOpacity>
+                    );
+                  })}
               </View>
             )}
 
@@ -1962,6 +1988,14 @@ const styles = StyleSheet.create({
   contactName: {
     fontSize: 14,
     color: '#1F2937',
+    flex: 1,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#2563EB',
+    marginLeft: 6,
   },
   groupsSection: {
     marginBottom: 16,
@@ -1980,6 +2014,7 @@ const styles = StyleSheet.create({
   groupName: {
     fontSize: 14,
     color: '#1F2937',
+    flex: 1,
   },
   chatArea: {
     flex: 1,

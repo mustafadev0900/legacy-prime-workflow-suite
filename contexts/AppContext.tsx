@@ -1824,11 +1824,14 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     setCallLogs(prev => prev.filter(log => log.id !== id));
   }, []);
 
-  const addConversation = useCallback(async (conversation: ChatConversation) => {
-    const updated = [...conversations, conversation];
-    setConversations(updated);
-    await AsyncStorage.setItem('conversations', JSON.stringify(updated));
-  }, [conversations]);
+  const addConversation = useCallback((conversation: ChatConversation) => {
+    setConversations(prev => {
+      if (prev.some(c => c.id === conversation.id)) return prev;
+      const updated = [...prev, conversation];
+      AsyncStorage.setItem('conversations', JSON.stringify(updated)).catch(console.error);
+      return updated;
+    });
+  }, []);
 
   const addMessageToConversation = useCallback(async (conversationId: string, message: ChatMessage) => {
     setConversations(prev => {
