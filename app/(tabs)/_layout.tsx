@@ -147,6 +147,7 @@ export default function TabLayout() {
         options={{
           title: 'More',
           tabBarIcon: ({ color }) => <Menu size={24} color={color} />,
+          href: Platform.OS === 'web' ? null : undefined,
         }}
       />
       {/* Hidden tabs - accessible via More screen on mobile, or directly on web */}

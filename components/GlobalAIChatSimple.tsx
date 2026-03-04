@@ -3882,7 +3882,10 @@ Generate appropriate line items from the price list that fit this scope of work$
                 attachedFiles.some(f => f.uploading === true)
               }
             >
-              <Send size={20} color="#FFFFFF" />
+              {attachedFiles.some(f => f.uploading)
+                ? <ActivityIndicator size="small" color="#FFFFFF" />
+                : <Send size={20} color="#FFFFFF" />
+              }
             </TouchableOpacity>
           </View>
         </View>
@@ -3908,12 +3911,14 @@ Generate appropriate line items from the price list that fit this scope of work$
 
               <Text style={styles.attachMenuTitle}>Attach File</Text>
 
-              <TouchableOpacity style={styles.attachOption} onPress={handleTakePhoto}>
-                <View style={[styles.attachIconContainer, { backgroundColor: '#EF4444' }]}>
-                  <ImageIcon size={24} color="#FFFFFF" />
-                </View>
-                <Text style={styles.attachOptionText}>Take Photo</Text>
-              </TouchableOpacity>
+              {Platform.OS !== 'web' && (
+                <TouchableOpacity style={styles.attachOption} onPress={handleTakePhoto}>
+                  <View style={[styles.attachIconContainer, { backgroundColor: '#EF4444' }]}>
+                    <ImageIcon size={24} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.attachOptionText}>Take Photo</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity style={styles.attachOption} onPress={handlePickImage}>
                 <View style={[styles.attachIconContainer, { backgroundColor: '#8B5CF6' }]}>
@@ -4381,7 +4386,10 @@ Generate appropriate line items from the price list that fit this scope of work$
                     attachedFiles.some(f => f.uploading === true)
                   }
                 >
-                  <Send size={20} color="#FFFFFF" />
+                  {attachedFiles.some(f => f.uploading)
+                    ? <ActivityIndicator size="small" color="#FFFFFF" />
+                    : <Send size={20} color="#FFFFFF" />
+                  }
                 </TouchableOpacity>
               </View>
             </View>
@@ -4406,12 +4414,14 @@ Generate appropriate line items from the price list that fit this scope of work$
 
               <Text style={styles.attachMenuTitle}>Attach File</Text>
 
-              <TouchableOpacity style={styles.attachOption} onPress={handleTakePhoto}>
-                <View style={[styles.attachIconContainer, { backgroundColor: '#EF4444' }]}>
-                  <ImageIcon size={24} color="#FFFFFF" />
-                </View>
-                <Text style={styles.attachOptionText}>Take Photo</Text>
-              </TouchableOpacity>
+              {Platform.OS !== 'web' && (
+                <TouchableOpacity style={styles.attachOption} onPress={handleTakePhoto}>
+                  <View style={[styles.attachIconContainer, { backgroundColor: '#EF4444' }]}>
+                    <ImageIcon size={24} color="#FFFFFF" />
+                  </View>
+                  <Text style={styles.attachOptionText}>Take Photo</Text>
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity style={styles.attachOption} onPress={handlePickImage}>
                 <View style={[styles.attachIconContainer, { backgroundColor: '#8B5CF6' }]}>
