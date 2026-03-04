@@ -1,15 +1,18 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs';
-
-// In Node.js serverless environments, do NOT set workerSrc to a file path.
-// Doing so causes Node.js to try spawning a Worker thread, which fails in
-// restricted serverless sandboxes. Leaving workerSrc as the default empty
-// string makes pdfjs run in fake-worker (single-thread) mode — correct for
-// Vercel/Lambda-style runtimes.
-// pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdfjs-dist/legacy/build/pdf.worker.mjs'; // intentionally omitted
+// pdf-parse is a CommonJS module — use require() style import to avoid
+// "has no default export" TypeScript error with ESM-style imports.
+// It is a pure Node.js library (no browser APIs, no web workers) and works
+// reliably in Vercel/Lambda serverless environments unlike pdfjs-dist.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pdfParse: (buffer: Buffer) => Promise<{ text: string; numpages: number }> = require('pdf-parse');
 
 export const config = {
   maxDuration: 30,
+  api: {
+    bodyParser: {
+      sizeLimit: '20mb', // support base64 fallback if needed
+    },
+  },
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -23,52 +26,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    console.log('[ExtractPdfText] Fetching PDF:', fileName, pdfUrl.substring(0, 60));
+    console.log('[ExtractPdfText] Fetching PDF:', fileName, pdfUrl.substring(0, 80));
 
     const response = await fetch(pdfUrl);
     if (!response.ok) {
-      throw new Error(`Failed to fetch PDF: HTTP ${response.status}`);
+      throw new Error(`Failed to fetch PDF from S3: HTTP ${response.status} — URL may not be publicly accessible`);
     }
 
-    const data = new Uint8Array(await response.arrayBuffer());
-    console.log('[ExtractPdfText] PDF size:', data.length, 'bytes');
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    console.log('[ExtractPdfText] PDF size:', buffer.length, 'bytes');
 
-    const pdf = await (pdfjsLib as any).getDocument({
-      data,
-      useSystemFonts: true,
-      standardFontDataUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/standard_fonts/',
-    }).promise;
+    const data = await pdfParse(buffer);
 
-    const totalPages: number = pdf.numPages;
-    const maxPages = Math.min(totalPages, 25);
-    console.log('[ExtractPdfText] Pages:', totalPages, '— extracting', maxPages);
+    // pdf-parse returns all text in data.text; clean up excessive whitespace
+    const extractedText = data.text
+      .replace(/\r\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/[^\S\n]{2,}/g, ' ')
+      .trim();
 
-    const pageTexts: string[] = [];
-    for (let p = 1; p <= maxPages; p++) {
-      const page = await pdf.getPage(p);
-      const textContent = await page.getTextContent();
-      const text = (textContent.items as any[])
-        .filter((item: any) => item.str)
-        .map((item: any) => item.str)
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      if (text) {
-        pageTexts.push(totalPages > 1 ? `[Page ${p}/${totalPages}]\n${text}` : text);
-      }
-    }
-
-    if (totalPages > maxPages) {
-      pageTexts.push(`[Note: Document has ${totalPages} pages; only first ${maxPages} extracted.]`);
-    }
-
-    const extractedText = pageTexts.join('\n\n');
-    console.log('[ExtractPdfText] Extracted chars:', extractedText.length);
+    console.log('[ExtractPdfText] Extracted chars:', extractedText.length, '— pages:', data.numpages);
 
     return res.status(200).json({
       success: true,
       text: extractedText,
-      pages: totalPages,
+      pages: data.numpages,
     });
   } catch (err: any) {
     console.error('[ExtractPdfText] Error:', err.message);

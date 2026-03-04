@@ -2760,11 +2760,12 @@ Generate appropriate line items from the price list that fit this scope of work$
             if (uploadResponse.ok) {
               console.log('[Attachment] PDF uploaded successfully to S3:', fileUrl);
 
-              // Update the attached file with S3 URL and remove uploading flag
+              // Store S3 URL in s3Url; preserve original local URI so
+              // we can fall back to base64 if S3 fetch fails server-side.
               setAttachedFiles(prev =>
                 prev.map(f =>
                   f.name === file.name && f.mimeType === 'application/pdf'
-                    ? { ...f, uri: fileUrl, uploading: false }
+                    ? { ...f, s3Url: fileUrl, uploading: false }
                     : f
                 )
               );
