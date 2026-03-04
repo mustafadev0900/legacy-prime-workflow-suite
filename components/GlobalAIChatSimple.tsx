@@ -44,6 +44,7 @@ const extensionMimeTypeMap: Record<string, string> = {
 type AttachedFile = {
   uri: string;
   name: string;
+  displayName?: string; // friendly name from PDF /Title metadata (overrides name in UI)
   mimeType: string;
   size: number;
   type: 'file';
@@ -2760,8 +2761,7 @@ Generate appropriate line items from the price list that fit this scope of work$
             if (uploadResponse.ok) {
               console.log('[Attachment] PDF uploaded successfully to S3:', fileUrl);
 
-              // Store S3 URL in s3Url; preserve original local URI so
-              // we can fall back to base64 if S3 fetch fails server-side.
+              // Mark upload done; preserve original local URI for base64 fallback
               setAttachedFiles(prev =>
                 prev.map(f =>
                   f.name === file.name && f.mimeType === 'application/pdf'
@@ -2769,6 +2769,30 @@ Generate appropriate line items from the price list that fit this scope of work$
                     : f
                 )
               );
+
+              // Fetch PDF /Title metadata for a user-friendly display name
+              try {
+                const titleResp = await fetch(`${API_BASE}/api/extract-pdf-text`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ pdfUrl: fileUrl, fileName: file.name }),
+                });
+                if (titleResp.ok) {
+                  const { title } = await titleResp.json();
+                  if (title && title.length > 1) {
+                    console.log('[Attachment] PDF title found:', title);
+                    setAttachedFiles(prev =>
+                      prev.map(f =>
+                        f.name === file.name && f.mimeType === 'application/pdf'
+                          ? { ...f, displayName: title }
+                          : f
+                      )
+                    );
+                  }
+                }
+              } catch {
+                // Non-fatal — file.name used as fallback
+              }
             } else {
               throw new Error(`Upload failed with status: ${uploadResponse.status}`);
             }
@@ -3312,8 +3336,8 @@ Generate appropriate line items from the price list that fit this scope of work$
             }).then(r => r.ok ? r.json() : null).catch(() => null),
           ]);
 
-          // Prefer PDF's internal /Title over the (often generic) file system name
-          const displayName = textResult?.title || file.name || 'document.pdf';
+          // Prefer PDF's internal /Title, then the cached displayName, then raw file.name
+          const displayName = textResult?.title || (file as any).displayName || file.name || 'document.pdf';
           console.log('[Send] PDF — text chars:', textResult?.text?.length ?? 0, 'pages rendered:', imageResult?.convertedPages ?? 0, 'title:', textResult?.title || '(none)');
 
           // Always add converted page images — vision reads encoded/scanned fonts correctly
@@ -3370,8 +3394,8 @@ Generate appropriate line items from the price list that fit this scope of work$
             }).then(r => r.ok ? r.json() : null).catch(() => null),
           ]);
 
-          // Prefer PDF's internal /Title over the (often generic) file system name
-          const displayName = textResult?.title || file.name || 'document.pdf';
+          // Prefer PDF's internal /Title, then the cached displayName, then raw file.name
+          const displayName = textResult?.title || (file as any).displayName || file.name || 'document.pdf';
           console.log('[Send] PDF — text chars:', textResult?.text?.length ?? 0, 'pages rendered:', imageResult?.convertedPages ?? 0, 'title:', textResult?.title || '(none)');
 
           // Always add converted page images — vision reads encoded/scanned fonts correctly
@@ -3451,7 +3475,7 @@ Generate appropriate line items from the price list that fit this scope of work$
                   if (Platform.OS === 'web') {
                     window.open(file.uri, '_blank');
                   } else {
-                    Alert.alert('PDF', `${file.name}\nSize: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+                    Alert.alert('PDF', `${file.displayName || file.name}\nSize: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
                   }
                 }}
                 style={{
@@ -3468,7 +3492,7 @@ Generate appropriate line items from the price list that fit this scope of work$
                 <FileText size={24} color="#D97706" />
                 <View style={{ marginLeft: 12, flex: 1 }}>
                   <Text style={{ fontSize: 14, fontWeight: '600', color: '#92400E' }}>
-                    {file.name}
+                    {file.displayName || file.name}
                   </Text>
                   <Text style={{ fontSize: 12, color: '#78350F', marginTop: 2 }}>
                     PDF • {(file.size / 1024 / 1024).toFixed(2)} MB
@@ -3737,7 +3761,7 @@ Generate appropriate line items from the price list that fit this scope of work$
                     <X size={14} color="#FFFFFF" />
                   </TouchableOpacity>
                   <Text style={styles.attachmentName} numberOfLines={1}>
-                    {file.uploading ? `${file.name} (uploading...)` : file.name}
+                    {file.uploading ? `${file.displayName || file.name} (uploading...)` : (file.displayName || file.name)}
                   </Text>
                 </View>
               ))}

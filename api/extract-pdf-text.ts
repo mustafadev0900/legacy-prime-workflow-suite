@@ -24,53 +24,91 @@ function decodePdfStr(s: string): string {
     .replace(/\\(\d{3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)));
 }
 
-function hexToString(hex: string): string {
-  const h = hex.replace(/\s/g, '');
-  let result = '';
-  for (let i = 0; i < h.length - 1; i += 2) {
-    const code = parseInt(h.slice(i, i + 2), 16);
-    if (code > 31 && code < 128) result += String.fromCharCode(code);
-    else if (code > 127) result += String.fromCharCode(code); // keep non-ASCII too
+// Apply a character-code offset to recover text from shifted-encoding fonts.
+// Many PDF generators encode chars as (original_code - N), so adding N back
+// recovers the original. Also recovers digits/specials that encoded to control
+// chars (<32) and were previously dropped.
+function applyOffset(text: string, offset: number): string {
+  if (offset === 0) return text;
+  let out = '';
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i) + offset;
+    if (code >= 32 && code < 127) out += String.fromCharCode(code);
+    else if (code >= 127 && code < 65536) out += String.fromCharCode(code);
+    // else drop (still non-printable after correction)
   }
-  return result;
+  return out;
+}
+
+// Decode hex pairs with an optional offset applied to each byte.
+function hexToStringWithOffset(hex: string, offset: number): string {
+  const h = hex.replace(/\s/g, '');
+  let out = '';
+  for (let i = 0; i < h.length - 1; i += 2) {
+    const code = parseInt(h.slice(i, i + 2), 16) + offset;
+    if (code >= 32 && code < 127) out += String.fromCharCode(code);
+    else if (code >= 127 && code < 65536) out += String.fromCharCode(code);
+  }
+  return out;
+}
+
+// Common document words used to detect whether extracted text is readable.
+const COMMON_DOC_WORDS = /\b(?:the|and|for|total|date|from|invoice|receipt|description|quantity|payment|company|address|service|number|balance|tax|item|subtotal|name|email|project|contract|estimate|bill|paid|due|amount|price|to|of|in|at|by|no|unit)\b/i;
+
+function looksGarbled(text: string): boolean {
+  const letters = (text.match(/[a-zA-Z]/g) || []).length;
+  if (letters < 20) return false; // too short to judge
+  return !COMMON_DOC_WORDS.test(text);
 }
 
 // ----- text extraction from a single decompressed content stream -----
 
-function extractTextFromStream(stream: string): string {
+function extractTextFromStreamWithOffset(stream: string, offset: number): string {
   const parts: string[] = [];
-
-  // BT...ET blocks contain all text rendering operations
   const btEtRe = /BT[\s\S]*?ET/g;
   let btMatch: RegExpExecArray | null;
   while ((btMatch = btEtRe.exec(stream)) !== null) {
     const block = btMatch[0];
     let m: RegExpExecArray | null;
 
-    // TJ array: [(string) kern <hex>] TJ  — most common in modern PDFs
+    // TJ array: [(string) kern <hex>] TJ
     const tjArrRe = /\[([\s\S]*?)\]\s*TJ/g;
     while ((m = tjArrRe.exec(block)) !== null) {
-      // Match paren strings AND hex strings inside the array
       const items = m[1].match(/(\([^)\\]*(?:\\.[^)\\]*)*\)|<[0-9A-Fa-f\s]+>)/g) ?? [];
       const text = (items as string[]).map(item =>
         item.startsWith('(')
-          ? decodePdfStr(item.slice(1, -1))
-          : hexToString(item.slice(1, -1))
+          ? applyOffset(decodePdfStr(item.slice(1, -1)), offset)
+          : hexToStringWithOffset(item.slice(1, -1), offset)
       ).join('');
       if (text.trim()) parts.push(text);
     }
 
-    // Tj / ' / " operator: (string) Tj  or  <hex> Tj
+    // Tj / ' / " operator
     const tjRe = /(?:\(([^)\\]*(?:\\.[^)\\]*)*)\)|<([0-9A-Fa-f\s]+)>)\s*(?:Tj|'|")/g;
     while ((m = tjRe.exec(block)) !== null) {
-      const text = m[1] !== undefined ? decodePdfStr(m[1]) : hexToString(m[2]);
+      const text = m[1] !== undefined
+        ? applyOffset(decodePdfStr(m[1]), offset)
+        : hexToStringWithOffset(m[2], offset);
       if (text.trim()) parts.push(text);
     }
 
     parts.push(' ');
   }
-
   return parts.join('');
+}
+
+function extractTextFromStream(stream: string): string {
+  // Standard decode first
+  const normal = extractTextFromStreamWithOffset(stream, 0);
+  if (!looksGarbled(normal)) return normal;
+
+  // Garbled — try common PDF font encoding offsets (+29 is the most frequent)
+  for (const offset of [29, 30, 31, 32, 28, 27]) {
+    const corrected = extractTextFromStreamWithOffset(stream, offset);
+    if (!looksGarbled(corrected)) return corrected;
+  }
+
+  return normal; // best effort
 }
 
 // ----- PDF metadata (title) extraction -----
@@ -79,7 +117,14 @@ function extractPdfTitle(raw: string): string {
   // Parenthesis form: /Title (My Document)
   const parenMatch = raw.match(/\/Title\s*\(([^)\\]*(?:\\.[^)\\]*)*)\)/);
   if (parenMatch) {
-    const t = decodePdfStr(parenMatch[1]).trim();
+    let t = decodePdfStr(parenMatch[1]).trim();
+    // Apply offset correction if title is garbled
+    if (t && looksGarbled(t)) {
+      for (const offset of [29, 30, 31, 32]) {
+        const corrected = applyOffset(t, offset);
+        if (!looksGarbled(corrected)) { t = corrected; break; }
+      }
+    }
     if (t && t.length > 0 && t.length < 200) return t;
   }
   // Hex form: /Title <FFFE...> (UTF-16BE BOM common in modern PDFs)
@@ -102,7 +147,7 @@ function extractPdfTitle(raw: string): string {
       if (title && title.length > 0 && title.length < 200) return title;
     }
     // Plain ASCII hex
-    const t = hexToString(h).trim();
+    const t = hexToStringWithOffset(h, 0).trim();
     if (t && t.length > 0 && t.length < 200) return t;
   }
   return '';
