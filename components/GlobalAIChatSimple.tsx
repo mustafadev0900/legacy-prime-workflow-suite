@@ -576,6 +576,25 @@ function useOpenAIChat(appData: {
   return { messages, sendMessage, isLoading, isLoadingHistory, pendingAction, clearPendingAction, addMessage, updateLastMessage, clearChat };
 }
 
+// Renders assistant message text with inline markdown support (**bold**).
+// Returns nested <Text> elements safe for use inside a parent <Text> in React Native.
+const renderMarkdownSegments = (text: string): React.ReactNode => {
+  const lines = text.split('\n');
+  return lines.map((line, lineIdx) => {
+    const segments = line.split(/(\*\*[^*]+\*\*)/g);
+    return (
+      <Text key={lineIdx}>
+        {lineIdx > 0 ? '\n' : ''}
+        {segments.map((seg, segIdx) =>
+          seg.startsWith('**') && seg.endsWith('**') && seg.length > 4 ? (
+            <Text key={segIdx} style={{ fontWeight: '700' }}>{seg.slice(2, -2)}</Text>
+          ) : seg
+        )}
+      </Text>
+    );
+  });
+};
+
 export default function GlobalAIChatSimple({ currentPageContext, inline = false }: GlobalAIChatProps) {
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 768;
@@ -3400,7 +3419,7 @@ Generate appropriate line items from the price list that fit this scope of work$
         // PDFs only — run text extraction + image conversion in parallel for best accuracy
         console.log('[Send] Processing PDF(s) with text+vision pipeline');
 
-        const pdfPageImages: { type: string; mimeType: string; uri: string; name: string; s3Url: string; }[] = [];
+        const pdfPageImages: { type: string; mimeType: string; uri: string; name: string; s3Url: string; size?: number; }[] = [];
 
         for (const file of filesWithS3Urls.filter(f => f.mimeType === 'application/pdf')) {
           const pdfUrl = file.s3Url || (file.uri?.startsWith('http') ? file.uri : null);
@@ -3636,7 +3655,7 @@ Generate appropriate line items from the price list that fit this scope of work$
                     <View key={`${message.id}-${i}`} style={message.role === 'user' ? styles.userMessageContainer : styles.assistantMessageContainer}>
                       <View style={message.role === 'user' ? styles.userMessage : styles.assistantMessage}>
                         <Text style={message.role === 'user' ? styles.userMessageText : styles.assistantMessageText} selectable>
-                          {part.text}
+                          {message.role === 'user' ? part.text : renderMarkdownSegments(part.text)}
                           {/* Render estimate link if present */}
                           {message.estimateLink && (
                             <>
@@ -4122,7 +4141,7 @@ Generate appropriate line items from the price list that fit this scope of work$
                         <View key={`${message.id}-${i}`} style={message.role === 'user' ? styles.userMessageContainer : styles.assistantMessageContainer}>
                           <View style={message.role === 'user' ? styles.userMessage : styles.assistantMessage}>
                             <Text style={message.role === 'user' ? styles.userMessageText : styles.assistantMessageText} selectable>
-                              {part.text}
+                              {message.role === 'user' ? part.text : renderMarkdownSegments(part.text)}
                               {/* Render estimate link if present */}
                               {message.estimateLink && (
                                 <>
