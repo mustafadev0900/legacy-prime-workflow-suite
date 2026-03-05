@@ -1,8 +1,15 @@
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useApp } from '@/contexts/AppContext';
+
+// CRITICAL: must be called at module level (outside component) so it runs
+// synchronously when this page is loaded inside ASWebAuthenticationSession on iOS.
+// It signals the native browser modal to close and passes the URL back to
+// WebBrowser.openAuthSessionAsync in login.tsx.
+WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthCallbackScreen() {
   const { setUser, setCompany } = useApp();

@@ -2,7 +2,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import { useState, useEffect } from 'react';
 import { router } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
-import { auth } from '@/lib/supabase';
+import { auth, supabase } from '@/lib/supabase';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -166,9 +166,45 @@ export default function LoginScreen() {
         const redirectUrl = process.env.EXPO_PUBLIC_API_URL
           ? `${process.env.EXPO_PUBLIC_API_URL}/auth/callback`
           : 'https://legacy-prime-workflow-suite.vercel.app/auth/callback';
+
         const browserResult = await WebBrowser.openAuthSessionAsync(result.url, redirectUrl);
+
         if (browserResult.type === 'success') {
-          // onAuthStateChange in _layout.tsx will detect the new session
+          // Parse tokens from the returned URL hash (e.g. /auth/callback#access_token=...&refresh_token=...)
+          const urlStr = browserResult.url;
+          const hashIndex = urlStr.indexOf('#');
+          if (hashIndex !== -1) {
+            const params = new URLSearchParams(urlStr.substring(hashIndex + 1));
+            const accessToken = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
+
+            if (accessToken && refreshToken) {
+              const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken,
+              });
+
+              if (sessionError || !sessionData.session) {
+                Alert.alert('Sign-in Failed', 'Could not establish session. Please try again.');
+                return;
+              }
+
+              // Load user profile
+              const authUserId = sessionData.session.user.id;
+              const { data: userProfile } = await supabase
+                .from('users')
+                .select('*, companies(*)')
+                .eq('id', authUserId)
+                .single();
+
+              if (userProfile) {
+                setUser(userProfile as any);
+                // @ts-ignore
+                setCompany(userProfile.companies ?? null);
+              }
+            }
+          }
+
           router.replace('/(tabs)/dashboard');
         }
       }
