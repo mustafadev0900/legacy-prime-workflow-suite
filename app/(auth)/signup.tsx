@@ -1,6 +1,6 @@
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useState } from 'react';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,6 +10,12 @@ import { auth } from '@/lib/supabase';
 import Logo from '@/components/Logo';
 
 export default function SignupScreen() {
+  const { phone: phoneParam } = useLocalSearchParams<{ phone?: string }>();
+  // Strip +1 country code for the 10-digit field if pre-filled from phone login
+  const initialPhone = phoneParam
+    ? phoneParam.replace(/^\+1/, '').replace(/\D/g, '').slice(0, 10)
+    : '';
+
   const [accountType, setAccountType] = useState<'company' | 'employee' | null>(null);
   const [name, setName] = useState<string>('');
   const [email, setEmail] = useState<string>('');
@@ -18,7 +24,7 @@ export default function SignupScreen() {
   const [companyName, setCompanyName] = useState<string>('');
   const [employeeCount, setEmployeeCount] = useState<string>('2');
   const [companyCode, setCompanyCode] = useState<string>('');
-  const [phone, setPhone] = useState<string>('');
+  const [phone, setPhone] = useState<string>(initialPhone);
   const [address, setAddress] = useState<string>('');
   const [hourlyRate, setHourlyRate] = useState<string>('');
   const insets = useSafeAreaInsets();
@@ -447,19 +453,24 @@ export default function SignupScreen() {
             <>
               <Text style={styles.label}>{t('signup.phone')}</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, !!initialPhone && styles.inputVerified]}
                 placeholder="5551234567"
                 placeholderTextColor="#9CA3AF"
                 value={phone}
                 onChangeText={(text) => {
-                  // Only allow digits and limit to 10 characters
+                  if (initialPhone) return; // locked when pre-filled from phone login
                   const filtered = text.replace(/[^0-9]/g, '').slice(0, 10);
                   setPhone(filtered);
                 }}
                 keyboardType="number-pad"
                 maxLength={10}
+                editable={!initialPhone}
               />
-              <Text style={styles.hint}>Enter 10-digit US phone number (digits only)</Text>
+              {initialPhone ? (
+                <Text style={styles.hintVerified}>✓ Phone number verified</Text>
+              ) : (
+                <Text style={styles.hint}>Enter 10-digit US phone number (digits only)</Text>
+              )}
 
               <Text style={styles.label}>{t('signup.address')}</Text>
               <TextInput
@@ -585,6 +596,18 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: -12,
     marginBottom: 16,
+  },
+  hintVerified: {
+    fontSize: 12,
+    color: '#16A34A',
+    marginTop: -12,
+    marginBottom: 16,
+    fontWeight: '500' as const,
+  },
+  inputVerified: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+    color: '#15803D',
   },
   signupButton: {
     backgroundColor: '#2563EB',

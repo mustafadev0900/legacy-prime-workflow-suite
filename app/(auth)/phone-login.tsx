@@ -63,12 +63,12 @@ export default function PhoneLoginScreen() {
         .single();
 
       if (profileError || !userProfile) {
-        // Phone auth user exists but no profile — account not fully set up
+        // No account linked to this phone — sign out OTP session and go to signup
         await supabase.auth.signOut();
-        Alert.alert(
-          'Account Not Found',
-          'No account is linked to this phone number. Please sign up or log in with email first, then add your phone in your profile.',
-        );
+        router.push({
+          pathname: '/(auth)/signup',
+          params: { phone: formattedPhone },
+        });
         return;
       }
 
