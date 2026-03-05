@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTranslation } from 'react-i18next';
 import { useApp } from '@/contexts/AppContext';
-import { auth } from '@/lib/supabase';
+import { auth, supabase } from '@/lib/supabase';
 import Logo from '@/components/Logo';
 
 export default function SignupScreen() {
@@ -127,6 +127,11 @@ export default function SignupScreen() {
         console.log('[Signup] Company account created successfully');
         console.log('[Signup] Company Code:', result.companyCode);
 
+        // If user came from phone login, save verified phone number in E.164 format
+        if (phoneParam && result.user) {
+          await supabase.from('users').update({ phone: phoneParam }).eq('id', result.user.id);
+        }
+
         // Update app context with user and company data
         if (result.user && result.company) {
           setUser({
@@ -226,6 +231,11 @@ export default function SignupScreen() {
         }
 
         console.log('[Signup] Employee account created successfully');
+
+        // If user came from phone login, overwrite phone with verified E.164 format
+        if (phoneParam && result.user) {
+          await supabase.from('users').update({ phone: phoneParam }).eq('id', result.user.id);
+        }
 
         // Notify admins of the pending approval — fire-and-forget
         if (result.user && result.company) {
