@@ -318,7 +318,7 @@ export const auth = {
     try {
       const appUrl = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${appUrl}/auth/reset-password`,
+        redirectTo: `${appUrl}/reset-password`,
       });
 
       if (error) throw error;

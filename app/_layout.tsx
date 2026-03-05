@@ -33,6 +33,9 @@ const PUBLIC_ROUTES = [
   '/subscription',
   '/inspection',
   '/subcontractor-register',
+  '/reset-password',
+  '/forgot-password',
+  '/phone-login',
 ];
 
 function RootLayoutNav() {

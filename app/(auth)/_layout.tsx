@@ -7,6 +7,9 @@ export default function AuthLayout() {
       <Stack.Screen name="signup" />
       <Stack.Screen name="phone-verification" />
       <Stack.Screen name="subscription" />
+      <Stack.Screen name="forgot-password" />
+      <Stack.Screen name="phone-login" />
+      <Stack.Screen name="reset-password" />
     </Stack>
   );
 }
