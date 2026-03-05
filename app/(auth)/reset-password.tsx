@@ -29,6 +29,9 @@ export default function ResetPasswordScreen() {
         const type = params.get('type');
 
         if (accessToken && refreshToken && type === 'recovery') {
+          // Sign out any existing session first — an active session blocks recovery updateUser
+          await supabase.auth.signOut();
+
           const { error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
@@ -90,12 +93,14 @@ export default function ResetPasswordScreen() {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
         const msg = error.message?.toLowerCase() ?? '';
-        if (msg.includes('same') || msg.includes('different')) {
+        if (msg.includes('same') || msg.includes('different') || msg.includes('422')) {
           setErrors({ password: 'New password must be different from your current password' });
         } else if (msg.includes('weak') || msg.includes('strong')) {
           setErrors({ password: 'Password is too weak. Use at least 6 characters with letters and numbers' });
+        } else if (msg.includes('session') || msg.includes('token') || msg.includes('expired')) {
+          setSessionError('Your reset session expired. Please request a new reset link.');
         } else {
-          setErrors({ password: error.message });
+          setErrors({ password: `Reset failed: ${error.message}` });
         }
         return;
       }
