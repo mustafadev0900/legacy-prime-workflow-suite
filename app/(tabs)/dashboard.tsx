@@ -9,13 +9,14 @@ import Svg, { Circle, G } from 'react-native-svg';
 import { Project, Report, ProjectReportData } from '@/types';
 import DailyTaskCard from '@/components/DailyTasks/DailyTaskCard';
 import AddTaskModal from '@/components/DailyTasks/AddTaskModal';
+import DashboardSkeleton from '@/components/DashboardSkeleton';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImage } from '@/lib/upload-utils';
 
 
 export default function DashboardScreen() {
   const { t } = useTranslation();
-  const { projects, expenses, clockEntries, addProject, addReport, reports, clients, updateClient, addClient, dailyLogs = [], company, estimates, updateEstimate, dailyTasks = [], loadDailyTasks, addDailyTask, updateDailyTask, deleteDailyTask, user, refreshReports } = useApp();
+  const { projects, expenses, clockEntries, addProject, addReport, reports, clients, updateClient, addClient, dailyLogs = [], company, estimates, updateEstimate, dailyTasks = [], loadDailyTasks, addDailyTask, updateDailyTask, deleteDailyTask, user, refreshReports, isLoading } = useApp();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
@@ -994,6 +995,10 @@ export default function DashboardScreen() {
     // Cleanup on unmount
     return () => clearInterval(intervalId);
   }, [updateDailyTask]);
+
+  if (isLoading) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <View style={styles.container}>
