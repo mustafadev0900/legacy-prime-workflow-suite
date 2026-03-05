@@ -53,11 +53,12 @@ export default function PhoneLoginScreen() {
       if (error) throw error;
       if (!data.user) throw new Error('Authentication failed');
 
-      // Load user profile from our users table
+      // Load user profile by phone number (phone OTP creates a new auth user,
+      // so we match by phone field rather than auth UUID)
       const { data: userProfile, error: profileError } = await supabase
         .from('users')
         .select('*, companies(*)')
-        .eq('id', data.user.id)
+        .eq('phone', formattedPhone)
         .single();
 
       if (profileError || !userProfile) {
