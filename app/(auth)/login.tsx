@@ -9,7 +9,7 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
 import Logo from '@/components/Logo';
 import * as WebBrowser from 'expo-web-browser';
 import { Phone } from 'lucide-react-native';
-import Svg, { Path, G, ClipPath, Defs } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState<string>('');
@@ -265,19 +265,12 @@ export default function LoginScreen() {
               <ActivityIndicator color="#1F2937" />
             ) : (
               <View style={styles.socialButtonInner}>
-                {/* Official Google "G" logo */}
-                <Svg width={20} height={20} viewBox="0 0 48 48">
-                  <Defs>
-                    <ClipPath id="g">
-                      <Path d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z" />
-                    </ClipPath>
-                  </Defs>
-                  <G>
-                    <Path fill="#FBBC05" d="M0 37V11l17 13z" />
-                    <Path fill="#EA4335" d="M0 11l17 13 7-6.1L48 14V0H0z" />
-                    <Path fill="#34A853" d="M0 37l30-23 7.9 1L48 0v48H0z" />
-                    <Path fill="#4285F4" d="M48 48L17 24l-4-3 35-10z" />
-                  </G>
+                {/* Google logo from flat-color-icons_google.svg */}
+                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                  <Path d="M21.8055 10.0415H21V10H12V14H17.6515C16.827 16.3285 14.6115 18 12 18C8.6865 18 6 15.3135 6 12C6 8.6865 8.6865 6 12 6C13.5295 6 14.921 6.577 15.9805 7.5195L18.809 4.691C17.023 3.0265 14.634 2 12 2C6.4775 2 2 6.4775 2 12C2 17.5225 6.4775 22 12 22C17.5225 22 22 17.5225 22 12C22 11.3295 21.931 10.675 21.8055 10.0415Z" fill="#FFC107" />
+                  <Path d="M3.15332 7.3455L6.43882 9.755C7.32782 7.554 9.48082 6 12.0003 6C13.5298 6 14.9213 6.577 15.9808 7.5195L18.8093 4.691C17.0233 3.0265 14.6343 2 12.0003 2C8.15932 2 4.82832 4.1685 3.15332 7.3455Z" fill="#FF3D00" />
+                  <Path d="M12.0002 21.9964C14.5832 21.9964 16.9302 21.0079 18.7047 19.4004L15.6097 16.7814C14.5721 17.571 13.3039 17.9978 12.0002 17.9964C9.39916 17.9964 7.19066 16.3379 6.35866 14.0234L3.09766 16.5359C4.75266 19.7744 8.11366 21.9964 12.0002 21.9964Z" fill="#4CAF50" />
+                  <Path d="M21.8055 10.0415H21V10H12V14H17.6515C17.2571 15.1082 16.5467 16.0766 15.608 16.7855L15.6095 16.7845L18.7045 19.4035C18.4855 19.6025 22 17 22 12C22 11.3295 21.931 10.675 21.8055 10.0415Z" fill="#1976D2" />
                 </Svg>
                 <Text style={styles.socialButtonText}>Continue with Google</Text>
               </View>
