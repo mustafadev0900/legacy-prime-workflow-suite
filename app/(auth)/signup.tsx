@@ -116,7 +116,8 @@ export default function SignupScreen() {
           name: name.trim(),
           companyName: companyName.trim(),
           employeeCount: parseInt(employeeCount),
-          subscriptionPlan: 'basic', // Default to basic plan
+          subscriptionPlan: 'basic',
+          ...(phoneParam ? { phone: phoneParam } : {}),
         });
 
         if (!result.success) {
@@ -126,12 +127,6 @@ export default function SignupScreen() {
 
         console.log('[Signup] Company account created successfully');
         console.log('[Signup] Company Code:', result.companyCode);
-
-        // If user came from phone login, save verified phone number in E.164 format
-        if (phoneParam && result.user) {
-          // @ts-ignore - phone column exists but not in generated Supabase types
-          await supabase.from('users').update({ phone: phoneParam }).eq('id', result.user.id);
-        }
 
         // Update app context with user and company data
         if (result.user && result.company) {

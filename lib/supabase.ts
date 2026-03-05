@@ -30,6 +30,7 @@ export const auth = {
     companyName: string;
     employeeCount: number;
     subscriptionPlan: 'basic' | 'pro' | 'enterprise';
+    phone?: string;
   }) => {
     try {
       // 1. Create auth user
@@ -94,6 +95,7 @@ export const auth = {
           role: 'admin',
           company_id: company.id,
           is_active: true,
+          ...(params.phone ? { phone: params.phone } : {}),
         })
         .select()
         .single();
