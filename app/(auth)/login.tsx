@@ -8,6 +8,8 @@ import { useTranslation } from 'react-i18next';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import Logo from '@/components/Logo';
 import * as WebBrowser from 'expo-web-browser';
+import { Phone } from 'lucide-react-native';
+import Svg, { Path, G, ClipPath, Defs } from 'react-native-svg';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState<string>('');
@@ -247,7 +249,10 @@ export default function LoginScreen() {
             onPress={() => router.push('/(auth)/phone-login')}
             disabled={isSocialLoading}
           >
-            <Text style={styles.socialButtonText}>📱  Continue with Phone</Text>
+            <View style={styles.socialButtonInner}>
+              <Phone size={20} color="#1F2937" strokeWidth={2} />
+              <Text style={styles.socialButtonText}>Continue with Phone</Text>
+            </View>
           </TouchableOpacity>
 
           {/* Google Login */}
@@ -259,7 +264,23 @@ export default function LoginScreen() {
             {isSocialLoading ? (
               <ActivityIndicator color="#1F2937" />
             ) : (
-              <Text style={styles.socialButtonText}>🇬  Continue with Google</Text>
+              <View style={styles.socialButtonInner}>
+                {/* Official Google "G" logo */}
+                <Svg width={20} height={20} viewBox="0 0 48 48">
+                  <Defs>
+                    <ClipPath id="g">
+                      <Path d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z" />
+                    </ClipPath>
+                  </Defs>
+                  <G>
+                    <Path fill="#FBBC05" d="M0 37V11l17 13z" />
+                    <Path fill="#EA4335" d="M0 11l17 13 7-6.1L48 14V0H0z" />
+                    <Path fill="#34A853" d="M0 37l30-23 7.9 1L48 0v48H0z" />
+                    <Path fill="#4285F4" d="M48 48L17 24l-4-3 35-10z" />
+                  </G>
+                </Svg>
+                <Text style={styles.socialButtonText}>Continue with Google</Text>
+              </View>
             )}
           </TouchableOpacity>
 
@@ -273,7 +294,16 @@ export default function LoginScreen() {
               {isSocialLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={[styles.socialButtonText, styles.appleButtonText]}>🍎  Continue with Apple</Text>
+                <View style={styles.socialButtonInner}>
+                  {/* Official Apple logo */}
+                  <Svg width={18} height={22} viewBox="0 0 814 1000">
+                    <Path
+                      fill="#FFFFFF"
+                      d="M788.1 340.9c-5.8 4.5-108.2 62.2-108.2 190.5 0 148.4 130.3 200.9 134.2 202.2-.6 3.2-20.7 71.9-68.7 141.9-42.8 61.6-87.5 123.1-155.5 123.1s-85.5-39.5-164-39.5c-76 0-103.7 40.8-165.9 40.8s-105-57.8-155.5-127.4C46 405.8 1 326.8 1 251.4c0-141.9 92.4-216.7 182.5-216.7 49.3 0 90.5 32.3 121.6 32.3 29.9 0 77.2-34.5 134.2-34.5 27.4 0 121.5 2.6 190.4 103.8zm-162.5-153.4c27.4-34.5 46.4-82.5 46.4-130.5 0-6.5-.6-13-1.3-19.5-44.1 1.6-97 29.9-128.8 68.7-23.4 26.7-46.4 74.7-46.4 123.1 0 6.5 1.3 13 1.9 15.6 2.6.6 6.5 1.3 10.4 1.3 39.9 0 90.5-26.8 117.8-58.7z"
+                    />
+                  </Svg>
+                  <Text style={[styles.socialButtonText, styles.appleButtonText]}>Continue with Apple</Text>
+                </View>
               )}
             </TouchableOpacity>
           )}
@@ -326,9 +356,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#E5E7EB',
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12,
+  },
+  socialButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   appleButton: {
     backgroundColor: '#000000',
