@@ -173,45 +173,56 @@ export default function LoginScreen() {
         const redirectUrl = 'legacyprime://auth/callback';
 
         const browserResult = await WebBrowser.openAuthSessionAsync(result.url, redirectUrl);
+        console.log('[OAuth] browserResult type:', browserResult.type);
 
         if (browserResult.type === 'success') {
-          // Parse tokens from the returned URL — Supabase puts them in the hash fragment.
-          // e.g. legacyprime://auth/callback#access_token=...&refresh_token=...
-          const urlStr = browserResult.url;
+          const urlStr = (browserResult as any).url as string;
+          console.log('[OAuth] returned URL:', urlStr);
+
+          // Parse tokens — Supabase puts them in hash or query params
           const separatorIndex = urlStr.indexOf('#') !== -1 ? urlStr.indexOf('#') : urlStr.indexOf('?');
-          if (separatorIndex !== -1) {
-            const params = new URLSearchParams(urlStr.substring(separatorIndex + 1));
-            const accessToken = params.get('access_token');
-            const refreshToken = params.get('refresh_token');
+          if (separatorIndex === -1) {
+            Alert.alert('Sign-in Failed', 'No tokens returned. Please try again.');
+            return;
+          }
 
-            if (accessToken && refreshToken) {
-              const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-                access_token: accessToken,
-                refresh_token: refreshToken,
-              });
+          const params = new URLSearchParams(urlStr.substring(separatorIndex + 1));
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          console.log('[OAuth] accessToken present:', !!accessToken, 'refreshToken present:', !!refreshToken);
 
-              if (sessionError || !sessionData.session) {
-                Alert.alert('Sign-in Failed', 'Could not establish session. Please try again.');
-                return;
-              }
+          if (!accessToken || !refreshToken) {
+            Alert.alert('Sign-in Failed', 'Missing tokens in callback. Please try again.');
+            return;
+          }
 
-              // Load user profile
-              const authUserId = sessionData.session.user.id;
-              const { data: userProfile } = await supabase
-                .from('users')
-                .select('*, companies(*)')
-                .eq('id', authUserId)
-                .single();
+          const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
 
-              if (userProfile) {
-                setUser(userProfile as any);
-                // @ts-ignore
-                setCompany(userProfile.companies ?? null);
-              }
-            }
+          if (sessionError || !sessionData.session) {
+            Alert.alert('Sign-in Failed', sessionError?.message || 'Could not establish session. Please try again.');
+            return;
+          }
+
+          // Load user profile
+          const authUserId = sessionData.session.user.id;
+          const { data: userProfile } = await supabase
+            .from('users')
+            .select('*, companies(*)')
+            .eq('id', authUserId)
+            .single();
+
+          if (userProfile) {
+            setUser(userProfile as any);
+            // @ts-ignore
+            setCompany(userProfile.companies ?? null);
           }
 
           router.replace('/(tabs)/dashboard');
+        } else {
+          console.log('[OAuth] Not successful, type was:', browserResult.type);
         }
       }
     } catch (e: any) {
