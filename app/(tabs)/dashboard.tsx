@@ -16,7 +16,7 @@ import { compressImage } from '@/lib/upload-utils';
 
 export default function DashboardScreen() {
   const { t } = useTranslation();
-  const { projects, expenses, clockEntries, addProject, addReport, reports, clients, updateClient, addClient, dailyLogs = [], company, estimates, updateEstimate, dailyTasks = [], loadDailyTasks, addDailyTask, updateDailyTask, deleteDailyTask, user, refreshReports, isLoading } = useApp();
+  const { projects, expenses, clockEntries, addProject, addReport, reports, clients, updateClient, addClient, dailyLogs = [], company, estimates, updateEstimate, dailyTasks = [], loadDailyTasks, addDailyTask, updateDailyTask, deleteDailyTask, user, refreshReports, isLoading, isCompanyReloading } = useApp();
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
@@ -996,7 +996,7 @@ export default function DashboardScreen() {
     return () => clearInterval(intervalId);
   }, [updateDailyTask]);
 
-  if (isLoading) {
+  if (isLoading || isCompanyReloading) {
     return <DashboardSkeleton />;
   }
 

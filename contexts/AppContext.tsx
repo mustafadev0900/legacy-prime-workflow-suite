@@ -150,6 +150,7 @@ interface AppState {
   scheduleShareLinks: ScheduleShareLink[];
   dailyTaskReminders: DailyTaskReminder[];
   isLoading: boolean;
+  isCompanyReloading: boolean;
 
   loadScheduledTasks: (projectId: string) => Promise<void>;
   updateScheduledTasks: (tasks: ScheduledTask[]) => Promise<void>;
@@ -293,6 +294,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
   const [scheduleShareLinks, setScheduleShareLinks] = useState<ScheduleShareLink[]>([]);
   const [dailyTaskReminders, setDailyTaskReminders] = useState<DailyTaskReminder[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isCompanyReloading, setIsCompanyReloading] = useState<boolean>(false);
 
   // Compute categories dynamically from price list items
   const priceListCategories = useMemo(() => {
@@ -337,6 +339,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
       // Call loadData again to reload all data from backend
       // We need to re-run the data loading logic after login
       (async () => {
+        setIsCompanyReloading(true);
         try {
           console.log('[App] Loading data from backend for company:', company.id);
           // Use direct HTTP fetch instead of tRPC dynamic import (which breaks in production)
@@ -487,6 +490,8 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
           console.log('[App] ✅ Finished reloading data after company change');
         } catch (error: any) {
           console.error('[App] ❌ Fatal error reloading data after company change:', error?.message || error);
+        } finally {
+          setIsCompanyReloading(false);
         }
       })();
     }
@@ -2950,6 +2955,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     scheduleShareLinks,
     dailyTaskReminders,
     isLoading,
+    isCompanyReloading,
     loadScheduledTasks,
     updateScheduledTasks,
     addDailyTaskReminder,
@@ -3073,6 +3079,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     scheduleShareLinks,
     dailyTaskReminders,
     isLoading,
+    isCompanyReloading,
     loadScheduledTasks,
     updateScheduledTasks,
     addDailyTaskReminder,
