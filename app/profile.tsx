@@ -34,8 +34,8 @@ export default function ProfileScreen() {
   const [isConnectingGoogle, setIsConnectingGoogle] = useState<boolean>(false);
   const [isGoogleLinked, setIsGoogleLinked] = useState<boolean>(false);
 
-  // Phone connect flow: idle → enter-phone → enter-otp → success
-  const [phoneStep, setPhoneStep] = useState<'idle' | 'enter-phone' | 'enter-otp' | 'success'>('idle');
+  // Phone connect flow: idle → enter-phone → enter-otp → success | unlink-phone
+  const [phoneStep, setPhoneStep] = useState<'idle' | 'enter-phone' | 'enter-otp' | 'success' | 'unlink-phone'>('idle');
   const [phoneInput, setPhoneInput] = useState<string>('');
   const [otpInput, setOtpInput] = useState<string>('');
   const [phoneLoading, setPhoneLoading] = useState<boolean>(false);
@@ -44,12 +44,20 @@ export default function ProfileScreen() {
   // Google connect inline confirmation
   const [showGoogleConfirm, setShowGoogleConfirm] = useState<boolean>(false);
   const [googleConnectError, setGoogleConnectError] = useState<string>('');
+  const [isUnlinkingGoogle, setIsUnlinkingGoogle] = useState<boolean>(false);
+  const [googleUnlinkError, setGoogleUnlinkError] = useState<string>('');
+
+  // Apple
+  const [isAppleLinked, setIsAppleLinked] = useState<boolean>(false);
+  const [showAppleConfirm, setShowAppleConfirm] = useState<boolean>(false);
+  const [isUnlinkingApple, setIsUnlinkingApple] = useState<boolean>(false);
+  const [appleUnlinkError, setAppleUnlinkError] = useState<string>('');
 
   useEffect(() => {
-    // Check if the current session is linked to Google
     supabase.auth.getUser().then(({ data }) => {
       const providers: string[] = data?.user?.app_metadata?.providers ?? [];
       setIsGoogleLinked(providers.includes('google'));
+      setIsAppleLinked(providers.includes('apple'));
     });
   }, []);
 
@@ -292,7 +300,56 @@ export default function ProfileScreen() {
 
   const handleConnectGoogle = () => {
     setGoogleConnectError('');
-    setShowGoogleConfirm(prev => !prev); // toggle inline confirmation card
+    setGoogleUnlinkError('');
+    setShowGoogleConfirm(prev => !prev);
+  };
+
+  const handleUnlinkGoogle = async () => {
+    setIsUnlinkingGoogle(true);
+    setGoogleUnlinkError('');
+    try {
+      const { data: identitiesData, error: idError } = await supabase.auth.getUserIdentities();
+      if (idError) throw idError;
+      const identities = identitiesData?.identities ?? [];
+      if (identities.length <= 1) {
+        setGoogleUnlinkError('Add another sign-in method (password or phone) before unlinking Google.');
+        return;
+      }
+      const googleIdentity = identities.find(i => i.provider === 'google');
+      if (!googleIdentity) { setGoogleUnlinkError('No Google identity found.'); return; }
+      const { error: unlinkError } = await supabase.auth.unlinkIdentity(googleIdentity);
+      if (unlinkError) throw unlinkError;
+      setIsGoogleLinked(false);
+      setShowGoogleConfirm(false);
+    } catch (e: any) {
+      setGoogleUnlinkError(e.message || 'Failed to unlink Google account.');
+    } finally {
+      setIsUnlinkingGoogle(false);
+    }
+  };
+
+  const handleUnlinkApple = async () => {
+    setIsUnlinkingApple(true);
+    setAppleUnlinkError('');
+    try {
+      const { data: identitiesData, error: idError } = await supabase.auth.getUserIdentities();
+      if (idError) throw idError;
+      const identities = identitiesData?.identities ?? [];
+      if (identities.length <= 1) {
+        setAppleUnlinkError('Add another sign-in method before unlinking Apple ID.');
+        return;
+      }
+      const appleIdentity = identities.find(i => i.provider === 'apple');
+      if (!appleIdentity) { setAppleUnlinkError('No Apple identity found.'); return; }
+      const { error: unlinkError } = await supabase.auth.unlinkIdentity(appleIdentity);
+      if (unlinkError) throw unlinkError;
+      setIsAppleLinked(false);
+      setShowAppleConfirm(false);
+    } catch (e: any) {
+      setAppleUnlinkError(e.message || 'Failed to unlink Apple ID.');
+    } finally {
+      setIsUnlinkingApple(false);
+    }
   };
 
   const doConnectGoogle = async () => {
@@ -353,12 +410,29 @@ export default function ProfileScreen() {
   const handleConnectPhone = () => {
     setPhoneError('');
     if (phoneStep !== 'idle') {
-      // Toggle — close if already open
       setPhoneStep('idle');
+    } else if (user.phone) {
+      // Already linked — show unlink confirmation
+      setPhoneStep('unlink-phone');
     } else {
       setPhoneInput('');
       setOtpInput('');
       setPhoneStep('enter-phone');
+    }
+  };
+
+  const handleUnlinkPhone = async () => {
+    setPhoneLoading(true);
+    setPhoneError('');
+    try {
+      const { error } = await supabase.from('users').update({ phone: null }).eq('id', user.id);
+      if (error) throw error;
+      setUser({ ...user, phone: undefined });
+      setPhoneStep('idle');
+    } catch (e: any) {
+      setPhoneError(e.message || 'Failed to unlink phone number.');
+    } finally {
+      setPhoneLoading(false);
     }
   };
 
@@ -582,9 +656,27 @@ export default function ProfileScreen() {
               <ChevronRight size={18} color="#9CA3AF" />
             </TouchableOpacity>
 
-            {/* Inline phone connect form */}
+            {/* Inline phone connect / unlink form */}
             {phoneStep !== 'idle' && (
               <View style={styles.connectForm}>
+                {phoneStep === 'unlink-phone' && (
+                  <>
+                    <Text style={styles.connectFormTitle}>Unlink phone number</Text>
+                    <Text style={styles.connectFormSub}>
+                      {'Current: '}<Text style={{ fontWeight: '600', color: '#111827' }}>{user.phone}</Text>
+                      {'\nRemoving this will prevent SMS sign-in with this number.'}
+                    </Text>
+                    {!!phoneError && <Text style={styles.connectError}>{phoneError}</Text>}
+                    <View style={styles.connectActions}>
+                      <TouchableOpacity style={styles.connectCancelBtn} onPress={() => setPhoneStep('idle')}>
+                        <Text style={styles.connectCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.connectConfirmBtn, { backgroundColor: '#DC2626' }]} onPress={handleUnlinkPhone} disabled={phoneLoading}>
+                        {phoneLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.connectConfirmText}>Unlink</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
                 {phoneStep === 'enter-phone' && (
                   <>
                     <Text style={styles.connectFormTitle}>Enter your phone number</Text>
@@ -683,16 +775,19 @@ export default function ProfileScreen() {
             {showGoogleConfirm && (
               <View style={styles.connectForm}>
                 {isGoogleLinked ? (
-                  <View style={styles.connectSuccess}>
-                    <CheckCircle size={20} color="#16A34A" />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.connectSuccessTitle}>Google account is linked</Text>
-                      <Text style={styles.connectSuccessSub}>You can sign in using "Continue with Google" on the login screen.</Text>
+                  <>
+                    <Text style={styles.connectFormTitle}>Google account is linked</Text>
+                    <Text style={styles.connectFormSub}>You can sign in using "Continue with Google" on the login screen.</Text>
+                    {!!googleUnlinkError && <Text style={styles.connectError}>{googleUnlinkError}</Text>}
+                    <View style={styles.connectActions}>
+                      <TouchableOpacity style={styles.connectCancelBtn} onPress={() => setShowGoogleConfirm(false)}>
+                        <Text style={styles.connectCancelText}>Close</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.connectConfirmBtn, { backgroundColor: '#DC2626' }]} onPress={handleUnlinkGoogle} disabled={isUnlinkingGoogle}>
+                        {isUnlinkingGoogle ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.connectConfirmText}>Unlink Google</Text>}
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity onPress={() => setShowGoogleConfirm(false)}>
-                      <Text style={styles.inboxDismiss}>✕</Text>
-                    </TouchableOpacity>
-                  </View>
+                  </>
                 ) : (
                   <>
                     <Text style={styles.connectFormTitle}>Connect Google Account</Text>
@@ -719,17 +814,48 @@ export default function ProfileScreen() {
             {Platform.OS === 'ios' && (
               <>
                 <View style={styles.divider} />
-                <TouchableOpacity style={styles.actionItem} disabled>
-                  <View style={[styles.infoIcon, { backgroundColor: '#F9FAFB' }]}>
+                <TouchableOpacity
+                  style={styles.actionItem}
+                  onPress={isAppleLinked ? () => { setAppleUnlinkError(''); setShowAppleConfirm(prev => !prev); } : undefined}
+                  disabled={!isAppleLinked}
+                >
+                  <View style={[styles.infoIcon, { backgroundColor: isAppleLinked ? '#F0FDF4' : '#F9FAFB' }]}>
                     <Svg width={18} height={20} viewBox="0 0 24 24">
-                      <Path fill="#111827" d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.3.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83zM13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
+                      <Path fill={isAppleLinked ? '#16A34A' : '#111827'} d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.3.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83zM13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
                     </Svg>
                   </View>
                   <View style={styles.infoContent}>
-                    <Text style={styles.actionLabel}>Apple ID</Text>
-                    <Text style={styles.actionSub}>Coming soon</Text>
+                    <View style={styles.actionLabelRow}>
+                      <Text style={styles.actionLabel}>Apple ID</Text>
+                      {isAppleLinked && (
+                        <View style={styles.linkedBadge}>
+                          <CheckCircle size={12} color="#16A34A" />
+                          <Text style={styles.linkedBadgeText}>Linked</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.actionSub}>
+                      {isAppleLinked ? 'Connected — tap to manage' : 'Coming soon'}
+                    </Text>
                   </View>
+                  {isAppleLinked && <ChevronRight size={18} color="#9CA3AF" />}
                 </TouchableOpacity>
+
+                {showAppleConfirm && isAppleLinked && (
+                  <View style={styles.connectForm}>
+                    <Text style={styles.connectFormTitle}>Apple ID is linked</Text>
+                    <Text style={styles.connectFormSub}>You can sign in using "Continue with Apple" on the login screen.</Text>
+                    {!!appleUnlinkError && <Text style={styles.connectError}>{appleUnlinkError}</Text>}
+                    <View style={styles.connectActions}>
+                      <TouchableOpacity style={styles.connectCancelBtn} onPress={() => setShowAppleConfirm(false)}>
+                        <Text style={styles.connectCancelText}>Close</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.connectConfirmBtn, { backgroundColor: '#DC2626' }]} onPress={handleUnlinkApple} disabled={isUnlinkingApple}>
+                        {isUnlinkingApple ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.connectConfirmText}>Unlink Apple</Text>}
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
               </>
             )}
           </View>
