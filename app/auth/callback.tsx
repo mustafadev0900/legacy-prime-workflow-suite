@@ -12,7 +12,7 @@ import { useApp } from '@/contexts/AppContext';
 WebBrowser.maybeCompleteAuthSession();
 
 export default function AuthCallbackScreen() {
-  const { user: currentUser, setUser, setCompany } = useApp();
+  const { user: currentUser, setUser, setCompany, logout } = useApp();
   const [status, setStatus] = useState<'loading' | 'error'>('loading');
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -39,42 +39,34 @@ export default function AuthCallbackScreen() {
         const origRt = sessionStorage.getItem('profile_orig_rt');
 
         if (connectIntent === 'google' && connectUserId) {
-          // Clean up all connect-flow sessionStorage keys up front
+          // Clean up all connect-flow sessionStorage keys
           ['profile_connect_intent', 'profile_connect_userId', 'profile_orig_at', 'profile_orig_rt']
             .forEach(k => sessionStorage.removeItem(k));
           window.history.replaceState(null, '', window.location.pathname);
 
-          // Helper: restore original session and redirect to profile with error
+          // abort: sign out (clears Supabase session AND AppContext via logout()),
+          // then show the error on this page. /auth/callback is a PUBLIC_ROUTE so
+          // the _layout auth guard will not redirect away even with user = null.
           const abort = async (msg: string) => {
-            if (origAt && origRt) {
-              await supabase.auth.setSession({ access_token: origAt, refresh_token: origRt });
-            } else {
-              await supabase.auth.signOut();
-            }
-            sessionStorage.setItem('google_connect_error', msg);
-            router.replace('/profile' as any);
+            await logout();
+            setErrorMsg(msg);
+            setStatus('error');
           };
 
-          // Get Google email — check hash, then query params, then auto-set session
-          // (Supabase sometimes processes the URL before our code runs)
+          // Get Google email: try hash → query params → already-set session
+          // (Supabase PKCE auto-exchanges the code before our code runs, so the
+          // access_token may no longer be in the URL — read from session instead)
           const hp = new URLSearchParams(window.location.hash.substring(1));
           const qp = new URLSearchParams(window.location.search.substring(1));
-          const accessToken  = hp.get('access_token')  || qp.get('access_token');
-          const refreshToken = hp.get('refresh_token') || qp.get('refresh_token');
+          const accessToken = hp.get('access_token') || qp.get('access_token');
 
           let googleEmail: string | null = null;
-
           if (accessToken) {
-            try {
-              const payload = JSON.parse(atob(accessToken.split('.')[1]));
-              googleEmail = payload.email ?? null;
-            } catch {}
+            try { googleEmail = JSON.parse(atob(accessToken.split('.')[1])).email ?? null; } catch {}
           }
-
           if (!googleEmail) {
-            // Supabase may have already set the session — read email from it
-            const { data: { session: autoSess } } = await supabase.auth.getSession();
-            googleEmail = autoSess?.user?.email ?? null;
+            const { data: { session: s } } = await supabase.auth.getSession();
+            googleEmail = s?.user?.email ?? null;
           }
 
           if (!googleEmail) {
@@ -82,7 +74,7 @@ export default function AuthCallbackScreen() {
             return;
           }
 
-          // Conflict check — does this Google email belong to a different account?
+          // Conflict check
           const { data: taken } = await supabase
             .from('users').select('id')
             .eq('email', googleEmail).neq('id', connectUserId)
@@ -90,20 +82,18 @@ export default function AuthCallbackScreen() {
 
           if (taken) {
             await abort(
-              `The Google account "${googleEmail}" is already registered to a different LegacyPrime account. Please choose a different Google account.`,
+              `The Google account "${googleEmail}" is already registered to a different LegacyPrime account. Please go back to login and sign in with your original account.`,
             );
             return;
           }
 
-          // No conflict — establish session (if not already auto-set), update email, sign out
-          if (accessToken && refreshToken) {
-            const { data: sd } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-            if (!sd?.session) {
-              await abort('Failed to establish session. Please try again.');
-              return;
+          // No conflict — establish session if needed, update email, sign out to re-auth
+          if (accessToken) {
+            const refreshToken = hp.get('refresh_token') || qp.get('refresh_token');
+            if (refreshToken) {
+              await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
             }
           }
-
           await supabase.from('users').update({ email: googleEmail }).eq('id', connectUserId);
           await supabase.auth.signOut();
           router.replace('/(auth)/login' as any);
