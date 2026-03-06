@@ -382,8 +382,15 @@ export default function ProfileScreen() {
 
       if (Platform.OS === 'web') {
         if (typeof window !== 'undefined') {
+          // Save the original session so auth/callback.tsx can restore it on conflict.
+          // The page will fully reload during OAuth so we must persist this here.
+          const { data: { session: origSession } } = await supabase.auth.getSession();
           sessionStorage.setItem('profile_connect_intent', 'google');
           sessionStorage.setItem('profile_connect_userId', user.id);
+          if (origSession) {
+            sessionStorage.setItem('profile_orig_at', origSession.access_token);
+            sessionStorage.setItem('profile_orig_rt', origSession.refresh_token);
+          }
         }
         window.location.href = result.url;
         return;

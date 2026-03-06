@@ -27,8 +27,91 @@ export default function AuthCallbackScreen() {
       // in parallel with WebBrowser.openAuthSessionAsync). Do NOT process it as
       // a new login — doConnectGoogle in profile.tsx owns this token exchange.
       if (currentUser) return;
-      // Parse hash tokens from URL (web only — native uses deep links handled by Supabase)
+      // Web OAuth callback handling
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        // ── Step 1: check for profile connect intent BEFORE touching any session ──
+        // This must come first — Supabase may have already auto-set the Google
+        // session internally by the time this code runs, so we cannot rely on
+        // "no session yet" as a signal that we're in the normal login flow.
+        const connectIntent = sessionStorage.getItem('profile_connect_intent');
+        const connectUserId  = sessionStorage.getItem('profile_connect_userId');
+        const origAt = sessionStorage.getItem('profile_orig_at');
+        const origRt = sessionStorage.getItem('profile_orig_rt');
+
+        if (connectIntent === 'google' && connectUserId) {
+          // Clean up all connect-flow sessionStorage keys up front
+          ['profile_connect_intent', 'profile_connect_userId', 'profile_orig_at', 'profile_orig_rt']
+            .forEach(k => sessionStorage.removeItem(k));
+          window.history.replaceState(null, '', window.location.pathname);
+
+          // Helper: restore original session and redirect to profile with error
+          const abort = async (msg: string) => {
+            if (origAt && origRt) {
+              await supabase.auth.setSession({ access_token: origAt, refresh_token: origRt });
+            } else {
+              await supabase.auth.signOut();
+            }
+            sessionStorage.setItem('google_connect_error', msg);
+            router.replace('/profile' as any);
+          };
+
+          // Get Google email — check hash, then query params, then auto-set session
+          // (Supabase sometimes processes the URL before our code runs)
+          const hp = new URLSearchParams(window.location.hash.substring(1));
+          const qp = new URLSearchParams(window.location.search.substring(1));
+          const accessToken  = hp.get('access_token')  || qp.get('access_token');
+          const refreshToken = hp.get('refresh_token') || qp.get('refresh_token');
+
+          let googleEmail: string | null = null;
+
+          if (accessToken) {
+            try {
+              const payload = JSON.parse(atob(accessToken.split('.')[1]));
+              googleEmail = payload.email ?? null;
+            } catch {}
+          }
+
+          if (!googleEmail) {
+            // Supabase may have already set the session — read email from it
+            const { data: { session: autoSess } } = await supabase.auth.getSession();
+            googleEmail = autoSess?.user?.email ?? null;
+          }
+
+          if (!googleEmail) {
+            await abort('Could not read Google account info. Please try again.');
+            return;
+          }
+
+          // Conflict check — does this Google email belong to a different account?
+          const { data: taken } = await supabase
+            .from('users').select('id')
+            .eq('email', googleEmail).neq('id', connectUserId)
+            .maybeSingle();
+
+          if (taken) {
+            await abort(
+              `The Google account "${googleEmail}" is already registered to a different LegacyPrime account. Please choose a different Google account.`,
+            );
+            return;
+          }
+
+          // No conflict — establish session (if not already auto-set), update email, sign out
+          if (accessToken && refreshToken) {
+            const { data: sd } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+            if (!sd?.session) {
+              await abort('Failed to establish session. Please try again.');
+              return;
+            }
+          }
+
+          await supabase.from('users').update({ email: googleEmail }).eq('id', connectUserId);
+          await supabase.auth.signOut();
+          router.replace('/(auth)/login' as any);
+          return;
+        }
+        // ── End connect flow ─────────────────────────────────────────────────
+
+        // Normal login flow — parse tokens from URL hash
         const hash = window.location.hash.substring(1);
         const params = new URLSearchParams(hash);
         const accessToken = params.get('access_token');
@@ -43,65 +126,6 @@ export default function AuthCallbackScreen() {
         }
 
         if (accessToken && refreshToken) {
-          // ── Web Google-connect flow ──────────────────────────────────────────
-          // When the user clicks "Connect Google" from the profile page on web,
-          // we store intent in sessionStorage before redirecting to Google.
-          // On return, handle the connect logic here BEFORE setting any session.
-          const connectIntent = sessionStorage.getItem('profile_connect_intent');
-          const connectUserId  = sessionStorage.getItem('profile_connect_userId');
-
-          if (connectIntent === 'google' && connectUserId) {
-            sessionStorage.removeItem('profile_connect_intent');
-            sessionStorage.removeItem('profile_connect_userId');
-            window.history.replaceState(null, '', window.location.pathname);
-
-            // Decode email from JWT WITHOUT calling setSession() so the original
-            // user's session in storage is never overwritten on conflict.
-            let googleEmail: string | null = null;
-            try {
-              const payload = JSON.parse(atob(accessToken.split('.')[1]));
-              googleEmail = payload.email ?? null;
-            } catch {}
-
-            if (!googleEmail) {
-              sessionStorage.setItem('google_connect_error', 'Could not read Google account info. Please try again.');
-              router.replace('/profile' as any);
-              return;
-            }
-
-            // Check if this Google email already belongs to a different account.
-            const { data: taken } = await supabase
-              .from('users')
-              .select('id')
-              .eq('email', googleEmail)
-              .neq('id', connectUserId)
-              .maybeSingle();
-
-            if (taken) {
-              sessionStorage.setItem(
-                'google_connect_error',
-                `The Google account "${googleEmail}" is already registered to a different LegacyPrime account. Please choose a different Google account.`,
-              );
-              router.replace('/profile' as any);
-              return;
-            }
-
-            // No conflict — safe to establish session, update email, then sign out
-            // so the user re-authenticates cleanly with Google.
-            const { data: sd } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-            if (!sd?.session) {
-              sessionStorage.setItem('google_connect_error', 'Failed to establish session. Please try again.');
-              router.replace('/profile' as any);
-              return;
-            }
-
-            await supabase.from('users').update({ email: googleEmail }).eq('id', connectUserId);
-            await supabase.auth.signOut();
-            router.replace('/(auth)/login' as any);
-            return;
-          }
-          // ── End web connect flow ─────────────────────────────────────────────
-
           const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
