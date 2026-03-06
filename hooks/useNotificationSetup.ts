@@ -126,12 +126,13 @@ export function useNotificationSetup(
     // addPushTokenListener gives us the raw APNs/FCM device token — we must
     // re-call getExpoPushTokenAsync to get the Expo-wrapped token that our
     // push service understands, NOT register the raw device token directly.
-    tokenRefreshListener.current = Notifications.addPushTokenListener(async () => {
-      console.log('[Notifications] Push token rotated, fetching new Expo push token...');
+    // addPushTokenListener already provides the new Expo push token in the event.
+    // DO NOT call getExpoPushTokenAsync() inside this callback — that call itself
+    // fires the listener again, creating an infinite registration loop.
+    tokenRefreshListener.current = Notifications.addPushTokenListener(async (tokenEvent) => {
+      console.log('[Notifications] Push token rotated, re-registering:', tokenEvent.data);
       try {
-        const newTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-        console.log('[Notifications] Push token rotated, re-registering:', newTokenData.data);
-        await registerPushToken(newTokenData.data, Platform.OS as 'ios' | 'android', user.id, company.id);
+        await registerPushToken(tokenEvent.data, Platform.OS as 'ios' | 'android', user.id, company.id);
         console.log('[Notifications] Rotated token re-registered successfully');
       } catch (err) {
         console.warn('[Notifications] Failed to re-register rotated token:', err);
