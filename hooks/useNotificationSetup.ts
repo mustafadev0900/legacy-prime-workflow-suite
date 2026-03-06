@@ -122,12 +122,16 @@ export function useNotificationSetup(
 
     setup();
 
-    // Re-register the push token whenever Expo rotates it (e.g. after token invalidation
-    // or OS-level token refresh). Without this the old invalid token stays in the DB.
-    tokenRefreshListener.current = Notifications.addPushTokenListener(async (newToken) => {
-      console.log('[Notifications] Push token rotated, re-registering:', newToken.data);
+    // Re-register the push token whenever the underlying device token rotates.
+    // addPushTokenListener gives us the raw APNs/FCM device token — we must
+    // re-call getExpoPushTokenAsync to get the Expo-wrapped token that our
+    // push service understands, NOT register the raw device token directly.
+    tokenRefreshListener.current = Notifications.addPushTokenListener(async () => {
+      console.log('[Notifications] Push token rotated, fetching new Expo push token...');
       try {
-        await registerPushToken(newToken.data, Platform.OS as 'ios' | 'android', user.id, company.id);
+        const newTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+        console.log('[Notifications] Push token rotated, re-registering:', newTokenData.data);
+        await registerPushToken(newTokenData.data, Platform.OS as 'ios' | 'android', user.id, company.id);
         console.log('[Notifications] Rotated token re-registered successfully');
       } catch (err) {
         console.warn('[Notifications] Failed to re-register rotated token:', err);
