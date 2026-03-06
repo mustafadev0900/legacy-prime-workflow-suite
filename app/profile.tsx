@@ -392,6 +392,22 @@ export default function ProfileScreen() {
 
       if (!googleEmail) { setGoogleConnectError('Could not retrieve Google account email.'); return; }
 
+      // Check if this Google email is already tied to a different account
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('email', googleEmail)
+        .neq('id', user.id)
+        .maybeSingle();
+
+      if (existingUser) {
+        setGoogleConnectError(
+          `The Google account "${googleEmail}" is already linked to another LegacyPrime account. ` +
+          `Please choose a different Google account, or sign in to the existing account to manage it.`
+        );
+        return;
+      }
+
       const { error: updateError } = await supabase.from('users').update({ email: googleEmail }).eq('id', user.id);
       if (updateError) { setGoogleConnectError('Failed to link Google account. Please try again.'); return; }
 
