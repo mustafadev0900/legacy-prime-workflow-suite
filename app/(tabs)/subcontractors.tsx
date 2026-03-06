@@ -1,4 +1,5 @@
 import React, { useState, useCallback } from 'react';
+import SkeletonBox from '@/components/SkeletonBox';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Alert, Platform, Linking, ActivityIndicator, RefreshControl } from 'react-native';
 import { Users, Plus, Search, Mail, Phone, Star, X, FileText, UserPlus, FolderOpen, File, Send, CheckSquare, Square, MessageSquare, Building2, FileCheck, TrendingUp, Check, Loader } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,7 +14,7 @@ import { compressImage } from '@/lib/upload-utils';
 import { generateUUID } from '@/utils/uuid';
 
 export default function SubcontractorsScreen() {
-  const { subcontractors = [], addSubcontractor, projects, addProjectFile, addNotification, user, company, refreshSubcontractors } = useApp();
+  const { subcontractors = [], addSubcontractor, projects, addProjectFile, addNotification, user, company, refreshSubcontractors, isLoading, isCompanyReloading } = useApp();
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -950,7 +951,24 @@ ${company?.officePhone || ''}`;
               )}
             </View>
           </View>
-          {filteredSubcontractors.length === 0 ? (
+          {(isLoading || isCompanyReloading) && subcontractors.length === 0 ? (
+            <View>
+              {[0, 1, 2, 3].map(i => (
+                <View key={i} style={{ padding: 16, marginBottom: 8, backgroundColor: '#F9FAFB', borderRadius: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                    <SkeletonBox width={44} height={44} borderRadius={22} />
+                    <View style={{ flex: 1 }}>
+                      <SkeletonBox width="55%" height={16} borderRadius={4} />
+                      <SkeletonBox width="40%" height={12} borderRadius={4} style={{ marginTop: 6 }} />
+                    </View>
+                    <SkeletonBox width={60} height={24} borderRadius={12} />
+                  </View>
+                  <SkeletonBox width="70%" height={12} borderRadius={4} />
+                  <SkeletonBox width="50%" height={12} borderRadius={4} style={{ marginTop: 6 }} />
+                </View>
+              ))}
+            </View>
+          ) : filteredSubcontractors.length === 0 ? (
             <View style={styles.emptyState}>
               <Users size={64} color="#D1D5DB" />
               <Text style={styles.emptyStateText}>No subcontractors found</Text>

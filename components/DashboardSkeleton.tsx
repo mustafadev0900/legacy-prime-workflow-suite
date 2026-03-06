@@ -1,42 +1,5 @@
-import { useEffect, useRef } from 'react';
-import { View, Animated, StyleSheet, Dimensions } from 'react-native';
-
-const { width } = Dimensions.get('window');
-
-function SkeletonBox({ width: w, height: h, borderRadius = 8, style }: {
-  width?: number | string;
-  height: number;
-  borderRadius?: number;
-  style?: object;
-}) {
-  const opacity = useRef(new Animated.Value(0.3)).current;
-
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 1, duration: 800, useNativeDriver: false }),
-        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: false }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, []);
-
-  return (
-    <Animated.View
-      style={[
-        {
-          width: w ?? '100%',
-          height: h,
-          borderRadius,
-          backgroundColor: '#E5E7EB',
-          opacity,
-        },
-        style,
-      ]}
-    />
-  );
-}
+import { View, StyleSheet } from 'react-native';
+import SkeletonBox from '@/components/SkeletonBox';
 
 export default function DashboardSkeleton() {
   return (

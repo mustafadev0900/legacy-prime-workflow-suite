@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Alert, Platform, RefreshControl } from 'react-native';
+import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
@@ -13,7 +14,7 @@ import UploaderBadge from '@/components/UploaderBadge';
 import DocumentScannerModal, { DocumentScanResult } from '@/components/DocumentScannerModal';
 
 export default function ExpensesScreen() {
-  const { expenses, addExpense, projects, user, refreshExpenses, priceListCategories } = useApp();
+  const { expenses, addExpense, projects, user, refreshExpenses, priceListCategories, isLoading, isCompanyReloading } = useApp();
   const router = useRouter();
 
   // Field employees must submit expenses via their project screen, not this dashboard tab.
@@ -752,7 +753,20 @@ export default function ExpensesScreen() {
 
         <View style={styles.expensesList}>
           <Text style={styles.sectionTitle}>Recent Expenses</Text>
-          {filteredExpenses.length === 0 ? (
+          {(isLoading || isCompanyReloading) && expenses.length === 0 ? (
+            <View>
+              {[0, 1, 2, 3].map(i => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 8, backgroundColor: '#F9FAFB', borderRadius: 12, gap: 12 }}>
+                  <SkeletonBox width={44} height={44} borderRadius={22} />
+                  <View style={{ flex: 1 }}>
+                    <SkeletonBox width="55%" height={14} borderRadius={4} />
+                    <SkeletonBox width="35%" height={12} borderRadius={4} style={{ marginTop: 6 }} />
+                  </View>
+                  <SkeletonBox width={60} height={16} borderRadius={4} />
+                </View>
+              ))}
+            </View>
+          ) : filteredExpenses.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No expenses recorded for this project</Text>
             </View>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import SkeletonBox from '@/components/SkeletonBox';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Modal, Alert, TextInput, Image, Platform, ActivityIndicator, Clipboard } from 'react-native';
 import { useApp } from '@/contexts/AppContext';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -708,8 +709,17 @@ export default function SettingsScreen() {
           <Text style={styles.subsectionTitle}>{t('settings.teamMembers')}</Text>
 
           {isLoadingUsers ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>{t('common.loading')}</Text>
+            <View>
+              {[0, 1, 2, 3].map(i => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', padding: 14, marginBottom: 8, backgroundColor: '#F9FAFB', borderRadius: 12, gap: 12 }}>
+                  <SkeletonBox width={40} height={40} borderRadius={20} />
+                  <View style={{ flex: 1 }}>
+                    <SkeletonBox width="55%" height={14} borderRadius={4} />
+                    <SkeletonBox width="70%" height={12} borderRadius={4} style={{ marginTop: 6 }} />
+                  </View>
+                  <SkeletonBox width={60} height={24} borderRadius={12} />
+                </View>
+              ))}
             </View>
           ) : users && users.length > 0 ? (
             <View style={styles.usersList}>

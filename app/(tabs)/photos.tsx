@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Modal, ActivityIndicator, Pressable, Alert, RefreshControl } from 'react-native';
+import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Camera, Upload, Edit2, X, Check, Plus, Trash2, Settings } from 'lucide-react-native';
@@ -10,7 +11,7 @@ import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { supabase } from '@/lib/supabase';
 
 export default function PhotosScreen() {
-  const { photos, addPhoto, updatePhoto, photoCategories, priceListCategories, addPhotoCategory, updatePhotoCategory, deletePhotoCategory, company, projects, refreshPhotos } = useApp();
+  const { photos, addPhoto, updatePhoto, photoCategories, priceListCategories, addPhotoCategory, updatePhotoCategory, deletePhotoCategory, company, projects, refreshPhotos, isLoading, isCompanyReloading } = useApp();
 
   // Merge price-list categories with photo-specific categories (deduped, price list first).
   const allCategories = useMemo(() => {
@@ -410,6 +411,17 @@ export default function PhotosScreen() {
 
         <View style={styles.gallery}>
           <Text style={styles.galleryTitle}>Thumbnail Gallery</Text>
+          {(isLoading || isCompanyReloading) && photos.length === 0 ? (
+            <View style={styles.galleryGrid}>
+              {[0, 1, 2, 3, 4, 5].map(i => (
+                <View key={i} style={[styles.galleryItem, { overflow: 'hidden' }]}>
+                  <SkeletonBox width="100%" height={120} borderRadius={10} />
+                  <SkeletonBox width="60%" height={12} borderRadius={4} style={{ marginTop: 8 }} />
+                  <SkeletonBox width="40%" height={12} borderRadius={4} style={{ marginTop: 4 }} />
+                </View>
+              ))}
+            </View>
+          ) : (
           <View style={styles.galleryGrid}>
             {photos
               .filter(photo => !selectedProjectId || photo.projectId === selectedProjectId)
@@ -466,6 +478,7 @@ export default function PhotosScreen() {
               </View>
             ))}
           </View>
+          )}
         </View>
       </ScrollView>
 

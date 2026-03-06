@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Alert, Modal, FlatList, useWindowDimensions, KeyboardAvoidingView, ActivityIndicator, Linking } from 'react-native';
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import SkeletonBox from '@/components/SkeletonBox';
 import * as Notifications from 'expo-notifications';
 import { useTranslation } from 'react-i18next';
 import { Users, Search, Paperclip, Image as ImageIcon, Mic, Send, Play, X, Check, Bot, Sparkles, Trash2 } from 'lucide-react-native';
@@ -1440,6 +1441,22 @@ export default function ChatScreen() {
                 </View>
               </TouchableOpacity>
             </View>
+
+            {isLoadingConversations && conversations.filter(c => c.type === 'individual' || c.type === 'group').length === 0 && (
+              <View style={styles.contactsSection}>
+                <SkeletonBox width={140} height={14} borderRadius={4} style={{ marginBottom: 12 }} />
+                {[0, 1, 2, 3].map(i => (
+                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 10 }}>
+                    <SkeletonBox width={40} height={40} borderRadius={20} />
+                    <View style={{ flex: 1 }}>
+                      <SkeletonBox width="70%" height={14} borderRadius={4} />
+                      <SkeletonBox width="50%" height={12} borderRadius={4} style={{ marginTop: 6 }} />
+                    </View>
+                    <SkeletonBox width={36} height={12} borderRadius={4} />
+                  </View>
+                ))}
+              </View>
+            )}
 
             {individualChats.length > 0 && (
               <View style={styles.contactsSection}>

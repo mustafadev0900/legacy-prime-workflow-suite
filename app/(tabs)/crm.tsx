@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Modal, Linking, Alert, Platform, RefreshControl, ActivityIndicator } from 'react-native';
+import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import DailyTasksButton from '@/components/DailyTasksButton';
@@ -104,7 +105,7 @@ const promotionTemplates: MessageTemplate[] = [
 ];
 
 export default function CRMScreen() {
-  const { clients, addClient, addProject, updateClient, estimates, updateEstimate, callLogs, addCallLog, deleteCallLog, setCallLogs, company, refreshClients, refreshEstimates, projects, customPriceListItems } = useApp();
+  const { clients, addClient, addProject, updateClient, estimates, updateEstimate, callLogs, addCallLog, deleteCallLog, setCallLogs, company, refreshClients, refreshEstimates, projects, customPriceListItems, isLoading, isCompanyReloading } = useApp();
   const router = useRouter();
   const { sendSingleSMS, sendBulkSMSMessages, isLoading: isSendingSMS } = useTwilioSMS();
   const { initiateCall, isLoadingCall } = useTwilioCalls();
@@ -1358,6 +1359,23 @@ export default function CRMScreen() {
             </View>
           </View>
           
+          {(isLoading || isCompanyReloading) && clients.length === 0 && (
+            <View>
+              {[0, 1, 2, 3].map(i => (
+                <View key={i} style={{ padding: 16, marginBottom: 8, backgroundColor: '#F9FAFB', borderRadius: 12 }}>
+                  <SkeletonBox width="60%" height={16} borderRadius={4} />
+                  <SkeletonBox width="45%" height={13} borderRadius={4} style={{ marginTop: 8 }} />
+                  <SkeletonBox width="55%" height={13} borderRadius={4} style={{ marginTop: 6 }} />
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                    <SkeletonBox width={70} height={28} borderRadius={6} />
+                    <SkeletonBox width={70} height={28} borderRadius={6} />
+                    <SkeletonBox width={90} height={28} borderRadius={6} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
           {[...clients]
             .sort((a, b) => {
               const dateA = new Date(a.createdAt || a.lastContactDate || a.lastContacted).getTime();

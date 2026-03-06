@@ -1,4 +1,5 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
+import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useEffect } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import ClockInOutComponent from '@/components/ClockInOutComponent';
@@ -8,7 +9,7 @@ import { useLocalSearchParams } from 'expo-router';
 const isWeb = Platform.OS === 'web';
 
 export default function ClockScreen() {
-  const { projects, user } = useApp();
+  const { projects, user, isLoading, isCompanyReloading } = useApp();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const params = useLocalSearchParams();
 
@@ -63,7 +64,14 @@ export default function ClockScreen() {
                 <View style={styles.webMain}>
                   <View style={styles.projectListCard}>
                     <Text style={styles.projectListTitle}>Active Projects</Text>
-                    {activeProjects.length > 0 ? (
+                    {(isLoading || isCompanyReloading) && activeProjects.length === 0 ? (
+                      [0, 1, 2, 3].map(i => (
+                        <View key={i} style={{ padding: 14, marginBottom: 8, backgroundColor: '#F3F4F6', borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <SkeletonBox width="60%" height={15} borderRadius={4} />
+                          <SkeletonBox width={20} height={20} borderRadius={4} />
+                        </View>
+                      ))
+                    ) : activeProjects.length > 0 ? (
                       activeProjects.map((project) => (
                         <TouchableOpacity
                           key={project.id}
@@ -93,7 +101,14 @@ export default function ClockScreen() {
 
                 <View style={styles.projectListCard}>
                   <Text style={styles.projectListTitle}>Active Projects</Text>
-                  {activeProjects.length > 0 ? (
+                  {(isLoading || isCompanyReloading) && activeProjects.length === 0 ? (
+                    [0, 1, 2, 3].map(i => (
+                      <View key={i} style={{ padding: 14, marginBottom: 8, backgroundColor: '#F3F4F6', borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <SkeletonBox width="60%" height={15} borderRadius={4} />
+                        <SkeletonBox width={20} height={20} borderRadius={4} />
+                      </View>
+                    ))
+                  ) : activeProjects.length > 0 ? (
                     activeProjects.map((project) => (
                       <TouchableOpacity
                         key={project.id}
