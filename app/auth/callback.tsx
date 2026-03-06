@@ -93,11 +93,14 @@ export default function AuthCallbackScreen() {
       .single();
 
     if (!userProfile) {
-      // New Google user — sign out and redirect to signup with email pre-filled
-      await supabase.auth.signOut();
+      // New Google user — keep session active, redirect to signup with
+      // email + auth ID so signup can create DB records without calling signUp()
+      const googleName = authUser?.user_metadata?.full_name
+        || authUser?.user_metadata?.name
+        || '';
       router.replace({
         pathname: '/(auth)/signup',
-        params: { email },
+        params: { email, googleAuthId: authUserId, googleName },
       } as any);
       return;
     }

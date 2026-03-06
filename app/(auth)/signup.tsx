@@ -10,16 +10,20 @@ import { auth, supabase } from '@/lib/supabase';
 import Logo from '@/components/Logo';
 
 export default function SignupScreen() {
-  const { phone: phoneParam, email: emailParam } = useLocalSearchParams<{ phone?: string; email?: string }>();
+  const { phone: phoneParam, email: emailParam, googleAuthId: googleAuthIdParam, googleName: googleNameParam } =
+    useLocalSearchParams<{ phone?: string; email?: string; googleAuthId?: string; googleName?: string }>();
+
   // Strip +1 country code for the 10-digit field if pre-filled from phone login
   const initialPhone = phoneParam
     ? phoneParam.replace(/^\+1/, '').replace(/\D/g, '').slice(0, 10)
     : '';
-  // Email pre-filled and locked when coming from Google OAuth
+  // Email and authId pre-filled when coming from Google OAuth
   const initialEmail = emailParam ? decodeURIComponent(emailParam as string) : '';
+  const googleAuthId = googleAuthIdParam as string | undefined;
+  const isGoogleSignup = !!googleAuthId;
 
   const [accountType, setAccountType] = useState<'company' | 'employee' | null>(null);
-  const [name, setName] = useState<string>('');
+  const [name, setName] = useState<string>(googleNameParam ? decodeURIComponent(googleNameParam as string) : '');
   const [email, setEmail] = useState<string>(initialEmail);
   const [password, setPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
@@ -60,14 +64,15 @@ export default function SignupScreen() {
       return;
     }
 
-    if (password.length < 6) {
-      showAlert('Error', 'Password must be at least 6 characters long');
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      showAlert('Error', 'Passwords do not match');
-      return;
+    if (!isGoogleSignup) {
+      if (password.length < 6) {
+        showAlert('Error', 'Password must be at least 6 characters long');
+        return;
+      }
+      if (password !== confirmPassword) {
+        showAlert('Error', 'Passwords do not match');
+        return;
+      }
     }
 
     // Account-type specific validation BEFORE setting loading state
@@ -107,6 +112,57 @@ export default function SignupScreen() {
 
     try {
       console.log('[Signup] Starting account creation...');
+
+      // Google OAuth path — auth user already exists, only create DB records
+      if (isGoogleSignup && googleAuthId) {
+        const result = await auth.completeGoogleSignup({
+          authUserId: googleAuthId,
+          email: email.toLowerCase().trim(),
+          name: name.trim(),
+          accountType: accountType!,
+          companyName: accountType === 'company' ? companyName.trim() : undefined,
+          employeeCount: accountType === 'company' ? parseInt(employeeCount) : undefined,
+          companyCode: accountType === 'employee' ? companyCode.toUpperCase().trim() : undefined,
+          phone: accountType === 'employee' && phone.trim() ? `+1${phone.trim()}` : undefined,
+          address: accountType === 'employee' ? address.trim() : undefined,
+        });
+
+        if (!result.success) {
+          showAlert('Setup Failed', result.error || 'Failed to complete account setup');
+          return;
+        }
+
+        if (accountType === 'company' && result.user && result.company) {
+          setUser({
+            id: result.user.id, name: result.user.name, email: result.user.email,
+            role: result.user.role, companyId: result.user.company_id || '',
+            isActive: result.user.is_active, createdAt: result.user.created_at,
+          } as any);
+          setCompany({
+            id: result.company.id, name: result.company.name,
+            subscriptionStatus: result.company.subscription_status,
+            subscriptionPlan: result.company.subscription_plan,
+            employeeCount: result.company.employee_count,
+            companyCode: result.company.company_code || undefined,
+            settings: result.company.settings,
+            createdAt: result.company.created_at,
+            updatedAt: result.company.updated_at,
+          } as any);
+          router.push({
+            pathname: '/(auth)/subscription',
+            params: {
+              accountType: 'company',
+              companyId: result.company.id,
+              companyName: result.company.name,
+              companyCode: (result as any).companyCode,
+            },
+          });
+        } else if (result.pendingApproval) {
+          showAlert('Account Created', 'Your account is pending approval from your company administrator.');
+          router.replace('/(auth)/login');
+        }
+        return;
+      }
 
       if (accountType === 'company') {
 
@@ -417,25 +473,28 @@ export default function SignupScreen() {
             <Text style={styles.hintVerified}>✓ Email verified via Google</Text>
           )}
 
-          <Text style={styles.label}>{t('signup.password')}</Text>
-          <TextInput
-            style={styles.input}
-            placeholder={t('signup.passwordPlaceholder')}
-            placeholderTextColor="#9CA3AF"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
-
-          <Text style={styles.label}>{t('signup.confirmPassword')}</Text>
-          <TextInput
-            style={styles.input}
-            placeholder={t('signup.confirmPasswordPlaceholder')}
-            placeholderTextColor="#9CA3AF"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-          />
+          {!isGoogleSignup && (
+            <>
+              <Text style={styles.label}>{t('signup.password')}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={t('signup.passwordPlaceholder')}
+                placeholderTextColor="#9CA3AF"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+              />
+              <Text style={styles.label}>{t('signup.confirmPassword')}</Text>
+              <TextInput
+                style={styles.input}
+                placeholder={t('signup.confirmPasswordPlaceholder')}
+                placeholderTextColor="#9CA3AF"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+              />
+            </>
+          )}
 
           {accountType === 'company' && (
             <>

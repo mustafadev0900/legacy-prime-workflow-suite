@@ -312,6 +312,108 @@ export const auth = {
   },
 
   /**
+   * Complete signup for a user who authenticated via Google OAuth.
+   * The Supabase auth user already exists — we only create the app-level records.
+   */
+  completeGoogleSignup: async (params: {
+    authUserId: string;
+    email: string;
+    name: string;
+    accountType: 'company' | 'employee';
+    // Company-specific
+    companyName?: string;
+    employeeCount?: number;
+    // Employee-specific
+    companyCode?: string;
+    phone?: string;
+    address?: string;
+  }) => {
+    try {
+      if (params.accountType === 'company') {
+        const companyCode = generateCompanyCode();
+
+        const { data: company, error: companyError } = await supabase
+          .from('companies')
+          .insert({
+            name: params.companyName!,
+            subscription_plan: 'basic',
+            subscription_status: 'trial',
+            employee_count: params.employeeCount ?? 1,
+            company_code: companyCode,
+            settings: {
+              features: {
+                crm: true, estimates: true, schedule: true, expenses: true,
+                photos: true, chat: true, reports: true, clock: true, dashboard: true,
+              },
+              maxUsers: 10,
+              maxProjects: 50,
+            },
+          })
+          .select()
+          .single();
+
+        if (companyError) throw companyError;
+
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .insert({
+            id: params.authUserId,
+            email: params.email,
+            name: params.name,
+            role: 'admin',
+            company_id: company.id,
+            is_active: true,
+          })
+          .select()
+          .single();
+
+        if (userError) {
+          await supabase.from('companies').delete().eq('id', company.id);
+          throw userError;
+        }
+
+        return { success: true, user, company, companyCode };
+      } else {
+        // Employee
+        const { data: company, error: companyError } = await supabase
+          .from('companies')
+          .select('*')
+          .ilike('company_code', params.companyCode!)
+          .single();
+
+        if (companyError) {
+          if (companyError.code === 'PGRST116') {
+            return { success: false, error: `Company code "${params.companyCode}" not found.` };
+          }
+          throw companyError;
+        }
+
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .insert({
+            id: params.authUserId,
+            email: params.email,
+            name: params.name,
+            role: 'employee',
+            company_id: company.id,
+            is_active: false,
+            ...(params.phone ? { phone: params.phone } : {}),
+            ...(params.address ? { address: params.address } : {}),
+          })
+          .select()
+          .single();
+
+        if (userError) throw userError;
+
+        return { success: true, user, company, pendingApproval: true };
+      }
+    } catch (error: any) {
+      console.error('[Auth] Google signup completion error:', error);
+      return { success: false, error: error.message || 'Failed to complete account setup' };
+    }
+  },
+
+  /**
    * Reset password
    */
   resetPassword: async (email: string) => {

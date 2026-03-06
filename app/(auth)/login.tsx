@@ -218,12 +218,20 @@ export default function LoginScreen() {
             .single();
 
           if (!userProfile) {
-            // New Google user — sign out the OAuth session and send to signup
-            // with the Google email pre-filled and locked.
-            await supabase.auth.signOut();
+            // New Google user — no users table entry yet.
+            // Keep the OAuth session active (don't sign out) and redirect to
+            // signup with email + auth ID pre-filled so signup can create app-level
+            // DB records without calling supabase.auth.signUp() again.
+            const googleName = sessionData.session.user.user_metadata?.full_name
+              || sessionData.session.user.user_metadata?.name
+              || '';
             router.push({
               pathname: '/(auth)/signup',
-              params: { email: googleEmail },
+              params: {
+                email: googleEmail,
+                googleAuthId: sessionData.session.user.id,
+                googleName,
+              },
             });
             return;
           }
