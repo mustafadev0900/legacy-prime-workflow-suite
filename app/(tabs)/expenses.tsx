@@ -26,10 +26,11 @@ export default function ExpensesScreen() {
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
+    if (refreshing) return;
     setRefreshing(true);
     await refreshExpenses();
     setRefreshing(false);
-  }, [refreshExpenses]);
+  }, [refreshing, refreshExpenses]);
   const [expenseType, setExpenseType] = useState<string>('Subcontractor');
   const [category, setCategory] = useState<string>('');
   const [amount, setAmount] = useState<string>('');

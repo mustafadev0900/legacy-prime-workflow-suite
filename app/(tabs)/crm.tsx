@@ -316,6 +316,7 @@ export default function CRMScreen() {
   });
 
   const onRefresh = async () => {
+    if (refreshing) return;
     setRefreshing(true);
     await refreshClients();
     setRefreshing(false);

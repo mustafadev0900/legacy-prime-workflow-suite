@@ -20,10 +20,11 @@ export default function DashboardScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
+    if (refreshing) return;
     setRefreshing(true);
     await Promise.all([refreshReports(), loadDailyTasks()]);
     setRefreshing(false);
-  }, [refreshReports, loadDailyTasks]);
+  }, [refreshing, refreshReports, loadDailyTasks]);
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [projectFilter, setProjectFilter] = useState<'active' | 'completed' | 'archived'>('active');
   const [showImportOptions, setShowImportOptions] = useState<boolean>(false);

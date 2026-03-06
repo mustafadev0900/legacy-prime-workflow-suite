@@ -17,10 +17,11 @@ export default function SubcontractorsScreen() {
   const { subcontractors = [], addSubcontractor, projects, addProjectFile, addNotification, user, company, refreshSubcontractors, isLoading, isCompanyReloading } = useApp();
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
+    if (refreshing) return;
     setRefreshing(true);
     await refreshSubcontractors();
     setRefreshing(false);
-  }, [refreshSubcontractors]);
+  }, [refreshing, refreshSubcontractors]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedTrade, setSelectedTrade] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState<boolean>(false);

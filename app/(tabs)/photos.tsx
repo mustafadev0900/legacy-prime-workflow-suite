@@ -28,10 +28,11 @@ export default function PhotosScreen() {
   }, [priceListCategories, photoCategories]);
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
+    if (refreshing) return;
     setRefreshing(true);
     await refreshPhotos();
     setRefreshing(false);
-  }, [refreshPhotos]);
+  }, [refreshing, refreshPhotos]);
   const [category, setCategory] = useState<string>(photoCategories[0] || 'Other');
   const [notes, setNotes] = useState<string>('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
