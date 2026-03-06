@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Alert, Modal, FlatList, useWindowDimensions, KeyboardAvoidingView, ActivityIndicator, Linking } from 'react-native';
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import * as Notifications from 'expo-notifications';
 import { useTranslation } from 'react-i18next';
 import { Users, Search, Paperclip, Image as ImageIcon, Mic, Send, Play, X, Check, Bot, Sparkles, Trash2 } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
@@ -13,6 +14,22 @@ import { useApp } from '@/contexts/AppContext';
 import { ChatMessage } from '@/types';
 import GlobalAIChat from '@/components/GlobalAIChatSimple';
 import { getTipOfTheDay } from '@/constants/construction-tips';
+
+function formatChatTime(timestamp: string): string {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } else if (diffDays === 1) {
+    return 'Yesterday';
+  } else if (diffDays < 7) {
+    return date.toLocaleDateString([], { weekday: 'short' });
+  }
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
 
 export default function ChatScreen() {
   const { t } = useTranslation();
@@ -43,6 +60,8 @@ export default function ChatScreen() {
   // Used to detect new messages in non-selected conversations and show unread dots.
   const conversationLastMsgAtRef = useRef<Map<string, string>>(new Map());
   const [unreadConversations, setUnreadConversations] = useState<Set<string>>(new Set());
+  // Last message preview per conversation (text + timestamp + senderId)
+  const [conversationPreviews, setConversationPreviews] = useState<Map<string, { text: string; timestamp: string; senderId: string }>>(new Map());
 
   // Function to clear AI chat history
   const handleClearAIChat = async () => {
@@ -212,12 +231,42 @@ export default function ChatScreen() {
             };
             addConversation(localConversation);
 
-            // Detect new messages in non-selected conversations → unread dot
+            // Store last message preview for display in conversation list
+            if (conv.lastMessage) {
+              setConversationPreviews(prev => {
+                const next = new Map(prev);
+                next.set(conv.id, {
+                  text: conv.lastMessage.content || '',
+                  timestamp: conv.lastMessage.created_at,
+                  senderId: conv.lastMessage.sender_id,
+                });
+                return next;
+              });
+            }
+
+            // Detect new messages in non-selected conversations → unread dot + local notification
             if (conv.lastMessageAt) {
               const knownAt = conversationLastMsgAtRef.current.get(conv.id);
               const isSelected = conv.id === selectedChat;
               if (!isSelected && knownAt && conv.lastMessageAt > knownAt) {
                 setUnreadConversations(prev => new Set(prev).add(conv.id));
+                // Fire local notification so user sees the message even if app is open
+                if (Platform.OS !== 'web') {
+                  const msgText = conv.lastMessage?.content
+                    || (conv.lastMessage?.type === 'image' ? '📷 Photo'
+                      : conv.lastMessage?.type === 'voice' ? '🎤 Voice message'
+                      : conv.lastMessage?.type === 'file' ? '📎 File'
+                      : 'New message');
+                  Notifications.scheduleNotificationAsync({
+                    content: {
+                      title: conv.name,
+                      body: msgText,
+                      data: { type: 'chat', conversationId: conv.id },
+                      sound: 'default',
+                    },
+                    trigger: null,
+                  }).catch(() => {});
+                }
               }
               conversationLastMsgAtRef.current.set(conv.id, conv.lastMessageAt);
             }
@@ -1399,6 +1448,11 @@ export default function ChatScreen() {
                   .filter(conv => !searchQuery || conv.name.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map((conv) => {
                     const hasUnread = unreadConversations.has(conv.id);
+                    const preview = conversationPreviews.get(conv.id);
+                    const previewText = preview
+                      ? (preview.text || '📎 Attachment')
+                      : 'No messages yet';
+                    const previewTime = preview ? formatChatTime(preview.timestamp) : '';
                     return (
                       <TouchableOpacity
                         key={conv.id}
@@ -1416,8 +1470,16 @@ export default function ChatScreen() {
                             <Text style={styles.contactAvatarInitials}>{getInitials(conv.name)}</Text>
                           </View>
                         )}
-                        <Text style={[styles.contactName, hasUnread && { fontWeight: '700' }]}>{conv.name}</Text>
-                        {hasUnread && <View style={styles.unreadDot} />}
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                            <Text style={[styles.contactName, hasUnread && { fontWeight: '700' }]} numberOfLines={1}>{conv.name}</Text>
+                            {!!previewTime && <Text style={[styles.chatPreviewTime, hasUnread && { color: '#2563EB', fontWeight: '600' }]}>{previewTime}</Text>}
+                          </View>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Text style={[styles.chatPreviewText, hasUnread && { color: '#111827', fontWeight: '600' }]} numberOfLines={1}>{previewText}</Text>
+                            {hasUnread && <View style={styles.unreadBadge}><Text style={styles.unreadBadgeText}>●</Text></View>}
+                          </View>
+                        </View>
                       </TouchableOpacity>
                     );
                   })}
@@ -1431,15 +1493,30 @@ export default function ChatScreen() {
                   .filter(conv => !searchQuery || conv.name.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map((group) => {
                     const hasUnread = unreadConversations.has(group.id);
+                    const preview = conversationPreviews.get(group.id);
+                    const previewText = preview
+                      ? (preview.text || '📎 Attachment')
+                      : 'No messages yet';
+                    const previewTime = preview ? formatChatTime(preview.timestamp) : '';
                     return (
                       <TouchableOpacity
                         key={group.id}
                         style={[styles.groupItem, selectedChat === group.id && styles.groupItemActive]}
                         onPress={() => handleSelectChat(group.id)}
                       >
-                        <Users size={20} color="#2563EB" />
-                        <Text style={[styles.groupName, hasUnread && { fontWeight: '700' }]}>{group.name}</Text>
-                        {hasUnread && <View style={styles.unreadDot} />}
+                        <View style={[styles.contactAvatarPlaceholder, { backgroundColor: '#EFF6FF' }]}>
+                          <Users size={18} color="#2563EB" />
+                        </View>
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                            <Text style={[styles.groupName, hasUnread && { fontWeight: '700' }]} numberOfLines={1}>{group.name}</Text>
+                            {!!previewTime && <Text style={[styles.chatPreviewTime, hasUnread && { color: '#2563EB', fontWeight: '600' }]}>{previewTime}</Text>}
+                          </View>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Text style={[styles.chatPreviewText, hasUnread && { color: '#111827', fontWeight: '600' }]} numberOfLines={1}>{previewText}</Text>
+                            {hasUnread && <View style={styles.unreadBadge}><Text style={styles.unreadBadgeText}>●</Text></View>}
+                          </View>
+                        </View>
                       </TouchableOpacity>
                     );
                   })}
@@ -1977,8 +2054,29 @@ const styles = StyleSheet.create({
   },
   contactName: {
     fontSize: 14,
+    fontWeight: '600' as const,
     color: '#1F2937',
     flex: 1,
+  },
+  chatPreviewText: {
+    fontSize: 13,
+    color: '#6B7280',
+    flex: 1,
+    marginRight: 4,
+  },
+  chatPreviewTime: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginLeft: 6,
+    flexShrink: 0,
+  },
+  unreadBadge: {
+    flexShrink: 0,
+    marginLeft: 4,
+  },
+  unreadBadgeText: {
+    fontSize: 10,
+    color: '#2563EB',
   },
   unreadDot: {
     width: 8,
@@ -2003,6 +2101,7 @@ const styles = StyleSheet.create({
   },
   groupName: {
     fontSize: 14,
+    fontWeight: '600' as const,
     color: '#1F2937',
     flex: 1,
   },

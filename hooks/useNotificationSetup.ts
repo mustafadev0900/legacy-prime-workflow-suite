@@ -173,6 +173,9 @@ export function useNotificationSetup(
         );
 
         switch (data?.type) {
+          case 'chat':
+            router.push('/(tabs)/chat');
+            break;
           case 'task-reminder':
             router.push('/(tabs)/dashboard');
             break;

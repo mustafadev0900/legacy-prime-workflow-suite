@@ -88,6 +88,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('id', senderId)
       .single();
 
+    // Push notification to all other participants (fire-and-forget)
+    try {
+      const { data: otherParticipants } = await supabase
+        .from('conversation_participants')
+        .select('user_id')
+        .eq('conversation_id', conversationId)
+        .neq('user_id', senderId);
+
+      if (otherParticipants?.length) {
+        const otherUserIds = otherParticipants.map((p: any) => p.user_id);
+        const { data: tokenRows } = await supabase
+          .from('push_tokens')
+          .select('token')
+          .in('user_id', otherUserIds)
+          .eq('is_active', true)
+          .like('token', 'ExponentPushToken%');
+
+        if (tokenRows?.length) {
+          const senderName = sender?.name || 'Someone';
+          const msgPreview = type === 'text' ? (content || '') : type === 'image' ? '📷 Photo' : type === 'voice' ? '🎤 Voice message' : '📎 File';
+          const pushMessages = tokenRows.map((row: any) => ({
+            to: row.token,
+            title: senderName,
+            body: msgPreview,
+            data: { type: 'chat', conversationId },
+            sound: 'default',
+            badge: 1,
+          }));
+          fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(pushMessages),
+          }).catch((err: any) => console.warn('[Send Message] Push notification error:', err));
+        }
+      }
+    } catch (pushErr: any) {
+      console.warn('[Send Message] Push notification failed (non-fatal):', pushErr);
+    }
+
     return res.status(200).json({
       success: true,
       message: {
