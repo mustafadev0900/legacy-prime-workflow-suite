@@ -387,12 +387,21 @@ export default function ProfileScreen() {
       const refreshToken = params.get('refresh_token');
       if (!accessToken || !refreshToken) { setGoogleConnectError('Missing tokens. Please try again.'); return; }
 
-      const { data: sessionData } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-      const googleEmail = sessionData?.session?.user?.email ?? null;
+      // Decode the email from the JWT payload WITHOUT calling setSession() yet.
+      // Calling setSession() first would immediately replace the active session with the
+      // Google user's session, logging the current user out before we can validate anything.
+      let googleEmail: string | null = null;
+      try {
+        const payload = JSON.parse(atob(accessToken.split('.')[1]));
+        googleEmail = payload.email ?? null;
+      } catch {
+        setGoogleConnectError('Could not read Google account info. Please try again.');
+        return;
+      }
 
       if (!googleEmail) { setGoogleConnectError('Could not retrieve Google account email.'); return; }
 
-      // Check if this Google email is already tied to a different account
+      // Check if this Google email is already tied to a different account — BEFORE touching the session.
       const { data: existingUser } = await supabase
         .from('users')
         .select('id')
@@ -401,20 +410,17 @@ export default function ProfileScreen() {
         .maybeSingle();
 
       if (existingUser) {
-        // The OAuth call already swapped the Supabase session to the Google user's session.
-        // We must sign out to prevent the current user from being in a corrupted auth state.
-        // Show the message briefly, then restore a clean session via sign-out.
+        // Session has NOT been replaced — user stays logged in as their original account.
         setGoogleConnectError(
           `The Google account "${googleEmail}" is already registered to a different LegacyPrime account. ` +
-          `You can't link it here — please use a different Google account. ` +
-          `Signing you out to restore your session…`
+          `Please choose a different Google account.`
         );
-        setTimeout(async () => {
-          await logout();
-          router.replace('/(auth)/login');
-        }, 3000);
         return;
       }
+
+      // Validation passed — safe to establish the Google session now.
+      const { data: sessionData } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      if (!sessionData?.session) { setGoogleConnectError('Failed to establish Google session. Please try again.'); return; }
 
       const { error: updateError } = await supabase.from('users').update({ email: googleEmail }).eq('id', user.id);
       if (updateError) { setGoogleConnectError('Failed to link Google account. Please try again.'); return; }
