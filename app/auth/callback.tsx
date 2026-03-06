@@ -22,11 +22,13 @@ export default function AuthCallbackScreen() {
 
   const handleCallback = async () => {
     try {
-      // If the user is already authenticated, this callback was triggered by a
-      // connect-account flow from the profile page (Expo received the deep link
-      // in parallel with WebBrowser.openAuthSessionAsync). Do NOT process it as
-      // a new login — doConnectGoogle in profile.tsx owns this token exchange.
-      if (currentUser) return;
+      // Native only: if user is already authenticated, this callback was triggered
+      // by a connect-account deep link firing in parallel with openAuthSessionAsync.
+      // doConnectGoogle in profile.tsx owns that token exchange — skip here.
+      // On web we always proceed: the original session loads from localStorage fast
+      // enough that currentUser is already set, but we still need to run the
+      // sessionStorage connect-intent check below.
+      if (Platform.OS !== 'web' && currentUser) return;
       // Web OAuth callback handling
       if (Platform.OS === 'web' && typeof window !== 'undefined') {
         // ── Step 1: check for profile connect intent BEFORE touching any session ──
