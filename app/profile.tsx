@@ -401,10 +401,18 @@ export default function ProfileScreen() {
         .maybeSingle();
 
       if (existingUser) {
+        // The OAuth call already swapped the Supabase session to the Google user's session.
+        // We must sign out to prevent the current user from being in a corrupted auth state.
+        // Show the message briefly, then restore a clean session via sign-out.
         setGoogleConnectError(
-          `The Google account "${googleEmail}" is already linked to another LegacyPrime account. ` +
-          `Please choose a different Google account, or sign in to the existing account to manage it.`
+          `The Google account "${googleEmail}" is already registered to a different LegacyPrime account. ` +
+          `You can't link it here — please use a different Google account. ` +
+          `Signing you out to restore your session…`
         );
+        setTimeout(async () => {
+          await logout();
+          router.replace('/(auth)/login');
+        }, 3000);
         return;
       }
 
