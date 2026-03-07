@@ -12,8 +12,10 @@ import {
   useWindowDimensions,
   KeyboardAvoidingView,
   ActivityIndicator,
+  Keyboard,
 } from 'react-native';
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SkeletonBox from '@/components/SkeletonBox';
 import * as Notifications from 'expo-notifications';
 import { useTranslation } from 'react-i18next';
@@ -54,6 +56,7 @@ export default function ChatScreen() {
     useApp();
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 768;
+  const insets = useSafeAreaInsets();
   const rorkApi =
     process.env.EXPO_PUBLIC_RORK_API_BASE_URL ||
     process.env.EXPO_PUBLIC_API_URL ||
@@ -86,10 +89,21 @@ export default function ChatScreen() {
   const [conversationPreviews, setConversationPreviews] = useState<Map<string, PreviewEntry>>(new Map());
 
   const scrollViewRef = useRef<ScrollView>(null);
+  // Measured height of the mobile header so KAV gets an accurate offset
+  const [headerHeight, setHeaderHeight] = useState(56);
   const conversationsRef = useRef(conversations);
   useEffect(() => {
     conversationsRef.current = conversations;
   }, [conversations]);
+
+  // Scroll to the latest message whenever the keyboard slides up
+  useEffect(() => {
+    const event = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const sub = Keyboard.addListener(event, () => {
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
+    });
+    return () => sub.remove();
+  }, []);
 
   const selectedConversation = conversations.find((c) => c.id === selectedChat);
   const messages = selectedConversation?.messages || [];
@@ -866,16 +880,6 @@ export default function ChatScreen() {
         </View>
       )}
 
-      {/* Mobile back header */}
-      {isSmallScreen && selectedChat && (
-        <View style={styles.mobileHeader}>
-          <TouchableOpacity onPress={() => setSelectedChat(null)} style={styles.backButton}>
-            <Text style={styles.backButtonText}>← Back</Text>
-          </TouchableOpacity>
-          <Text style={styles.chatTitle} numberOfLines={1}>{selectedConversation?.name || 'Chat'}</Text>
-        </View>
-      )}
-
       <View style={styles.content}>
         {/* ─── Sidebar ─────────────────────────────────────────────────────── */}
         {(!isSmallScreen || !selectedChat) && (
@@ -996,10 +1000,25 @@ export default function ChatScreen() {
                 <GlobalAIChat inline />
               </View>
             ) : selectedChat ? (
+              <>
+                {/* Mobile header — lives inside the chat area so KAV sits directly below it */}
+                {isSmallScreen && (
+                  <View
+                    style={styles.mobileHeader}
+                    onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+                  >
+                    <TouchableOpacity onPress={() => setSelectedChat(null)} style={styles.backButton}>
+                      <Text style={styles.backButtonText}>← Back</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.chatTitle} numberOfLines={1}>
+                      {selectedConversation?.name || 'Chat'}
+                    </Text>
+                  </View>
+                )}
               <KeyboardAvoidingView
                 style={{ flex: 1 }}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={Platform.OS === 'ios' ? (isSmallScreen ? 150 : 90) : 0}
+                keyboardVerticalOffset={isSmallScreen ? headerHeight : 0}
               >
                 {!isSmallScreen && (
                   <View style={styles.chatHeader}>
@@ -1013,6 +1032,9 @@ export default function ChatScreen() {
                   style={styles.messagesContainer}
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
+                  onContentSizeChange={() =>
+                    scrollViewRef.current?.scrollToEnd({ animated: false })
+                  }
                 >
                   {messages.map((message) => {
                     const senderData = userMap.get(message.senderId);
@@ -1066,7 +1088,7 @@ export default function ChatScreen() {
 
                 {/* Input area */}
                 {isAudioMode ? (
-                  <View style={styles.recorderContainer}>
+                  <View style={[styles.recorderContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
                     <AudioRecorder
                       autoStart
                       onSend={handleAudioSend}
@@ -1074,7 +1096,7 @@ export default function ChatScreen() {
                     />
                   </View>
                 ) : (
-                  <View style={styles.inputContainer}>
+                  <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
                     <TouchableOpacity
                       style={styles.attachButton}
                       onPress={() => setShowAttachMenu(true)}
@@ -1088,6 +1110,12 @@ export default function ChatScreen() {
                       value={messageText}
                       onChangeText={setMessageText}
                       multiline
+                      onFocus={() =>
+                        setTimeout(
+                          () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+                          150
+                        )
+                      }
                     />
                     {messageText.trim() ? (
                       <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
@@ -1104,6 +1132,7 @@ export default function ChatScreen() {
                   </View>
                 )}
               </KeyboardAvoidingView>
+              </>
             ) : (
               <View style={styles.noChatSelected}>
                 <Users size={64} color="#D1D5DB" />
@@ -1483,13 +1512,7 @@ const styles = StyleSheet.create({
   aiChatDescription: { fontSize: 12, color: '#6B7280' },
   chatArea: { flex: 1, backgroundColor: '#FFFFFF' },
   chatAreaMobile: {
-    width: '100%',
-    position: 'absolute' as const,
-    top: 60,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 10,
+    flex: 1,
   },
   chatHeader: {
     padding: 16,
@@ -1523,7 +1546,9 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: 'row',
-    padding: 12,
+    paddingTop: 12,
+    paddingHorizontal: 12,
+    // paddingBottom is set dynamically in render using insets.bottom
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
     gap: 8,
