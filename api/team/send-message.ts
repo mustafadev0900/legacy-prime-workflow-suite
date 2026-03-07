@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const { conversationId, senderId, type, content, fileName, fileUrl, duration } = req.body;
+    const { conversationId, senderId, type, content, fileName, fileUrl, duration, replyTo } = req.body;
 
     // Validation
     if (!conversationId || !senderId || !type) {
@@ -67,6 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (fileName) messageData.file_name = fileName;
     if (fileUrl) messageData.file_url = fileUrl;
     if (duration) messageData.duration = duration;
+    if (replyTo?.id) messageData.reply_to = replyTo.id;
 
     const { data: message, error: messageError } = await supabase
       .from('messages')
@@ -107,7 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (tokenRows?.length) {
           const senderName = sender?.name || 'Someone';
-          const msgPreview = type === 'text' ? (content || '') : type === 'image' ? '📷 Photo' : type === 'voice' ? '🎤 Voice message' : '📎 File';
+          const msgPreview = type === 'text' ? (content || '') : type === 'image' ? '📷 Photo' : type === 'voice' ? '🎤 Voice message' : type === 'video' ? '🎬 Video' : '📎 File';
           const pushMessages = tokenRows.map((row: any) => ({
             to: row.token,
             title: senderName,

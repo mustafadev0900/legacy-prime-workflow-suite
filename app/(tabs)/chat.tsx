@@ -1,386 +1,366 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Platform, Alert, Modal, FlatList, useWindowDimensions, KeyboardAvoidingView, ActivityIndicator, Linking } from 'react-native';
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  Platform,
+  Alert,
+  Modal,
+  FlatList,
+  useWindowDimensions,
+  KeyboardAvoidingView,
+  ActivityIndicator,
+} from 'react-native';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import SkeletonBox from '@/components/SkeletonBox';
 import * as Notifications from 'expo-notifications';
 import { useTranslation } from 'react-i18next';
-import { Users, Search, Paperclip, Image as ImageIcon, Mic, Send, Play, X, Check, Bot, Sparkles, Trash2 } from 'lucide-react-native';
-import * as Clipboard from 'expo-clipboard';
+import {
+  Users,
+  Search,
+  Paperclip,
+  Image as ImageIcon,
+  Mic,
+  Send,
+  X,
+  Check,
+  Bot,
+  Trash2,
+  Video as VideoIcon,
+  Reply,
+} from 'lucide-react-native';
 import { Image } from 'expo-image';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
-import { Audio } from 'expo-av';
 import { useApp } from '@/contexts/AppContext';
 import { ChatMessage } from '@/types';
 import GlobalAIChat from '@/components/GlobalAIChatSimple';
 import { getTipOfTheDay } from '@/constants/construction-tips';
+import ChatListItem from '@/components/chat/ChatListItem';
+import ChatTabs, { ChatTab } from '@/components/chat/ChatTabs';
+import MessageBubble from '@/components/chat/MessageBubble';
+import ReplyPreview from '@/components/chat/ReplyPreview';
+import AudioRecorder from '@/components/chat/AudioRecorder';
 
-function formatChatTime(timestamp: string): string {
-  if (!timestamp) return '';
-  const date = new Date(timestamp);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } else if (diffDays === 1) {
-    return 'Yesterday';
-  } else if (diffDays < 7) {
-    return date.toLocaleDateString([], { weekday: 'short' });
-  }
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
+type PreviewEntry = { text: string; timestamp: string; senderId: string; type?: string };
 
 export default function ChatScreen() {
   const { t } = useTranslation();
-  const { user, conversations, clients, addConversation, addMessageToConversation } = useApp();
+  const { user, conversations, addConversation, addMessageToConversation } =
+    useApp();
   const { width } = useWindowDimensions();
   const isSmallScreen = width < 768;
-  const rorkApi = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+  const rorkApi =
+    process.env.EXPO_PUBLIC_RORK_API_BASE_URL ||
+    process.env.EXPO_PUBLIC_API_URL ||
+    'https://legacy-prime-workflow-suite.vercel.app';
+
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedChat, setSelectedChat] = useState<string | null>(null);
   const [messageText, setMessageText] = useState<string>('');
   const [showAttachMenu, setShowAttachMenu] = useState<boolean>(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [isRecording, setIsRecording] = useState<boolean>(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [showNewChatModal, setShowNewChatModal] = useState<boolean>(false);
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [newChatSearch, setNewChatSearch] = useState<string>('');
-
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewVideo, setPreviewVideo] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
+  const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
   const [dailyTipSent, setDailyTipSent] = useState<boolean>(false);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState<boolean>(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState<boolean>(false);
   const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
-  const [audioProgress, setAudioProgress] = useState<{ [key: string]: number }>({});
-  // Tracks the latest lastMessageAt per conversation (from fetchConversations API).
-  // Used to detect new messages in non-selected conversations and show unread dots.
+  const [isAudioMode, setIsAudioMode] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<ChatTab>('all');
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [locallyDeletedIds, setLocallyDeletedIds] = useState<Set<string>>(new Set());
+
   const conversationLastMsgAtRef = useRef<Map<string, string>>(new Map());
   const [unreadConversations, setUnreadConversations] = useState<Set<string>>(new Set());
-  // Last message preview per conversation (text + timestamp + senderId)
-  const [conversationPreviews, setConversationPreviews] = useState<Map<string, { text: string; timestamp: string; senderId: string }>>(new Map());
+  const [conversationPreviews, setConversationPreviews] = useState<Map<string, PreviewEntry>>(new Map());
 
-  // Function to clear AI chat history
+  const scrollViewRef = useRef<ScrollView>(null);
+  const conversationsRef = useRef(conversations);
+  useEffect(() => {
+    conversationsRef.current = conversations;
+  }, [conversations]);
+
+  const selectedConversation = conversations.find((c) => c.id === selectedChat);
+  const messages = selectedConversation?.messages || [];
+
+  const getInitials = (name: string) =>
+    name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2);
+
+  const userMap = useMemo(() => {
+    const map = new Map();
+    if (user) map.set(user.id, { name: user.name, avatar: user.avatar });
+    teamMembers.forEach((m) => map.set(m.id, { name: m.name, avatar: m.avatar }));
+    return map;
+  }, [user, teamMembers]);
+
+  useEffect(() => {
+    if (scrollViewRef.current && messages.length > 0) {
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, [messages, selectedChat]);
+
+  // ─── Clear AI chat ───────────────────────────────────────────────────────────
   const handleClearAIChat = async () => {
-    if (Platform.OS === 'web') {
-      if (window.confirm('Are you sure you want to clear all AI chat history? This cannot be undone.')) {
-        await clearAIChatHistory();
+    const doIt = async () => {
+      try {
+        const resp = await fetch(`${rorkApi}/api/clear-chat-history`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user?.id }),
+        });
+        if (resp.ok && selectedChat === 'ai-assistant') {
+          setSelectedChat(null);
+          setTimeout(() => setSelectedChat('ai-assistant'), 100);
+        } else if (!resp.ok) {
+          Alert.alert('Error', 'Failed to clear chat history');
+        }
+      } catch {
+        Alert.alert('Error', 'Failed to clear chat history');
       }
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm('Clear all AI chat history? This cannot be undone.')) doIt();
     } else {
-      Alert.alert('Clear AI Chat', 'Are you sure you want to clear all AI chat history? This cannot be undone.', [
+      Alert.alert('Clear AI Chat', 'Clear all AI chat history? This cannot be undone.', [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Clear', style: 'destructive', onPress: () => clearAIChatHistory() },
+        { text: 'Clear', style: 'destructive', onPress: doIt },
       ]);
     }
   };
 
-  const clearAIChatHistory = async () => {
-    if (!user?.id) return;
-
-    try {
-      console.log('[Chat] Clearing AI chat history...');
-
-      const response = await fetch(`${rorkApi}/api/clear-chat-history`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.id,
-        }),
-      });
-
-      if (response.ok) {
-        console.log('[Chat] ✅ AI chat history cleared');
-        // Reload the page or refresh AI chat to show cleared state
-        if (selectedChat === 'ai-assistant') {
-          setSelectedChat(null);
-          setTimeout(() => setSelectedChat('ai-assistant'), 100);
-        }
-      } else {
-        console.error('[Chat] ❌ Failed to clear AI chat history');
-        Alert.alert('Error', 'Failed to clear chat history');
-      }
-    } catch (error) {
-      console.error('[Chat] Error clearing AI chat:', error);
-      Alert.alert('Error', 'Failed to clear chat history');
-    }
-  };
-
-  // Refs for web audio recording
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
-  const audioPlayerRef = useRef<Audio.Sound | null>(null);
-  const webAudioRef = useRef<HTMLAudioElement | null>(null);
-  const recordingStartTimeRef = useRef<number | null>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
-  // Ref so polling effects always read the latest conversations without needing
-  // conversations in their dependency array (which would re-create the interval
-  // on every message add, causing excessive re-fetches).
-  const conversationsRef = useRef(conversations);
-  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
-
-  const selectedConversation = conversations.find(c => c.id === selectedChat);
-  const messages = selectedConversation?.messages || [];
-
-  // Helper function to get user initials
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
-  // Create a map of user IDs to user data for quick lookup
-  const userMap = useMemo(() => {
-    const map = new Map();
-
-    // Add current user
-    if (user) {
-      map.set(user.id, { name: user.name, avatar: user.avatar });
-    }
-
-    // Add team members
-    teamMembers.forEach(member => {
-      map.set(member.id, { name: member.name, avatar: member.avatar });
-    });
-
-    return map;
-  }, [user, teamMembers]);
-
-  // Auto-scroll to bottom when messages change or chat is opened
-  useEffect(() => {
-    if (scrollViewRef.current && messages.length > 0) {
-      // Small delay to ensure messages are rendered
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
-    }
-  }, [messages, selectedChat]);
-
-  // Fetch team members from database
+  // ─── Fetch team members ───────────────────────────────────────────────────────
   useEffect(() => {
     const fetchTeamMembers = async () => {
-      if (!user?.id || !user?.role) {
-        console.log('[Chat] User not loaded yet, skipping team member fetch');
-        return;
-      }
-
+      if (!user?.id || !user?.role) return;
       setIsLoadingMembers(true);
       try {
-        console.log('[Chat] Fetching team members for user:', user.id, 'role:', user.role);
-
-        const response = await fetch(
+        const resp = await fetch(
           `${rorkApi}/api/team/get-members?userId=${user.id}&userRole=${user.role}`
         );
-
-        const result = await response.json();
-
-        if (result.success) {
-          console.log('[Chat] Fetched', result.members.length, 'team members');
-          setTeamMembers(result.members);
-        } else {
-          console.error('[Chat] Failed to fetch team members:', result.error);
-          Alert.alert('Error', 'Failed to load team members');
-        }
-      } catch (error: any) {
-        console.error('[Chat] Error fetching team members:', error);
-        Alert.alert('Error', 'Failed to load team members: ' + error.message);
+        const result = await resp.json();
+        if (result.success) setTeamMembers(result.members);
+      } catch (e) {
+        console.error('[Chat] fetchTeamMembers error:', e);
       } finally {
         setIsLoadingMembers(false);
       }
     };
-
     fetchTeamMembers();
   }, [user?.id, user?.role]);
 
-  // Fetch conversations from database — runs on mount and every 30s to discover
-  // new conversations created by other users while the app is open.
+  // ─── Fetch conversations (poll 30s) ──────────────────────────────────────────
   useEffect(() => {
     const fetchConversations = async () => {
       if (!user?.id) return;
-
       setIsLoadingConversations(true);
       try {
-        console.log('[Chat] Fetching conversations for user:', user.id);
+        const resp = await fetch(`${rorkApi}/api/team/get-conversations?userId=${user.id}`);
+        const result = await resp.json();
+        if (!result.success) return;
 
-        const response = await fetch(
-          `${rorkApi}/api/team/get-conversations?userId=${user.id}`
-        );
-
-        const result = await response.json();
-
-        if (result.success) {
-          console.log('[Chat] Fetched', result.conversations.length, 'conversations');
-
-          result.conversations.forEach((conv: any) => {
-            // Always upsert the conversation — addConversation now deduplicates
-            // via functional update so calling it for existing convs is safe.
-            const localConversation = {
-              id: conv.id,
-              name: conv.name,
-              type: conv.type as 'individual' | 'group',
-              participants: conv.participants.map((p: any) => p.id),
-              messages: conversationsRef.current.find(c => c.id === conv.id)?.messages || [],
-              createdAt: conv.createdAt,
-              avatar: conv.avatar,
-            };
-            addConversation(localConversation);
-
-            // Store last message preview for display in conversation list
-            if (conv.lastMessage) {
-              setConversationPreviews(prev => {
-                const next = new Map(prev);
-                next.set(conv.id, {
-                  text: conv.lastMessage.content || '',
-                  timestamp: conv.lastMessage.created_at,
-                  senderId: conv.lastMessage.sender_id,
-                });
-                return next;
-              });
-            }
-
-            // Detect new messages in non-selected conversations → unread dot + local notification
-            if (conv.lastMessageAt) {
-              const knownAt = conversationLastMsgAtRef.current.get(conv.id);
-              const isSelected = conv.id === selectedChat;
-              if (!isSelected && knownAt && conv.lastMessageAt > knownAt) {
-                setUnreadConversations(prev => new Set(prev).add(conv.id));
-                // Fire local notification so user sees the message even if app is open
-                if (Platform.OS !== 'web') {
-                  const msgText = conv.lastMessage?.content
-                    || (conv.lastMessage?.type === 'image' ? '📷 Photo'
-                      : conv.lastMessage?.type === 'voice' ? '🎤 Voice message'
-                      : conv.lastMessage?.type === 'file' ? '📎 File'
-                      : 'New message');
-                  Notifications.scheduleNotificationAsync({
-                    content: {
-                      title: conv.name,
-                      body: msgText,
-                      data: { type: 'chat', conversationId: conv.id },
-                      sound: 'default',
-                    },
-                    trigger: null,
-                  }).catch(() => {});
-                }
-              }
-              conversationLastMsgAtRef.current.set(conv.id, conv.lastMessageAt);
-            }
+        result.conversations.forEach((conv: any) => {
+          addConversation({
+            id: conv.id,
+            name: conv.name,
+            type: conv.type as 'individual' | 'group',
+            participants: conv.participants.map((p: any) => p.id),
+            messages: conversationsRef.current.find((c) => c.id === conv.id)?.messages || [],
+            createdAt: conv.createdAt,
+            avatar: conv.avatar,
           });
-        } else {
-          console.error('[Chat] Failed to fetch conversations:', result.error);
-        }
-      } catch (error: any) {
-        console.error('[Chat] Error fetching conversations:', error);
+
+          if (conv.lastMessage) {
+            setConversationPreviews((prev) => {
+              const next = new Map(prev);
+              next.set(conv.id, {
+                text: conv.lastMessage.content || '',
+                timestamp: conv.lastMessage.created_at,
+                senderId: conv.lastMessage.sender_id,
+                type: conv.lastMessage.type,
+              });
+              return next;
+            });
+          }
+
+          if (conv.lastMessageAt) {
+            const knownAt = conversationLastMsgAtRef.current.get(conv.id);
+            const isSelected = conv.id === selectedChat;
+            if (!isSelected && knownAt && conv.lastMessageAt > knownAt) {
+              setUnreadConversations((prev) => new Set(prev).add(conv.id));
+              if (Platform.OS !== 'web') {
+                const msgText =
+                  conv.lastMessage?.content ||
+                  (conv.lastMessage?.type === 'image'
+                    ? '📷 Photo'
+                    : conv.lastMessage?.type === 'voice'
+                    ? '🎤 Voice message'
+                    : conv.lastMessage?.type === 'video'
+                    ? '🎬 Video'
+                    : conv.lastMessage?.type === 'file'
+                    ? '📎 File'
+                    : 'New message');
+                Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: conv.name,
+                    body: msgText,
+                    data: { type: 'chat', conversationId: conv.id },
+                    sound: 'default',
+                  },
+                  trigger: null,
+                }).catch(() => {});
+              }
+            }
+            conversationLastMsgAtRef.current.set(conv.id, conv.lastMessageAt);
+          }
+        });
+      } catch (e) {
+        console.error('[Chat] fetchConversations error:', e);
       } finally {
         setIsLoadingConversations(false);
       }
     };
 
     fetchConversations();
-    const pollInterval = setInterval(fetchConversations, 30000);
-    return () => clearInterval(pollInterval);
+    const interval = setInterval(fetchConversations, 30000);
+    return () => clearInterval(interval);
   }, [user?.id]);
 
-  // Fetch messages when a team conversation is selected and poll for new messages
+  // ─── Fetch messages (poll 5s) ─────────────────────────────────────────────────
   useEffect(() => {
     const fetchMessages = async () => {
-      if (!selectedChat || !user?.id || selectedChat === 'ai-assistant') {
-        return;
-      }
-
-      const conversation = conversationsRef.current.find(c => c.id === selectedChat);
-      if (!conversation || (conversation.type !== 'individual' && conversation.type !== 'group')) {
-        return; // Not a team chat
-      }
+      if (!selectedChat || !user?.id || selectedChat === 'ai-assistant') return;
+      const conversation = conversationsRef.current.find((c) => c.id === selectedChat);
+      if (!conversation) return;
 
       try {
-        console.log('[Chat] Fetching messages for conversation:', selectedChat);
-
-        const response = await fetch(
+        const resp = await fetch(
           `${rorkApi}/api/team/get-messages?conversationId=${selectedChat}&userId=${user.id}`
         );
+        const result = await resp.json();
+        if (!result.success) return;
 
-        const result = await response.json();
+        const latestConv = conversationsRef.current.find((c) => c.id === selectedChat);
+        const existingIds = new Set((latestConv?.messages || []).map((m) => m.id));
 
-        if (result.success) {
-          console.log('[Chat] Fetched', result.messages.length, 'messages');
-
-          // Read the latest conversation snapshot to avoid stale dedup misses
-          const latestConv = conversationsRef.current.find(c => c.id === selectedChat);
-          const existingMessageIds = new Set((latestConv?.messages || []).map(m => m.id));
-
-          // Only add new messages that don't exist yet
-          result.messages.forEach((msg: any) => {
-            if (!existingMessageIds.has(msg.id)) {
-              const chatMessage: ChatMessage = {
-                id: msg.id,
-                senderId: msg.senderId,
-                type: msg.type,
-                content: msg.content, // S3 URL for file/image/voice; text content for text msgs
-                text: msg.text,
-                fileName: msg.fileName,
-                duration: msg.duration,
-                timestamp: msg.timestamp,
-              };
-
-              addMessageToConversation(selectedChat, chatMessage);
-            }
-          });
-        } else {
-          console.error('[Chat] Failed to fetch messages:', result.error);
-        }
-      } catch (error: any) {
-        console.error('[Chat] Error fetching messages:', error);
+        result.messages.forEach((msg: any) => {
+          if (!existingIds.has(msg.id)) {
+            addMessageToConversation(selectedChat, {
+              id: msg.id,
+              senderId: msg.senderId,
+              type: msg.type,
+              content: msg.content,
+              text: msg.text,
+              fileName: msg.fileName,
+              duration: msg.duration,
+              timestamp: msg.timestamp,
+              replyTo: msg.replyTo,
+              isDeleted: msg.isDeleted,
+            });
+          }
+        });
+      } catch (e) {
+        console.error('[Chat] fetchMessages error:', e);
       }
     };
 
-    // Initial fetch
     fetchMessages();
-
-    // Poll for new messages every 5 seconds
-    const pollInterval = setInterval(() => {
-      fetchMessages();
-    }, 5000);
-
-    // Cleanup interval on unmount or when selectedChat changes
-    return () => {
-      clearInterval(pollInterval);
-    };
+    const interval = setInterval(fetchMessages, 5000);
+    return () => clearInterval(interval);
   }, [selectedChat, user?.id]);
 
-  const allPeople = useMemo(() => {
-    return teamMembers.map(member => ({
-      id: member.id,
-      name: member.name,
-      avatar: member.avatar,
-      type: 'employee' as const,
-      email: member.email,
-      role: member.role,
-    }));
-  }, [teamMembers]);
+  // ─── Daily tip ────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const checkDailyTip = async () => {
+      if (selectedChat !== 'ai-assistant') return;
+      const today = new Date().toISOString().split('T')[0];
+      const last = await AsyncStorage.getItem('lastDailyTipDate_chat');
+      if (last !== today && !dailyTipSent) {
+        const tip = getTipOfTheDay();
+        const tipMsg: ChatMessage = {
+          id: `daily-tip-${Date.now()}`,
+          senderId: 'ai-assistant',
+          type: 'text',
+          text: `🏗️ **Daily Construction Tip** (${tip.category})\n\n${tip.tip}\n\n💡 Have questions? I\'m here to help!`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        };
+        setTimeout(() => addMessageToConversation('ai-assistant', tipMsg), 800);
+        await AsyncStorage.setItem('lastDailyTipDate_chat', today);
+        setDailyTipSent(true);
+      }
+    };
+    checkDailyTip();
+  }, [selectedChat, dailyTipSent]);
+
+  // ─── Team member helpers ───────────────────────────────────────────────────────
+  const allPeople = useMemo(
+    () =>
+      teamMembers.map((m) => ({
+        id: m.id,
+        name: m.name,
+        avatar: m.avatar,
+        type: 'employee' as const,
+        email: m.email,
+        role: m.role,
+      })),
+    [teamMembers]
+  );
 
   const filteredPeople = useMemo(() => {
     if (!newChatSearch) return allPeople;
-    const query = newChatSearch.toLowerCase();
-    return allPeople.filter(p => 
-      p.name.toLowerCase().includes(query) || 
-      p.email.toLowerCase().includes(query)
-    );
+    const q = newChatSearch.toLowerCase();
+    return allPeople.filter((p) => p.name.toLowerCase().includes(q) || p.email?.toLowerCase().includes(q));
   }, [allPeople, newChatSearch]);
 
-  const handleToggleParticipant = (personId: string) => {
-    setSelectedParticipants(prev => {
-      if (prev.includes(personId)) {
-        return prev.filter(id => id !== personId);
-      }
-      return [...prev, personId];
+  // ─── Conversation filtering by tab ───────────────────────────────────────────
+  const filteredConversations = useMemo(() => {
+    const all = conversations.filter(
+      (c) => c.type === 'individual' || c.type === 'group'
+    );
+    const searched = searchQuery
+      ? all.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      : all;
+
+    switch (activeTab) {
+      case 'unread':
+        return searched.filter((c) => unreadConversations.has(c.id));
+      case 'groups':
+        return searched.filter((c) => c.type === 'group');
+      default:
+        return searched;
+    }
+  }, [conversations, searchQuery, activeTab, unreadConversations]);
+
+  // ─── Handlers ─────────────────────────────────────────────────────────────────
+  const handleSelectChat = (convId: string) => {
+    setSelectedChat(convId);
+    setReplyingTo(null);
+    setUnreadConversations((prev) => {
+      const next = new Set(prev);
+      next.delete(convId);
+      return next;
     });
+  };
+
+  const handleToggleParticipant = (personId: string) => {
+    setSelectedParticipants((prev) =>
+      prev.includes(personId) ? prev.filter((id) => id !== personId) : [...prev, personId]
+    );
   };
 
   const handleCreateChat = async () => {
@@ -388,91 +368,160 @@ export default function ChatScreen() {
       Alert.alert('Error', 'Please select at least one person');
       return;
     }
-
-    if (!user?.id) {
-      Alert.alert('Error', 'User not logged in');
-      return;
-    }
+    if (!user?.id) return;
 
     try {
-      const participantNames = allPeople
-        .filter(p => selectedParticipants.includes(p.id))
-        .map(p => p.name);
+      const names = allPeople.filter((p) => selectedParticipants.includes(p.id)).map((p) => p.name);
+      const chatName = names.join(', ');
 
-      const chatName = selectedParticipants.length === 1
-        ? participantNames[0]
-        : participantNames.join(', ');
-
-      console.log('[Chat] Creating conversation with participants:', selectedParticipants);
-
-      // Call API to create or find existing conversation
-      const response = await fetch(`${rorkApi}/api/team/create-conversation`, {
+      const resp = await fetch(`${rorkApi}/api/team/create-conversation`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           createdBy: user.id,
           participantIds: selectedParticipants,
-          name: selectedParticipants.length > 1 ? chatName : null, // Only set name for group chats
+          name: selectedParticipants.length > 1 ? chatName : null,
           type: selectedParticipants.length === 1 ? 'individual' : 'group',
         }),
       });
 
-      const result = await response.json();
-
+      const result = await resp.json();
       if (!result.success) {
-        console.error('[Chat] Failed to create conversation:', result.error);
         Alert.alert('Error', 'Failed to create conversation');
         return;
       }
 
-      const dbConversation = result.conversation;
-
-      if (result.existed) {
-        console.log('[Chat] Found existing conversation:', dbConversation.id);
-      } else {
-        console.log('[Chat] Created new conversation:', dbConversation.id);
-      }
-
-      // Check if conversation already exists in local context
-      const existingLocalConv = conversations.find(c => c.id === dbConversation.id);
-
-      if (!existingLocalConv) {
-        // Add to local context if not already there
-        const localConversation = {
-          id: dbConversation.id,
+      const dbConv = result.conversation;
+      if (!conversations.find((c) => c.id === dbConv.id)) {
+        addConversation({
+          id: dbConv.id,
           name: chatName,
-          type: dbConversation.type as 'individual' | 'group',
+          type: dbConv.type,
           participants: [user.id, ...selectedParticipants],
           messages: [],
-          createdAt: dbConversation.created_at,
-          avatar: selectedParticipants.length === 1
-            ? allPeople.find(p => p.id === selectedParticipants[0])?.avatar
-            : undefined,
-        };
-
-        addConversation(localConversation);
+          createdAt: dbConv.created_at,
+          avatar:
+            selectedParticipants.length === 1
+              ? allPeople.find((p) => p.id === selectedParticipants[0])?.avatar
+              : undefined,
+        });
       }
 
-      // Select the conversation (existing or new)
-      setSelectedChat(dbConversation.id);
+      setSelectedChat(dbConv.id);
       setShowNewChatModal(false);
       setSelectedParticipants([]);
       setNewChatSearch('');
-
-    } catch (error: any) {
-      console.error('[Chat] Error creating conversation:', error);
-      Alert.alert('Error', 'Failed to create conversation: ' + error.message);
+    } catch (e: any) {
+      Alert.alert('Error', 'Failed to create conversation: ' + e.message);
     }
   };
 
+  const handleSendMessage = async () => {
+    if (!messageText.trim() || !selectedChat) return;
+
+    const conversation = conversations.find((c) => c.id === selectedChat);
+    const isTeamChat =
+      selectedChat !== 'ai-assistant' &&
+      conversation &&
+      (conversation.type === 'individual' || conversation.type === 'group');
+
+    if (isTeamChat) {
+      try {
+        const resp = await fetch(`${rorkApi}/api/team/send-message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversationId: selectedChat,
+            senderId: user?.id,
+            type: 'text',
+            content: messageText,
+            replyTo: replyingTo
+              ? {
+                  id: replyingTo.id,
+                  senderId: replyingTo.senderId,
+                  senderName: userMap.get(replyingTo.senderId)?.name || 'Unknown',
+                  type: replyingTo.type,
+                  text: replyingTo.text || replyingTo.content,
+                  content: replyingTo.content,
+                }
+              : undefined,
+          }),
+        });
+
+        const result = await resp.json();
+        if (result.success) {
+          const replyToPayload = replyingTo
+            ? {
+                id: replyingTo.id,
+                senderId: replyingTo.senderId,
+                senderName: userMap.get(replyingTo.senderId)?.name || 'Unknown',
+                type: replyingTo.type,
+                text: replyingTo.text || replyingTo.content,
+                content: replyingTo.content,
+              }
+            : undefined;
+
+          addMessageToConversation(selectedChat, {
+            id: result.message.id,
+            senderId: user?.id || '',
+            text: messageText,
+            content: messageText,
+            type: 'text',
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            replyTo: replyToPayload,
+          });
+          setMessageText('');
+          setReplyingTo(null);
+        } else {
+          Alert.alert('Error', 'Failed to send message');
+        }
+      } catch (e: any) {
+        Alert.alert('Error', 'Failed to send message: ' + e.message);
+      }
+    } else {
+      addMessageToConversation(selectedChat, {
+        id: Date.now().toString(),
+        senderId: user?.id || '',
+        text: messageText,
+        type: 'text',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      });
+      setMessageText('');
+      setReplyingTo(null);
+    }
+  };
+
+  const handleReply = (message: ChatMessage) => {
+    setReplyingTo(message);
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!user?.id) return;
+
+    // Optimistic UI: mark deleted locally
+    setLocallyDeletedIds((prev) => new Set(prev).add(messageId));
+
+    try {
+      const resp = await fetch(`${rorkApi}/api/team/delete-message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId, userId: user.id }),
+      });
+      const result = await resp.json();
+      if (!result.success) {
+        // Undo optimistic update
+        setLocallyDeletedIds((prev) => { const n = new Set(prev); n.delete(messageId); return n; });
+        console.error('[Chat] Delete failed:', result.error);
+      }
+    } catch (e) {
+      console.error('[Chat] Delete message error:', e);
+    }
+  };
+
+  // ─── Image pick/send ─────────────────────────────────────────────────────────
   const handlePickImage = async () => {
-    // Dismiss the attach menu FIRST and wait for its animation to finish.
-    // Launching a system picker while the Modal is still animating out causes
-    // "Attempt to present while a presentation is in progress" on iOS.
     setShowAttachMenu(false);
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise((r) => setTimeout(r, 300));
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -481,164 +530,186 @@ export default function ChatScreen() {
         maxWidth: 1920,
         maxHeight: 1920,
       });
-
-      if (!result.canceled && result.assets[0]) {
-        setPreviewImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
+      if (!result.canceled && result.assets[0]) setPreviewImage(result.assets[0].uri);
+    } catch {
       Alert.alert('Error', 'Failed to pick image');
     }
   };
 
   const handleTakePhoto = async () => {
-    // Dismiss modal first — same reason as handlePickImage above.
     setShowAttachMenu(false);
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise((r) => setTimeout(r, 300));
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Permission Required', 'Camera permission is needed');
         return;
       }
-
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: false,
         quality: 0.6,
         maxWidth: 1920,
         maxHeight: 1920,
       });
-
-      if (!result.canceled && result.assets[0]) {
-        setPreviewImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error taking photo:', error);
+      if (!result.canceled && result.assets[0]) setPreviewImage(result.assets[0].uri);
+    } catch {
       Alert.alert('Error', 'Failed to take photo');
+    }
+  };
+
+  const uploadToS3 = async (
+    localUri: string,
+    mimeType: string
+  ): Promise<{ publicUrl: string }> => {
+    let blob: Blob;
+    if (Platform.OS === 'web') {
+      const response = await fetch(localUri);
+      blob = await response.blob();
+    } else {
+      const base64 = await FileSystem.readAsStringAsync(localUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const dataUri = `data:${mimeType};base64,${base64}`;
+      const fetchResponse = await fetch(dataUri);
+      blob = await fetchResponse.blob();
+    }
+
+    const ext = mimeType.split('/')[1] || 'bin';
+    const urlResp = await fetch(`${rorkApi}/api/get-upload-url`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user?.id, fileName: `file.${ext}`, fileType: mimeType }),
+    });
+    const urlResult = await urlResp.json();
+    if (!urlResult.success) throw new Error(urlResult.error || 'Failed to get upload URL');
+
+    const uploadResp = await fetch(urlResult.uploadUrl, {
+      method: 'PUT',
+      body: blob,
+      headers: { 'Content-Type': mimeType },
+    });
+    if (!uploadResp.ok) throw new Error('Failed to upload to S3');
+
+    return { publicUrl: urlResult.publicUrl };
+  };
+
+  const sendMediaMessage = async (
+    type: 'image' | 'video' | 'file',
+    publicUrl: string,
+    extras?: { fileName?: string }
+  ) => {
+    if (!selectedChat) return;
+    const resp = await fetch(`${rorkApi}/api/team/send-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        conversationId: selectedChat,
+        senderId: user?.id,
+        type,
+        content: publicUrl,
+        ...extras,
+      }),
+    });
+    const result = await resp.json();
+    if (result.success) {
+      addMessageToConversation(selectedChat, {
+        id: result.message.id,
+        senderId: user?.id || '',
+        type,
+        content: publicUrl,
+        fileName: extras?.fileName,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      });
+    } else {
+      Alert.alert('Error', 'Failed to send message');
     }
   };
 
   const handleSendImage = async () => {
     if (!previewImage || !selectedChat) return;
-
     setIsUploadingImage(true);
     try {
-      const conversation = conversations.find(c => c.id === selectedChat);
-      const isTeamChat = selectedChat !== 'ai-assistant' && conversation && (conversation.type === 'individual' || conversation.type === 'group');
+      const conversation = conversations.find((c) => c.id === selectedChat);
+      const isTeam =
+        selectedChat !== 'ai-assistant' &&
+        conversation &&
+        (conversation.type === 'individual' || conversation.type === 'group');
 
-      if (isTeamChat) {
-        // Team chat: Upload to S3 using presigned URL
-        console.log('[Chat] Uploading image to S3...');
-
-        // Get file blob
-        let blob: Blob;
-        let fileExtension = 'jpg';
-        let contentType = 'image/jpeg';
-
-        if (Platform.OS === 'web') {
-          const response = await fetch(previewImage);
-          blob = await response.blob();
-          contentType = blob.type || 'image/jpeg';
-          fileExtension = contentType.split('/')[1] || 'jpg';
-        } else {
-          // Mobile (iOS/Android/Hermes): new Blob([Uint8Array]) is NOT supported.
-          // Fetch a data URI instead — this is the only reliable way to get a Blob
-          // from base64 in React Native's Hermes runtime.
-          const base64 = await FileSystem.readAsStringAsync(previewImage, {
-            encoding: FileSystem.EncodingType.Base64,
-          });
-          fileExtension = previewImage.split('.').pop()?.toLowerCase() || 'jpg';
-          contentType = `image/${fileExtension}`;
-          const dataUri = `data:${contentType};base64,${base64}`;
-          const fetchResponse = await fetch(dataUri);
-          blob = await fetchResponse.blob();
-        }
-
-        // Get presigned URL
-        const urlResponse = await fetch(`${rorkApi}/api/get-upload-url`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user?.id,
-            fileName: `image.${fileExtension}`,
-            fileType: contentType,
-          }),
-        });
-
-        const urlResult = await urlResponse.json();
-
-        if (!urlResult.success) {
-          throw new Error(urlResult.error || 'Failed to get upload URL');
-        }
-
-        // Upload directly to S3
-        const uploadResponse = await fetch(urlResult.uploadUrl, {
-          method: 'PUT',
-          body: blob,
-          headers: {
-            'Content-Type': contentType,
-          },
-        });
-
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to upload to S3');
-        }
-
-        console.log('[Chat] Image uploaded to S3:', urlResult.publicUrl);
-
-        // Send message via API
-        const messageResponse = await fetch(`${rorkApi}/api/team/send-message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            conversationId: selectedChat,
-            senderId: user?.id,
-            type: 'image',
-            content: urlResult.publicUrl,
-          }),
-        });
-
-        const result = await messageResponse.json();
-
-        if (result.success) {
-          const newMessage: ChatMessage = {
-            id: result.message.id,
-            senderId: user?.id || '1',
-            type: 'image',
-            content: urlResult.publicUrl,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          addMessageToConversation(selectedChat, newMessage);
-        } else {
-          Alert.alert('Error', 'Failed to send image');
-        }
+      if (isTeam) {
+        const ext = previewImage.split('.').pop()?.toLowerCase() || 'jpg';
+        const mime = `image/${ext}`;
+        const { publicUrl } = await uploadToS3(previewImage, mime);
+        await sendMediaMessage('image', publicUrl);
       } else {
-        // AI assistant or local chat - use local URI
-        const newMessage: ChatMessage = {
+        addMessageToConversation(selectedChat, {
           id: Date.now().toString(),
-          senderId: user?.id || '1',
+          senderId: user?.id || '',
           type: 'image',
           content: previewImage,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
-        addMessageToConversation(selectedChat, newMessage);
+        });
       }
-
       setPreviewImage(null);
-    } catch (error: any) {
-      console.error('[Chat] Error sending image:', error);
-      Alert.alert('Error', 'Failed to send image: ' + error.message);
+    } catch (e: any) {
+      Alert.alert('Error', 'Failed to send image: ' + e.message);
     } finally {
       setIsUploadingImage(false);
     }
   };
 
+  // ─── Video pick/send ──────────────────────────────────────────────────────────
+  const handlePickVideo = async () => {
+    setShowAttachMenu(false);
+    await new Promise((r) => setTimeout(r, 300));
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: true,
+        videoMaxDuration: 60,
+      });
+      if (!result.canceled && result.assets[0]) setPreviewVideo(result.assets[0].uri);
+    } catch {
+      Alert.alert('Error', 'Failed to pick video');
+    }
+  };
+
+  const handleSendVideo = async () => {
+    if (!previewVideo || !selectedChat) return;
+    setIsUploadingVideo(true);
+    try {
+      const conversation = conversations.find((c) => c.id === selectedChat);
+      const isTeam =
+        selectedChat !== 'ai-assistant' &&
+        conversation &&
+        (conversation.type === 'individual' || conversation.type === 'group');
+
+      if (isTeam) {
+        const ext = previewVideo.split('.').pop()?.toLowerCase() || 'mp4';
+        const mime = `video/${ext}`;
+        const { publicUrl } = await uploadToS3(previewVideo, mime);
+        await sendMediaMessage('video', publicUrl);
+      } else {
+        addMessageToConversation(selectedChat, {
+          id: Date.now().toString(),
+          senderId: user?.id || '',
+          type: 'video',
+          content: previewVideo,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        });
+      }
+      setPreviewVideo(null);
+    } catch (e: any) {
+      Alert.alert('Error', 'Failed to send video: ' + e.message);
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  // ─── Document pick/send ───────────────────────────────────────────────────────
   const handlePickDocument = async () => {
     if (!selectedChat) return;
-
-    // Dismiss modal first — same race condition fix as handlePickImage/handleTakePhoto.
     setShowAttachMenu(false);
-    await new Promise(resolve => setTimeout(resolve, 300));
+    await new Promise((r) => setTimeout(r, 300));
 
     try {
       const result = await DocumentPicker.getDocumentAsync({
@@ -647,1083 +718,397 @@ export default function ChatScreen() {
       });
 
       if (!result.canceled && result.assets[0]) {
-        const conversation = conversations.find(c => c.id === selectedChat);
-        const isTeamChat = selectedChat !== 'ai-assistant' && conversation && (conversation.type === 'individual' || conversation.type === 'group');
+        const conversation = conversations.find((c) => c.id === selectedChat);
+        const isTeam =
+          selectedChat !== 'ai-assistant' &&
+          conversation &&
+          (conversation.type === 'individual' || conversation.type === 'group');
 
-        if (isTeamChat) {
-          // Team chat: Upload to S3 using presigned URL
-          console.log('[Chat] Uploading document to S3...');
-
-          // Get file blob
-          let blob: Blob;
-          const fileName = result.assets[0].name;
-          const mimeType = result.assets[0].mimeType || 'application/octet-stream';
-
-          if (Platform.OS === 'web') {
-            const response = await fetch(result.assets[0].uri);
-            blob = await response.blob();
-          } else {
-            // Mobile (Hermes): new Blob([Uint8Array]) unsupported — use data URI fetch.
-            const base64 = await FileSystem.readAsStringAsync(result.assets[0].uri, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            const dataUri = `data:${mimeType};base64,${base64}`;
-            const fetchResponse = await fetch(dataUri);
-            blob = await fetchResponse.blob();
-          }
-
-          // Get presigned URL
-          const urlResponse = await fetch(`${rorkApi}/api/get-upload-url`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: user?.id,
-              fileName: fileName,
-              fileType: mimeType,
-            }),
-          });
-
-          const urlResult = await urlResponse.json();
-
-          if (!urlResult.success) {
-            throw new Error(urlResult.error || 'Failed to get upload URL');
-          }
-
-          // Upload directly to S3
-          const uploadResponse = await fetch(urlResult.uploadUrl, {
-            method: 'PUT',
-            body: blob,
-            headers: {
-              'Content-Type': mimeType,
-            },
-          });
-
-          if (!uploadResponse.ok) {
-            throw new Error('Failed to upload to S3');
-          }
-
-          console.log('[Chat] Document uploaded to S3:', urlResult.publicUrl);
-
-          // Send message via API
-          const messageResponse = await fetch(`${rorkApi}/api/team/send-message`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              conversationId: selectedChat,
-              senderId: user?.id,
-              type: 'file',
-              content: urlResult.publicUrl,
-              fileName: fileName,
-            }),
-          });
-
-          const messageResult = await messageResponse.json();
-
-          if (messageResult.success) {
-            const newMessage: ChatMessage = {
-              id: messageResult.message.id,
-              senderId: user?.id || '1',
-              type: 'file',
-              fileName: fileName,
-              content: urlResult.publicUrl,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            };
-            addMessageToConversation(selectedChat, newMessage);
-            Alert.alert('Success', `${fileName} sent`);
-          } else {
-            Alert.alert('Error', 'Failed to send document');
-          }
+        if (isTeam) {
+          const file = result.assets[0];
+          const mime = file.mimeType || 'application/octet-stream';
+          const { publicUrl } = await uploadToS3(file.uri, mime);
+          await sendMediaMessage('file', publicUrl, { fileName: file.name });
         } else {
-          // AI assistant or local chat
-          const newMessage: ChatMessage = {
+          addMessageToConversation(selectedChat, {
             id: Date.now().toString(),
-            senderId: user?.id || '1',
+            senderId: user?.id || '',
             type: 'file',
             fileName: result.assets[0].name,
             content: result.assets[0].uri,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          addMessageToConversation(selectedChat, newMessage);
-          Alert.alert('Document Sent', `${result.assets[0].name} sent to chat`);
+          });
         }
       }
-    } catch (error: any) {
-      console.error('Error with document:', error);
-      Alert.alert('Error', error.message || 'Failed to send document');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to send document');
     }
   };
 
-  const startRecording = async () => {
-    try {
-      console.log('[Voice] Starting recording...');
-      recordingStartTimeRef.current = Date.now(); // Record start time
-
-      if (Platform.OS === 'web') {
-        // Web recording using MediaRecorder API
-        let stream = streamRef.current;
-        if (!stream || stream.getTracks().length === 0 || stream.getTracks()[0].readyState !== 'live') {
-          console.log('[Voice] Getting new media stream');
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          streamRef.current = stream;
-        } else {
-          console.log('[Voice] Reusing existing media stream');
-        }
-
-        audioChunksRef.current = [];
-
-        const mediaRecorder = new MediaRecorder(stream, {
-          mimeType: 'audio/webm',
-        });
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            audioChunksRef.current.push(event.data);
-          }
-        };
-
-        mediaRecorder.start();
-        mediaRecorderRef.current = mediaRecorder;
-        setIsRecording(true);
-      } else {
-        // Mobile recording using expo-av
-        const { status } = await Audio.requestPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('Permission Required', 'Microphone permission is needed');
-          return;
-        }
-
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-        });
-
-        const { recording: newRecording } = await Audio.Recording.createAsync(
-          Audio.RecordingOptionsPresets.HIGH_QUALITY
-        );
-        setRecording(newRecording);
-        setIsRecording(true);
-      }
-    } catch (error) {
-      console.error('Failed to start recording:', error);
-      Alert.alert('Error', 'Failed to start recording. Please check microphone permissions.');
-    }
-  };
-
-  const stopRecording = async () => {
+  // ─── Audio recording send ─────────────────────────────────────────────────────
+  const handleAudioSend = async (result: {
+    uri: string | null;
+    blob?: Blob;
+    durationSec: number;
+    mimeType: string;
+  }) => {
+    setIsAudioMode(false);
     if (!selectedChat) return;
 
-    // Check if recording on web or mobile
-    const isWebRecording = Platform.OS === 'web' && mediaRecorderRef.current;
-    const isMobileRecording = recording;
-
-    if (!isWebRecording && !isMobileRecording) return;
-
-    // Calculate recording duration
-    const durationInSeconds = recordingStartTimeRef.current
-      ? Math.round((Date.now() - recordingStartTimeRef.current) / 1000)
-      : 0;
-    console.log('[Voice] Recording duration:', durationInSeconds, 'seconds');
+    const conversation = conversations.find((c) => c.id === selectedChat);
+    const isTeam =
+      selectedChat !== 'ai-assistant' &&
+      conversation &&
+      (conversation.type === 'individual' || conversation.type === 'group');
 
     try {
-      setIsRecording(false);
-      let audioBlob: Blob | null = null;
-      let uri: string | null = null;
+      if (isTeam) {
+        let base64Audio: string;
+        if (result.blob) {
+          base64Audio = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(result.blob!);
+          });
+        } else if (result.uri) {
+          base64Audio = await FileSystem.readAsStringAsync(result.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+        } else {
+          throw new Error('No audio data');
+        }
 
-      // Handle web recording
-      if (Platform.OS === 'web' && mediaRecorderRef.current) {
-        const mediaRecorder = mediaRecorderRef.current;
-
-        // Stop the recorder and wait for final data
-        await new Promise<void>((resolve) => {
-          mediaRecorder.onstop = () => resolve();
-          mediaRecorder.stop();
+        const ext = result.mimeType === 'audio/webm' ? 'webm' : 'm4a';
+        const uploadResp = await fetch(`${rorkApi}/api/upload-audio`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            audioData: `data:${result.mimeType};base64,${base64Audio}`,
+            userId: user?.id,
+            fileName: `voice-message.${ext}`,
+          }),
         });
 
-        // Create blob from recorded chunks
-        audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        console.log('[Voice] Web recording stopped, blob size:', audioBlob.size);
+        const uploadResult = await uploadResp.json();
+        if (!uploadResult.success) throw new Error(uploadResult.error);
 
-        // Stop media stream to release microphone
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => {
-            console.log('[Voice] Stopping track:', track.kind);
-            track.stop();
-          });
-          streamRef.current = null;
-        }
-
-        mediaRecorderRef.current = null;
-      }
-      // Handle mobile recording
-      else if (recording) {
-        await recording.stopAndUnloadAsync();
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-        uri = recording.getURI();
-
-        if (!uri) {
-          Alert.alert('Error', 'Failed to get recording');
-          setRecording(null);
-          return;
-        }
-
-        setRecording(null);
-      }
-
-      // Check if this is a team chat (not AI assistant)
-      const conversation = conversations.find(c => c.id === selectedChat);
-      const isTeamChat = selectedChat !== 'ai-assistant' && conversation && (conversation.type === 'individual' || conversation.type === 'group');
-
-      if (isTeamChat) {
-        // Team chat: Upload to S3 and send via API
-        console.log('[Voice] Uploading voice message to S3...');
-
-        try {
-          let base64Audio: string;
-
-          // Convert to base64
-          if (audioBlob) {
-            // Web: Convert blob to base64
-            base64Audio = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                const base64 = (reader.result as string).split(',')[1];
-                resolve(base64);
-              };
-              reader.onerror = reject;
-              reader.readAsDataURL(audioBlob);
-            });
-          } else if (uri) {
-            // Mobile: Read file as base64
-            base64Audio = await FileSystem.readAsStringAsync(uri, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-          } else {
-            throw new Error('No audio data available');
-          }
-
-          // Upload to S3
-          const uploadResponse = await fetch(`${rorkApi}/api/upload-audio`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              audioData: `data:audio/${audioBlob ? 'webm' : 'm4a'};base64,${base64Audio}`,
-              userId: user?.id,
-              fileName: `voice-message.${audioBlob ? 'webm' : 'm4a'}`,
-            }),
-          });
-
-          const uploadResult = await uploadResponse.json();
-
-          if (!uploadResult.success) {
-            throw new Error(uploadResult.error || 'Failed to upload audio');
-          }
-
-          console.log('[Voice] Audio uploaded to S3:', uploadResult.url);
-
-          // Send message via API
-          const messageResponse = await fetch(`${rorkApi}/api/team/send-message`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              conversationId: selectedChat,
-              senderId: user?.id,
-              type: 'voice',
-              content: uploadResult.url,
-              duration: durationInSeconds,
-            }),
-          });
-
-          const messageResult = await messageResponse.json();
-
-          if (!messageResult.success) {
-            throw new Error(messageResult.error || 'Failed to send voice message');
-          }
-
-          console.log('[Voice] Voice message sent successfully');
-
-          // Add message to local state
-          const newMessage: ChatMessage = {
-            id: messageResult.message.id,
-            senderId: user?.id || '1',
+        const msgResp = await fetch(`${rorkApi}/api/team/send-message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversationId: selectedChat,
+            senderId: user?.id,
             type: 'voice',
             content: uploadResult.url,
-            duration: durationInSeconds,
+            duration: result.durationSec,
+          }),
+        });
+
+        const msgResult = await msgResp.json();
+        if (msgResult.success) {
+          addMessageToConversation(selectedChat, {
+            id: msgResult.message.id,
+            senderId: user?.id || '',
+            type: 'voice',
+            content: uploadResult.url,
+            duration: result.durationSec,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          addMessageToConversation(selectedChat, newMessage);
-        } catch (error: any) {
-          console.error('[Voice] Error sending voice message:', error);
-          Alert.alert('Error', 'Failed to send voice message: ' + error.message);
+          });
         }
       } else {
-        // Local conversation (AI assistant or existing local chat)
-        const newMessage: ChatMessage = {
+        const localUri =
+          result.uri ||
+          (result.blob ? URL.createObjectURL(result.blob) : null);
+        addMessageToConversation(selectedChat, {
           id: Date.now().toString(),
-          senderId: user?.id || '1',
+          senderId: user?.id || '',
           type: 'voice',
-          content: uri || URL.createObjectURL(audioBlob!),
-          duration: durationInSeconds,
+          content: localUri || '',
+          duration: result.durationSec,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
-        addMessageToConversation(selectedChat, newMessage);
+        });
       }
-    } catch (error) {
-      console.error('Failed to stop recording:', error);
-      Alert.alert('Error', 'Failed to stop recording');
-      setRecording(null);
-      mediaRecorderRef.current = null;
+    } catch (e: any) {
+      Alert.alert('Error', 'Failed to send voice message: ' + e.message);
     }
   };
 
-  const cancelRecording = async () => {
-    console.log('[Voice] Canceling recording...');
-
-    try {
-      setIsRecording(false);
-
-      // Handle web recording cancellation
-      if (Platform.OS === 'web' && mediaRecorderRef.current) {
-        console.log('[Voice] Stopping web recording');
-        mediaRecorderRef.current.stop();
-        mediaRecorderRef.current = null;
-        audioChunksRef.current = [];
-
-        // Stop media stream
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
-          streamRef.current = null;
-        }
-      }
-      // Handle mobile recording cancellation
-      else if (recording) {
-        await recording.stopAndUnloadAsync();
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-        setRecording(null);
-      }
-
-      console.log('[Voice] Recording canceled');
-    } catch (error) {
-      console.error('Failed to cancel recording:', error);
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (messageText.trim() && selectedChat) {
-      const conversation = conversations.find(c => c.id === selectedChat);
-      const isTeamChat = selectedChat !== 'ai-assistant' && conversation && (conversation.type === 'individual' || conversation.type === 'group');
-
-      if (isTeamChat) {
-        // Team chat: Send via API
-        try {
-          const response = await fetch(`${rorkApi}/api/team/send-message`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              conversationId: selectedChat,
-              senderId: user?.id,
-              type: 'text',
-              content: messageText,
-            }),
-          });
-
-          const result = await response.json();
-
-          if (result.success) {
-            const newMessage: ChatMessage = {
-              id: result.message.id,
-              senderId: user?.id || '1',
-              text: messageText,
-              content: messageText,
-              type: 'text',
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            };
-            addMessageToConversation(selectedChat, newMessage);
-            setMessageText('');
-          } else {
-            Alert.alert('Error', 'Failed to send message');
-          }
-        } catch (error: any) {
-          console.error('[Chat] Error sending message:', error);
-          Alert.alert('Error', 'Failed to send message: ' + error.message);
-        }
-      } else {
-        // AI assistant or local chat
-        const newMessage: ChatMessage = {
-          id: Date.now().toString(),
-          senderId: user?.id || '1',
-          text: messageText,
-          type: 'text',
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        };
-        addMessageToConversation(selectedChat, newMessage);
-        setMessageText('');
-      }
-    }
-  };
-
-
-  useEffect(() => {
-    const checkAndSendDailyTip = async () => {
-      if (selectedChat !== 'ai-assistant') return;
-      
-      try {
-        const today = new Date().toISOString().split('T')[0];
-        const lastTipDate = await AsyncStorage.getItem('lastDailyTipDate_chat');
-        
-        console.log('[Daily Tip Chat] Checking daily tip - today:', today, 'lastTipDate:', lastTipDate, 'dailyTipSent:', dailyTipSent);
-        
-        if (lastTipDate !== today && !dailyTipSent) {
-          console.log('[Daily Tip Chat] Sending daily construction tip');
-          const tip = getTipOfTheDay();
-          const tipMessage: ChatMessage = {
-            id: `daily-tip-${Date.now()}`,
-            senderId: 'ai-assistant',
-            type: 'text',
-            text: `🏗️ **Daily Construction Tip** (${tip.category})\n\n${tip.tip}\n\n💡 Have questions about this or need help with your project? I'm here to help!`,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          
-          setTimeout(() => {
-            console.log('[Daily Tip Chat] Adding tip message to conversation');
-            addMessageToConversation('ai-assistant', tipMessage);
-          }, 800);
-          
-          await AsyncStorage.setItem('lastDailyTipDate_chat', today);
-          setDailyTipSent(true);
-          console.log('[Daily Tip Chat] Daily tip sent successfully');
-        } else {
-          console.log('[Daily Tip Chat] Daily tip already sent or conditions not met');
-        }
-      } catch (error) {
-        console.error('[Daily Tip] Error sending daily tip:', error);
-      }
-    };
-
-    checkAndSendDailyTip();
-  }, [selectedChat, dailyTipSent, addMessageToConversation]);
-
-
-
-  const handlePasteText = async () => {
-    try {
-      const text = await Clipboard.getStringAsync();
-      if (text) {
-        setMessageText(prev => prev + text);
-      }
-    } catch (error) {
-      console.error('Failed to paste text:', error);
-      Alert.alert('Error', 'Failed to paste text');
-    }
-  };
-
-  const handleCopyImage = async (imageUri: string | undefined) => {
-    if (!imageUri) return;
-    try {
-      if (Platform.OS === 'web') {
-        Alert.alert('Info', 'Image copied to clipboard. On web, you can right-click the image to copy.');
-      } else {
-        await Clipboard.setImageAsync(imageUri);
-        Alert.alert('Success', 'Image copied to clipboard');
-      }
-    } catch (error) {
-      console.error('Failed to copy image:', error);
-      Alert.alert('Error', 'Failed to copy image');
-    }
-  };
-
-
-
-  const playAudio = async (messageId: string, audioUrl: string, duration: number) => {
-    try {
-      // If already playing this audio, pause it
-      if (playingAudioId === messageId) {
-        console.log('[Audio] Pausing audio:', messageId);
-
-        // Pause web audio (don't reset position)
-        if (webAudioRef.current) {
-          webAudioRef.current.pause();
-        }
-
-        // Pause mobile audio
-        if (audioPlayerRef.current) {
-          await audioPlayerRef.current.pauseAsync();
-        }
-
-        setPlayingAudioId(null);
-        return;
-      }
-
-      // Stop any currently playing audio
-      if (playingAudioId && playingAudioId !== messageId) {
-        if (webAudioRef.current) {
-          webAudioRef.current.pause();
-          webAudioRef.current.currentTime = 0;
-          webAudioRef.current = null;
-        }
-
-        if (audioPlayerRef.current) {
-          await audioPlayerRef.current.stopAsync();
-          await audioPlayerRef.current.unloadAsync();
-          audioPlayerRef.current = null;
-        }
-        setAudioProgress(prev => ({ ...prev, [playingAudioId]: 0 }));
-      }
-
-      console.log('[Audio] Playing audio:', audioUrl);
-
-      // For web, use HTML5 Audio
-      if (Platform.OS === 'web') {
-        let audio = webAudioRef.current;
-
-        // Create new audio if doesn't exist or different audio
-        if (!audio || audio.src !== audioUrl) {
-          audio = new window.Audio(audioUrl);
-          webAudioRef.current = audio;
-
-          audio.onended = () => {
-            setPlayingAudioId(null);
-            setAudioProgress(prev => ({ ...prev, [messageId]: 0 }));
-          };
-
-          audio.onerror = (error) => {
-            console.error('[Audio] Error playing audio:', error);
-            Alert.alert('Error', 'Failed to play audio');
-            setPlayingAudioId(null);
-            webAudioRef.current = null;
-          };
-
-          // Update progress as audio plays
-          audio.ontimeupdate = () => {
-            if (audio && duration > 0) {
-              const progress = (audio.currentTime / duration) * 100;
-              setAudioProgress(prev => ({ ...prev, [messageId]: progress }));
-            }
-          };
-        }
-
-        await audio.play();
-        setPlayingAudioId(messageId);
-      } else {
-        // For mobile, use expo-av
-        let sound = audioPlayerRef.current;
-
-        if (!sound) {
-          const { sound: newSound } = await Audio.Sound.createAsync(
-            { uri: audioUrl },
-            { shouldPlay: true }
-          );
-          sound = newSound;
-          audioPlayerRef.current = sound;
-
-          sound.setOnPlaybackStatusUpdate((status) => {
-            if (status.isLoaded) {
-              if (status.didJustFinish) {
-                setPlayingAudioId(null);
-                setAudioProgress(prev => ({ ...prev, [messageId]: 0 }));
-                sound?.unloadAsync();
-                // Null the ref so the next tap creates a fresh Sound instance
-                // rather than calling playAsync() on an unloaded sound.
-                audioPlayerRef.current = null;
-              } else if (status.durationMillis) {
-                const progress = (status.positionMillis / status.durationMillis) * 100;
-                setAudioProgress(prev => ({ ...prev, [messageId]: progress }));
-              }
-            }
-          });
-        } else {
-          // Sound ref exists — check it's still loaded before resuming.
-          const status = await sound.getStatusAsync();
-          if (!status.isLoaded) {
-            // Was unloaded (e.g. after natural end) — recreate.
-            await sound.unloadAsync().catch(() => {});
-            audioPlayerRef.current = null;
-            const { sound: newSound } = await Audio.Sound.createAsync(
-              { uri: audioUrl },
-              { shouldPlay: true }
-            );
-            audioPlayerRef.current = newSound;
-          } else {
-            await sound.playAsync();
-          }
-        }
-
-        setPlayingAudioId(messageId);
-      }
-    } catch (error) {
-      console.error('[Audio] Error playing audio:', error);
-      Alert.alert('Error', 'Failed to play audio message');
-      setPlayingAudioId(null);
-    }
-  };
-
-  const renderMessageContent = (message: ChatMessage) => {
-    switch (message.type) {
-      case 'text':
-        const isTipMessage = message.id?.includes('daily-tip');
-        return (
-          <Text 
-            style={[
-              styles.messageText, 
-              message.senderId === user?.id && styles.messageTextOwn,
-              isTipMessage && styles.dailyTipText
-            ]}
-            selectable
-          >
-            {message.text}
-          </Text>
-        );
-      
-      case 'voice':
-        const isPlaying = playingAudioId === message.id;
-        const duration = message.duration || 0;
-        const progress = audioProgress[message.id] || 0;
-        const currentTime = Math.floor((duration * progress) / 100);
-
-        const currentMinutes = Math.floor(currentTime / 60);
-        const currentSeconds = currentTime % 60;
-        const totalMinutes = Math.floor(duration / 60);
-        const totalSeconds = duration % 60;
-
-        const formattedCurrent = `${currentMinutes}:${currentSeconds.toString().padStart(2, '0')}`;
-        const formattedTotal = `${totalMinutes}:${totalSeconds.toString().padStart(2, '0')}`;
-        const displayTime = isPlaying || progress > 0 ? formattedCurrent : formattedTotal;
-
-        return (
-          <View style={styles.voiceMessage}>
-            <TouchableOpacity
-              style={styles.playButton}
-              onPress={() => playAudio(message.id, message.content || '', duration)}
-            >
-              {isPlaying ? (
-                <View style={styles.pauseIcon}>
-                  <View style={styles.pauseBar} />
-                  <View style={styles.pauseBar} />
-                </View>
-              ) : (
-                <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
-              )}
-            </TouchableOpacity>
-            <View style={styles.voiceWaveformContainer}>
-              <View style={styles.voiceWaveform}>
-                {[12, 20, 14, 18, 12, 16, 10, 18, 14, 20].map((height, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.waveformBar,
-                      { height },
-                      (index / 10) * 100 <= progress && styles.waveformBarActive,
-                    ]}
-                  />
-                ))}
-              </View>
-              {progress > 0 && (
-                <View style={[styles.progressOverlay, { width: `${progress}%` }]} />
-              )}
-            </View>
-            <Text style={[styles.voiceDuration, message.senderId === user?.id && styles.voiceDurationOwn]}>
-              {displayTime}
-            </Text>
-          </View>
-        );
-      
-      case 'image':
-        return (
-          <TouchableOpacity 
-            onPress={() => setSelectedImage(message.content || null)}
-            onLongPress={() => handleCopyImage(message.content)}
-          >
-            <Image
-              source={{ uri: message.content }}
-              style={styles.messageImage}
-              contentFit="cover"
-            />
-          </TouchableOpacity>
-        );
-
-      case 'file':
-        const fileDownloadUrl = message.content;
-        return (
-          <TouchableOpacity
-            style={styles.fileMessage}
-            onPress={() => {
-              if (!fileDownloadUrl) return;
-              if (Platform.OS === 'web') {
-                window.open(fileDownloadUrl, '_blank');
-              } else {
-                Linking.openURL(fileDownloadUrl).catch(() =>
-                  Alert.alert('Error', 'Unable to open file')
-                );
-              }
-            }}
-            activeOpacity={fileDownloadUrl ? 0.7 : 1}
-          >
-            <Paperclip size={16} color={message.senderId === user?.id ? '#1F2937' : '#FFFFFF'} />
-            <Text style={[styles.fileName, message.senderId === user?.id && styles.fileNameOwn]}>
-              {message.fileName || 'Download file'}
-            </Text>
-          </TouchableOpacity>
-        );
-      
-      default:
-        return null;
-    }
-  };
-
-  // Clear unread dot when a conversation is opened
-  const handleSelectChat = (convId: string) => {
-    setSelectedChat(convId);
-    setUnreadConversations(prev => {
-      const next = new Set(prev);
-      next.delete(convId);
-      return next;
-    });
-  };
-
-  const individualChats = conversations.filter(c => c.type === 'individual');
-  const groupChats = conversations.filter(c => c.type === 'group');
+  // ─── Render ───────────────────────────────────────────────────────────────────
+  const isTeamChat = selectedChat !== 'ai-assistant';
 
   return (
     <View style={styles.container}>
-      {!isSmallScreen && <View style={styles.header}>
-        <View style={styles.userInfo}>
-          {user?.avatar ? (
-            <Image
-              source={{ uri: user.avatar }}
-              style={styles.userAvatar}
-              contentFit="cover"
-            />
-          ) : (
-            <View style={styles.userAvatarPlaceholder}>
-              <Text style={styles.userAvatarInitials}>{user ? getInitials(user.name) : 'JD'}</Text>
-            </View>
-          )}
-          <Text style={styles.userName}>{user?.name || 'John Doe'}</Text>
+      {/* Desktop header */}
+      {!isSmallScreen && (
+        <View style={styles.header}>
+          <View style={styles.userInfo}>
+            {user?.avatar ? (
+              <Image source={{ uri: user.avatar }} style={styles.userAvatar} contentFit="cover" />
+            ) : (
+              <View style={styles.userAvatarPlaceholder}>
+                <Text style={styles.userAvatarInitials}>{user ? getInitials(user.name) : 'JD'}</Text>
+              </View>
+            )}
+            <Text style={styles.userName}>{user?.name || 'User'}</Text>
+          </View>
+          <View style={styles.teamInfo}>
+            <Users size={20} color="#1F2937" />
+            <Text style={styles.teamName}>Team Chat</Text>
+          </View>
         </View>
-        <View style={styles.teamInfo}>
-          <Users size={20} color="#1F2937" />
-          <Text style={styles.teamName}>Team Alpha</Text>
-        </View>
-      </View>}
+      )}
 
+      {/* Mobile back header */}
       {isSmallScreen && selectedChat && (
         <View style={styles.mobileHeader}>
           <TouchableOpacity onPress={() => setSelectedChat(null)} style={styles.backButton}>
             <Text style={styles.backButtonText}>← Back</Text>
           </TouchableOpacity>
-          <Text style={styles.chatTitle}>{selectedConversation?.name}</Text>
+          <Text style={styles.chatTitle} numberOfLines={1}>{selectedConversation?.name || 'Chat'}</Text>
         </View>
       )}
 
       <View style={styles.content}>
-        {(!isSmallScreen || !selectedChat) && <View style={[styles.sidebar, isSmallScreen && styles.sidebarMobile]}>
-          <TouchableOpacity 
-            style={styles.newChatButton}
-            onPress={() => setShowNewChatModal(true)}
-          >
-            <Text style={styles.newChatButtonText}>Start New Chat</Text>
-          </TouchableOpacity>
+        {/* ─── Sidebar ─────────────────────────────────────────────────────── */}
+        {(!isSmallScreen || !selectedChat) && (
+          <View style={[styles.sidebar, isSmallScreen && styles.sidebarMobile]}>
+            <TouchableOpacity
+              style={styles.newChatButton}
+              onPress={() => setShowNewChatModal(true)}
+            >
+              <Text style={styles.newChatButtonText}>Start New Chat</Text>
+            </TouchableOpacity>
 
-          <View style={styles.searchContainer}>
-            <Search size={16} color="#9CA3AF" />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search..."
-              placeholderTextColor="#9CA3AF"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-          </View>
-
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.contactsSection}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>{t('chat.title')}</Text>
-                <TouchableOpacity onPress={handleClearAIChat} style={styles.clearChatIconButton}>
-                  <Trash2 size={18} color="#EF4444" />
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                style={[styles.aiChatItem, selectedChat === 'ai-assistant' && styles.contactItemActive]}
-                onPress={() => {
-                  setSelectedChat('ai-assistant');
-                }}
-              >
-                <View style={styles.aiAvatarContainer}>
-                  <Bot size={20} color="#2563EB" strokeWidth={2.5} />
-                </View>
-                <View style={styles.aiChatInfo}>
-                  <Text style={styles.aiChatName}>AI Assistant</Text>
-                  <Text style={styles.aiChatDescription}>{t('chat.typeMessage')}</Text>
-                </View>
-              </TouchableOpacity>
+            <View style={styles.searchContainer}>
+              <Search size={16} color="#9CA3AF" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search..."
+                placeholderTextColor="#9CA3AF"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
             </View>
 
-            {isLoadingConversations && conversations.filter(c => c.type === 'individual' || c.type === 'group').length === 0 && (
+            {/* Tabs */}
+            <ChatTabs
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              unreadCount={unreadConversations.size}
+            />
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {/* AI Assistant */}
               <View style={styles.contactsSection}>
-                <SkeletonBox width={140} height={14} borderRadius={4} style={{ marginBottom: 12 }} />
-                {[0, 1, 2, 3].map(i => (
-                  <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 10 }}>
-                    <SkeletonBox width={40} height={40} borderRadius={20} />
-                    <View style={{ flex: 1 }}>
-                      <SkeletonBox width="70%" height={14} borderRadius={4} />
-                      <SkeletonBox width="50%" height={12} borderRadius={4} style={{ marginTop: 6 }} />
-                    </View>
-                    <SkeletonBox width={36} height={12} borderRadius={4} />
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {individualChats.length > 0 && (
-              <View style={styles.contactsSection}>
-                <Text style={styles.sectionTitle}>Direct Messages</Text>
-                {individualChats
-                  .filter(conv => !searchQuery || conv.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((conv) => {
-                    const hasUnread = unreadConversations.has(conv.id);
-                    const preview = conversationPreviews.get(conv.id);
-                    const previewText = preview
-                      ? (preview.text || '📎 Attachment')
-                      : 'No messages yet';
-                    const previewTime = preview ? formatChatTime(preview.timestamp) : '';
-                    return (
-                      <TouchableOpacity
-                        key={conv.id}
-                        style={[styles.contactItem, selectedChat === conv.id && styles.contactItemActive]}
-                        onPress={() => handleSelectChat(conv.id)}
-                      >
-                        {conv.avatar ? (
-                          <Image
-                            source={{ uri: conv.avatar }}
-                            style={styles.contactAvatar}
-                            contentFit="cover"
-                          />
-                        ) : (
-                          <View style={styles.contactAvatarPlaceholder}>
-                            <Text style={styles.contactAvatarInitials}>{getInitials(conv.name)}</Text>
-                          </View>
-                        )}
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                            <Text style={[styles.contactName, hasUnread && { fontWeight: '700' }]} numberOfLines={1}>{conv.name}</Text>
-                            {!!previewTime && <Text style={[styles.chatPreviewTime, hasUnread && { color: '#2563EB', fontWeight: '600' }]}>{previewTime}</Text>}
-                          </View>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Text style={[styles.chatPreviewText, hasUnread && { color: '#111827', fontWeight: '600' }]} numberOfLines={1}>{previewText}</Text>
-                            {hasUnread && <View style={styles.unreadBadge}><Text style={styles.unreadBadgeText}>●</Text></View>}
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-              </View>
-            )}
-
-            {groupChats.length > 0 && (
-              <View style={styles.groupsSection}>
-                <Text style={styles.sectionTitle}>Groups</Text>
-                {groupChats
-                  .filter(conv => !searchQuery || conv.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                  .map((group) => {
-                    const hasUnread = unreadConversations.has(group.id);
-                    const preview = conversationPreviews.get(group.id);
-                    const previewText = preview
-                      ? (preview.text || '📎 Attachment')
-                      : 'No messages yet';
-                    const previewTime = preview ? formatChatTime(preview.timestamp) : '';
-                    return (
-                      <TouchableOpacity
-                        key={group.id}
-                        style={[styles.groupItem, selectedChat === group.id && styles.groupItemActive]}
-                        onPress={() => handleSelectChat(group.id)}
-                      >
-                        <View style={[styles.contactAvatarPlaceholder, { backgroundColor: '#EFF6FF' }]}>
-                          <Users size={18} color="#2563EB" />
-                        </View>
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                            <Text style={[styles.groupName, hasUnread && { fontWeight: '700' }]} numberOfLines={1}>{group.name}</Text>
-                            {!!previewTime && <Text style={[styles.chatPreviewTime, hasUnread && { color: '#2563EB', fontWeight: '600' }]}>{previewTime}</Text>}
-                          </View>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <Text style={[styles.chatPreviewText, hasUnread && { color: '#111827', fontWeight: '600' }]} numberOfLines={1}>{previewText}</Text>
-                            {hasUnread && <View style={styles.unreadBadge}><Text style={styles.unreadBadgeText}>●</Text></View>}
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-              </View>
-            )}
-
-            {conversations.length === 0 && (
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyStateText}>No conversations yet</Text>
-                <Text style={styles.emptyStateSubtext}>Start a new chat to get started</Text>
-              </View>
-            )}
-          </ScrollView>
-        </View>}
-
-        {(!isSmallScreen || selectedChat) && <View style={[styles.chatArea, isSmallScreen && styles.chatAreaMobile]}>
-          {selectedChat === 'ai-assistant' ? (
-            <View style={styles.aiChatContainer}>
-              {!isSmallScreen && <View style={styles.chatHeader}>
-                <View style={styles.aiHeaderInfo}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.sectionTitle}>{t('chat.title')}</Text>
+                  <TouchableOpacity onPress={handleClearAIChat} style={styles.clearChatIconButton}>
+                    <Trash2 size={18} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={[styles.aiChatItem, selectedChat === 'ai-assistant' && styles.contactItemActive]}
+                  onPress={() => handleSelectChat('ai-assistant')}
+                >
                   <View style={styles.aiAvatarContainer}>
                     <Bot size={20} color="#2563EB" strokeWidth={2.5} />
                   </View>
-                  <Text style={styles.chatTitle}>AI Assistant</Text>
-                </View>
-              </View>}
-              <GlobalAIChat inline />
-            </View>
-          ) : selectedChat ? (
-            <KeyboardAvoidingView
-              style={{ flex: 1 }}
-              behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-              keyboardVerticalOffset={Platform.OS === 'ios' ? (isSmallScreen ? 150 : 90) : 0}
-            >
-              {!isSmallScreen && <View style={styles.chatHeader}>
-                <Text style={styles.chatTitle}>{selectedConversation?.name}</Text>
-              </View>}
-
-              <ScrollView
-                ref={scrollViewRef}
-                style={styles.messagesContainer}
-                showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-              >
-                {messages.map((message) => {
-                  const senderData = userMap.get(message.senderId);
-                  const senderName = message.senderId === user?.id ? user.name : (senderData?.name || selectedConversation?.name || 'User');
-                  const senderAvatar = message.senderId === user?.id ? user?.avatar : (senderData?.avatar || selectedConversation?.avatar);
-
-                  return (
-                    <View
-                      key={message.id}
-                      style={[
-                        styles.messageRow,
-                        message.senderId === user?.id ? styles.messageRowRight : styles.messageRowLeft,
-                      ]}
-                    >
-                      {message.senderId !== user?.id && (
-                        senderAvatar ? (
-                          <Image
-                            source={{ uri: senderAvatar }}
-                            style={styles.messageAvatar}
-                            contentFit="cover"
-                          />
-                        ) : (
-                          <View style={styles.messageAvatarPlaceholder}>
-                            <Text style={styles.messageAvatarInitials}>{getInitials(senderName)}</Text>
-                          </View>
-                        )
-                      )}
-                      <View
-                        style={[
-                          styles.messageBubble,
-                          message.senderId === user?.id ? styles.messageBubbleRight : styles.messageBubbleLeft,
-                          message.id?.includes('daily-tip') && styles.dailyTipBubble,
-                        ]}
-                      >
-                        {renderMessageContent(message)}
-                        <Text
-                          style={[
-                            styles.messageTimestamp,
-                            message.senderId === user?.id && styles.messageTimestampOwn,
-                          ]}
-                        >
-                          {message.timestamp}
-                        </Text>
-                      </View>
-                      {message.senderId === user?.id && (
-                        user?.avatar ? (
-                          <Image
-                            source={{ uri: user.avatar }}
-                            style={styles.messageAvatar}
-                            contentFit="cover"
-                          />
-                        ) : (
-                          <View style={styles.messageAvatarPlaceholder}>
-                            <Text style={styles.messageAvatarInitials}>{getInitials(user.name)}</Text>
-                          </View>
-                        )
-                      )}
-                    </View>
-                  );
-                })}
-              </ScrollView>
-
-              {isRecording ? (
-                <View style={styles.recordingContainer}>
-                  <TouchableOpacity
-                    style={styles.cancelRecordButton}
-                    onPress={() => {
-                      console.log('[Chat] Cancel button clicked');
-                      cancelRecording();
-                    }}
-                  >
-                    <X size={24} color="#EF4444" />
-                  </TouchableOpacity>
-                  <View style={styles.recordingIndicator}>
-                    <View style={styles.recordingDot} />
-                    <Text style={styles.recordingText}>Recording...</Text>
+                  <View style={styles.aiChatInfo}>
+                    <Text style={styles.aiChatName}>AI Assistant</Text>
+                    <Text style={styles.aiChatDescription}>{t('chat.typeMessage')}</Text>
                   </View>
-                  <TouchableOpacity
-                    style={styles.stopRecordButton}
-                    onPress={() => {
-                      console.log('[Chat] Send/Stop recording button clicked');
-                      stopRecording();
-                    }}
-                  >
-                    <Send size={24} color="#2563EB" />
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.inputContainer}>
-                  <TouchableOpacity 
-                    style={styles.attachButton}
-                    onPress={() => setShowAttachMenu(true)}
-                  >
-                    <Paperclip size={20} color="#6B7280" />
-                  </TouchableOpacity>
-                  <TextInput
-                    style={styles.messageInput}
-    placeholder={t('chat.typeMessage')}
-                    placeholderTextColor="#9CA3AF"
-                    value={messageText}
-                    onChangeText={setMessageText}
-                    multiline
-                  />
-                  {messageText.trim() ? (
-                    <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
-                      <Send size={20} color="#FFFFFF" />
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.voiceButton}
-                      onPress={() => {
-                        console.log('[Chat] Mic button clicked');
-                        startRecording();
-                      }}
-                    >
-                      <Mic size={20} color="#2563EB" />
-                    </TouchableOpacity>
-                  )}
+                </TouchableOpacity>
+              </View>
+
+              {/* Skeleton loader */}
+              {isLoadingConversations &&
+                conversations.filter((c) => c.type === 'individual' || c.type === 'group').length === 0 && (
+                  <View style={styles.contactsSection}>
+                    <SkeletonBox width={140} height={14} borderRadius={4} style={{ marginBottom: 12 }} />
+                    {[0, 1, 2, 3].map((i) => (
+                      <View key={i} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 10 }}>
+                        <SkeletonBox width={48} height={48} borderRadius={24} />
+                        <View style={{ flex: 1 }}>
+                          <SkeletonBox width="70%" height={14} borderRadius={4} />
+                          <SkeletonBox width="50%" height={12} borderRadius={4} style={{ marginTop: 6 }} />
+                        </View>
+                        <SkeletonBox width={36} height={12} borderRadius={4} />
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+              {/* Conversations */}
+              {filteredConversations.length > 0 && (
+                <View style={styles.contactsSection}>
+                  <Text style={styles.sectionTitle}>
+                    {activeTab === 'groups' ? 'Groups' : activeTab === 'unread' ? 'Unread' : 'Messages'}
+                  </Text>
+                  {filteredConversations.map((conv) => (
+                    <ChatListItem
+                      key={conv.id}
+                      conversation={conv}
+                      isSelected={selectedChat === conv.id}
+                      hasUnread={unreadConversations.has(conv.id)}
+                      unreadCount={unreadConversations.has(conv.id) ? 1 : 0}
+                      preview={conversationPreviews.get(conv.id)}
+                      currentUserId={user?.id}
+                      onPress={() => handleSelectChat(conv.id)}
+                    />
+                  ))}
                 </View>
               )}
-            </KeyboardAvoidingView>
-          ) : (
-            <View style={styles.noChatSelected}>
-              <Users size={64} color="#D1D5DB" />
-              <Text style={styles.noChatText}>{t('chat.title')}</Text>
-              <Text style={styles.noChatSubtext}>{t('chat.noMessages')}</Text>
-            </View>
-          )}
-        </View>}
+
+              {conversations.filter((c) => c.type === 'individual' || c.type === 'group').length === 0 &&
+                !isLoadingConversations && (
+                  <View style={styles.emptyState}>
+                    <Text style={styles.emptyStateText}>No conversations yet</Text>
+                    <Text style={styles.emptyStateSubtext}>Start a new chat to get started</Text>
+                  </View>
+                )}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* ─── Chat area ──────────────────────────────────────────────────── */}
+        {(!isSmallScreen || selectedChat) && (
+          <View style={[styles.chatArea, isSmallScreen && styles.chatAreaMobile]}>
+            {selectedChat === 'ai-assistant' ? (
+              <View style={styles.aiChatContainer}>
+                {!isSmallScreen && (
+                  <View style={styles.chatHeader}>
+                    <View style={styles.aiHeaderInfo}>
+                      <View style={styles.aiAvatarContainer}>
+                        <Bot size={20} color="#2563EB" strokeWidth={2.5} />
+                      </View>
+                      <Text style={styles.chatTitle}>AI Assistant</Text>
+                    </View>
+                  </View>
+                )}
+                <GlobalAIChat inline />
+              </View>
+            ) : selectedChat ? (
+              <KeyboardAvoidingView
+                style={{ flex: 1 }}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? (isSmallScreen ? 150 : 90) : 0}
+              >
+                {!isSmallScreen && (
+                  <View style={styles.chatHeader}>
+                    <Text style={styles.chatTitle}>{selectedConversation?.name}</Text>
+                  </View>
+                )}
+
+                {/* Messages */}
+                <ScrollView
+                  ref={scrollViewRef}
+                  style={styles.messagesContainer}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {messages.map((message) => {
+                    const senderData = userMap.get(message.senderId);
+                    const senderName =
+                      message.senderId === user?.id
+                        ? user.name
+                        : senderData?.name || selectedConversation?.name || 'User';
+                    const senderAvatar =
+                      message.senderId === user?.id
+                        ? user?.avatar
+                        : senderData?.avatar || selectedConversation?.avatar;
+
+                    const isDeleted = locallyDeletedIds.has(message.id) || !!message.isDeleted;
+                    return (
+                      <MessageBubble
+                        key={message.id}
+                        message={{ ...message, isDeleted }}
+                        isOwn={message.senderId === user?.id}
+                        senderName={senderName}
+                        senderAvatar={senderAvatar}
+                        playingAudioId={playingAudioId}
+                        onAudioPlay={(id) => setPlayingAudioId(id)}
+                        onReply={handleReply}
+                        onDelete={handleDeleteMessage}
+                        onImagePress={(uri) => setSelectedImage(uri)}
+                        showSenderName={selectedConversation?.type === 'group'}
+                      />
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Reply bar */}
+                {replyingTo && (
+                  <View style={styles.replyBar}>
+                    <Reply size={16} color="#2563EB" />
+                    <View style={styles.replyBarContent}>
+                      <ReplyPreview
+                        replyTo={{
+                          id: replyingTo.id,
+                          senderId: replyingTo.senderId,
+                          senderName: userMap.get(replyingTo.senderId)?.name || 'Unknown',
+                          type: replyingTo.type,
+                          text: replyingTo.text || replyingTo.content,
+                          content: replyingTo.content,
+                        }}
+                        onDismiss={() => setReplyingTo(null)}
+                      />
+                    </View>
+                  </View>
+                )}
+
+                {/* Input area */}
+                {isAudioMode ? (
+                  <View style={styles.recorderContainer}>
+                    <AudioRecorder
+                      autoStart
+                      onSend={handleAudioSend}
+                      onCancel={() => setIsAudioMode(false)}
+                    />
+                  </View>
+                ) : (
+                  <View style={styles.inputContainer}>
+                    <TouchableOpacity
+                      style={styles.attachButton}
+                      onPress={() => setShowAttachMenu(true)}
+                    >
+                      <Paperclip size={20} color="#6B7280" />
+                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.messageInput}
+                      placeholder={t('chat.typeMessage')}
+                      placeholderTextColor="#9CA3AF"
+                      value={messageText}
+                      onChangeText={setMessageText}
+                      multiline
+                    />
+                    {messageText.trim() ? (
+                      <TouchableOpacity style={styles.sendButton} onPress={handleSendMessage}>
+                        <Send size={20} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.voiceButton}
+                        onPress={() => setIsAudioMode(true)}
+                      >
+                        <Mic size={20} color="#2563EB" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </KeyboardAvoidingView>
+            ) : (
+              <View style={styles.noChatSelected}>
+                <Users size={64} color="#D1D5DB" />
+                <Text style={styles.noChatText}>{t('chat.title')}</Text>
+                <Text style={styles.noChatSubtext}>{t('chat.noMessages')}</Text>
+              </View>
+            )}
+          </View>
+        )}
       </View>
 
+      {/* ─── New Chat Modal ──────────────────────────────────────────────────── */}
       <Modal
         visible={showNewChatModal}
         transparent
@@ -1734,11 +1119,13 @@ export default function ChatScreen() {
           <View style={styles.newChatModal}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('chat.title')}</Text>
-              <TouchableOpacity onPress={() => {
-                setShowNewChatModal(false);
-                setSelectedParticipants([]);
-                setNewChatSearch('');
-              }}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowNewChatModal(false);
+                  setSelectedParticipants([]);
+                  setNewChatSearch('');
+                }}
+              >
                 <X size={24} color="#1F2937" />
               </TouchableOpacity>
             </View>
@@ -1747,7 +1134,7 @@ export default function ChatScreen() {
               <Search size={16} color="#9CA3AF" />
               <TextInput
                 style={styles.searchInput}
-placeholder={t('common.search')}
+                placeholder={t('common.search')}
                 placeholderTextColor="#9CA3AF"
                 value={newChatSearch}
                 onChangeText={setNewChatSearch}
@@ -1756,9 +1143,7 @@ placeholder={t('common.search')}
 
             {selectedParticipants.length > 0 && (
               <View style={styles.selectedCount}>
-                <Text style={styles.selectedCountText}>
-                  {selectedParticipants.length} selected
-                </Text>
+                <Text style={styles.selectedCountText}>{selectedParticipants.length} selected</Text>
               </View>
             )}
 
@@ -1774,11 +1159,7 @@ placeholder={t('common.search')}
                   >
                     <View style={styles.personInfo}>
                       {item.avatar ? (
-                        <Image
-                          source={{ uri: item.avatar }}
-                          style={styles.personAvatar}
-                          contentFit="cover"
-                        />
+                        <Image source={{ uri: item.avatar }} style={styles.personAvatar} contentFit="cover" />
                       ) : (
                         <View style={styles.personAvatarPlaceholder}>
                           <Text style={styles.personAvatarInitials}>{getInitials(item.name)}</Text>
@@ -1809,7 +1190,7 @@ placeholder={t('common.search')}
                   ) : (
                     <Text style={styles.emptyStateText}>
                       {teamMembers.length === 0
-                        ? 'No team members found. Please add team members to the database.'
+                        ? 'No team members found.'
                         : 'No results found'}
                     </Text>
                   )}
@@ -1818,25 +1199,31 @@ placeholder={t('common.search')}
             />
 
             <TouchableOpacity
-              style={[styles.createChatButton, selectedParticipants.length === 0 && styles.createChatButtonDisabled]}
+              style={[
+                styles.createChatButton,
+                selectedParticipants.length === 0 && styles.createChatButtonDisabled,
+              ]}
               onPress={handleCreateChat}
               disabled={selectedParticipants.length === 0}
             >
               <Text style={styles.createChatButtonText}>
-                {selectedParticipants.length === 1 ? 'Start Direct Chat' : `Create Group (${selectedParticipants.length})`}
+                {selectedParticipants.length === 1
+                  ? 'Start Direct Chat'
+                  : `Create Group (${selectedParticipants.length})`}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
+      {/* ─── Attach Menu ─────────────────────────────────────────────────────── */}
       <Modal
         visible={showAttachMenu}
         transparent
         animationType="fade"
         onRequestClose={() => setShowAttachMenu(false)}
       >
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.attachModalOverlay}
           activeOpacity={1}
           onPress={() => setShowAttachMenu(false)}
@@ -1850,14 +1237,18 @@ placeholder={t('common.search')}
                 <Text style={styles.attachOptionText}>Take Photo</Text>
               </TouchableOpacity>
             )}
-
             <TouchableOpacity style={styles.attachOption} onPress={handlePickImage}>
               <View style={[styles.attachIconContainer, { backgroundColor: '#8B5CF6' }]}>
                 <ImageIcon size={24} color="#FFFFFF" />
               </View>
               <Text style={styles.attachOptionText}>Photo Library</Text>
             </TouchableOpacity>
-            
+            <TouchableOpacity style={styles.attachOption} onPress={handlePickVideo}>
+              <View style={[styles.attachIconContainer, { backgroundColor: '#10B981' }]}>
+                <VideoIcon size={24} color="#FFFFFF" />
+              </View>
+              <Text style={styles.attachOptionText}>Video</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.attachOption} onPress={handlePickDocument}>
               <View style={[styles.attachIconContainer, { backgroundColor: '#3B82F6' }]}>
                 <Paperclip size={24} color="#FFFFFF" />
@@ -1868,13 +1259,14 @@ placeholder={t('common.search')}
         </TouchableOpacity>
       </Modal>
 
+      {/* ─── Image Preview Modal ──────────────────────────────────────────────── */}
       <Modal
         visible={selectedImage !== null}
         transparent
         animationType="fade"
         onRequestClose={() => setSelectedImage(null)}
       >
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.imageModalOverlay}
           activeOpacity={1}
           onPress={() => setSelectedImage(null)}
@@ -1883,15 +1275,12 @@ placeholder={t('common.search')}
             <X size={24} color="#FFFFFF" />
           </TouchableOpacity>
           {selectedImage && (
-            <Image
-              source={{ uri: selectedImage }}
-              style={styles.fullscreenImage}
-              contentFit="contain"
-            />
+            <Image source={{ uri: selectedImage }} style={styles.fullscreenImage} contentFit="contain" />
           )}
         </TouchableOpacity>
       </Modal>
 
+      {/* ─── Send Image Preview Modal ─────────────────────────────────────────── */}
       <Modal
         visible={previewImage !== null}
         transparent
@@ -1906,15 +1295,9 @@ placeholder={t('common.search')}
                 <X size={24} color="#1F2937" />
               </TouchableOpacity>
             </View>
-
             {previewImage && (
-              <Image
-                source={{ uri: previewImage }}
-                style={styles.previewImage}
-                contentFit="contain"
-              />
+              <Image source={{ uri: previewImage }} style={styles.previewImage} contentFit="contain" />
             )}
-
             <View style={styles.previewActions}>
               <TouchableOpacity
                 style={styles.previewCancelButton}
@@ -1941,15 +1324,58 @@ placeholder={t('common.search')}
           </View>
         </View>
       </Modal>
+
+      {/* ─── Send Video Preview Modal ─────────────────────────────────────────── */}
+      <Modal
+        visible={previewVideo !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setPreviewVideo(null)}
+      >
+        <View style={styles.previewModalOverlay}>
+          <View style={styles.previewContainer}>
+            <View style={styles.previewHeader}>
+              <Text style={styles.previewTitle}>Send Video</Text>
+              <TouchableOpacity onPress={() => setPreviewVideo(null)}>
+                <X size={24} color="#1F2937" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.videoPreviewPlaceholder}>
+              <VideoIcon size={48} color="#9CA3AF" />
+              <Text style={styles.videoPreviewText}>Video selected</Text>
+            </View>
+            <View style={styles.previewActions}>
+              <TouchableOpacity
+                style={styles.previewCancelButton}
+                onPress={() => setPreviewVideo(null)}
+                disabled={isUploadingVideo}
+              >
+                <Text style={styles.previewCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.previewSendButton}
+                onPress={handleSendVideo}
+                disabled={isUploadingVideo}
+              >
+                {isUploadingVideo ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Send size={20} color="#FFFFFF" />
+                    <Text style={styles.previewSendText}>Send</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
+  container: { flex: 1, backgroundColor: '#F9FAFB' },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1959,16 +1385,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
   },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  userAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
+  userInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  userAvatar: { width: 40, height: 40, borderRadius: 20 },
   userAvatarPlaceholder: {
     width: 40,
     height: 40,
@@ -1977,598 +1395,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  userAvatarInitials: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700' as const,
-  },
-  userName: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#1F2937',
-  },
-  teamInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  teamName: {
-    fontSize: 14,
-    color: '#1F2937',
-  },
-  content: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  sidebar: {
-    width: 280,
-    backgroundColor: '#FFFFFF',
-    borderRightWidth: 1,
-    borderRightColor: '#E5E7EB',
-    padding: 16,
-  },
-  sidebarMobile: {
-    width: '100%',
-    borderRightWidth: 0,
-    flex: 1,
-  },
-  newChatButton: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  newChatButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600' as const,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginBottom: 16,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    color: '#1F2937',
-  },
-  contactsSection: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#6B7280',
-  },
-  clearChatIconButton: {
-    padding: 4,
-  },
-  contactItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 4,
-    gap: 12,
-  },
-  contactItemActive: {
-    backgroundColor: '#EFF6FF',
-  },
-  contactAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  contactAvatarPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  contactAvatarInitials: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700' as const,
-  },
-  contactName: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#1F2937',
-    flex: 1,
-  },
-  chatPreviewText: {
-    fontSize: 13,
-    color: '#6B7280',
-    flex: 1,
-    marginRight: 4,
-  },
-  chatPreviewTime: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    marginLeft: 6,
-    flexShrink: 0,
-  },
-  unreadBadge: {
-    flexShrink: 0,
-    marginLeft: 4,
-  },
-  unreadBadgeText: {
-    fontSize: 10,
-    color: '#2563EB',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#2563EB',
-    marginLeft: 6,
-  },
-  groupsSection: {
-    marginBottom: 16,
-  },
-  groupItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 4,
-    gap: 12,
-  },
-  groupItemActive: {
-    backgroundColor: '#EFF6FF',
-  },
-  groupName: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#1F2937',
-    flex: 1,
-  },
-  chatArea: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  chatAreaMobile: {
-    width: '100%',
-    position: 'absolute' as const,
-    top: 60,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 10,
-  },
-  chatHeader: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  chatTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: '#1F2937',
-  },
-  messagesContainer: {
-    flex: 1,
-    padding: 16,
-  },
-  messageRow: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    gap: 12,
-  },
-  messageRowLeft: {
-    justifyContent: 'flex-start',
-  },
-  messageRowRight: {
-    justifyContent: 'flex-end',
-  },
-  messageAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  messageAvatarPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  messageAvatarInitials: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700' as const,
-  },
-  messageBubble: {
-    maxWidth: '70%',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 16,
-  },
-  messageBubbleLeft: {
-    backgroundColor: '#2563EB',
-  },
-  messageBubbleRight: {
-    backgroundColor: '#E5E7EB',
-  },
-  messageTimestamp: {
-    fontSize: 10,
-    color: 'rgba(255, 255, 255, 0.7)',
-    marginTop: 4,
-    alignSelf: 'flex-end',
-  },
-  messageTimestampOwn: {
-    color: '#9CA3AF',
-  },
-  messageText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-  },
-  messageTextOwn: {
-    color: '#1F2937',
-  },
-  messageImage: {
-    width: 200,
-    height: 200,
-    borderRadius: 8,
-  },
-  voiceMessage: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    minWidth: 180,
-  },
-  playButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  pauseIcon: {
-    flexDirection: 'row',
-    gap: 3,
-    alignItems: 'center',
-  },
-  pauseBar: {
-    width: 3,
-    height: 12,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 1,
-  },
-  voiceWaveformContainer: {
-    flex: 1,
-    position: 'relative',
-  },
-  voiceWaveform: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    height: 24,
-  },
-  waveformBar: {
-    width: 3,
-    height: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    borderRadius: 2,
-  },
-  waveformBarActive: {
-    backgroundColor: '#FFFFFF',
-  },
-  progressOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    height: '100%',
-    backgroundColor: 'transparent',
-  },
-  voiceDuration: {
-    fontSize: 12,
-    color: '#FFFFFF',
-  },
-  voiceDurationOwn: {
-    color: '#6B7280',
-  },
-  fileMessage: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  fileName: {
-    fontSize: 14,
-    color: '#FFFFFF',
-  },
-  fileNameOwn: {
-    color: '#1F2937',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    gap: 12,
-    alignItems: 'center',
-  },
-  attachButton: {
-    padding: 8,
-  },
-  messageInput: {
-    flex: 1,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: '#1F2937',
-    maxHeight: 100,
-  },
-  sendButton: {
-    backgroundColor: '#2563EB',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  voiceButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#EFF6FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  recordingContainer: {
-    flexDirection: 'row',
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
-    alignItems: 'center',
-    gap: 16,
-    backgroundColor: '#FEF2F2',
-  },
-  cancelRecordButton: {
-    padding: 8,
-  },
-  recordingIndicator: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  recordingDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#EF4444',
-  },
-  recordingText: {
-    fontSize: 16,
-    color: '#EF4444',
-    fontWeight: '600' as const,
-  },
-  stopRecordButton: {
-    padding: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  newChatModal: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    width: '100%',
-    maxWidth: 500,
-    maxHeight: '80%',
-    padding: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: '#1F2937',
-  },
-  selectedCount: {
-    backgroundColor: '#EFF6FF',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  selectedCountText: {
-    fontSize: 14,
-    color: '#2563EB',
-    fontWeight: '600' as const,
-  },
-  personItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-  },
-  personItemSelected: {
-    backgroundColor: '#EFF6FF',
-    borderColor: '#2563EB',
-  },
-  personInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  personAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  personAvatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#2563EB',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  personAvatarInitials: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700' as const,
-  },
-  personDetails: {
-    flex: 1,
-  },
-  personName: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#1F2937',
-  },
-  personType: {
-    fontSize: 14,
-    color: '#6B7280',
-  },
-  checkIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#2563EB',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  createChatButton: {
-    backgroundColor: '#2563EB',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  createChatButtonDisabled: {
-    backgroundColor: '#D1D5DB',
-  },
-  createChatButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600' as const,
-  },
-  attachModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-    zIndex: 99999,
-  },
-  attachMenu: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 24,
-    paddingBottom: 40,
-    gap: 16,
-  },
-  attachOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    padding: 12,
-  },
-  attachIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  attachOptionText: {
-    fontSize: 16,
-    fontWeight: '500' as const,
-    color: '#1F2937',
-  },
-  imageModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeImageButton: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 10,
-    padding: 8,
-  },
-  fullscreenImage: {
-    width: '90%',
-    height: '80%',
-  },
-  noChatSelected: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  noChatText: {
-    fontSize: 20,
-    fontWeight: '600' as const,
-    color: '#1F2937',
-    marginTop: 16,
-  },
-  noChatSubtext: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  emptyState: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  emptyStateText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#6B7280',
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  dailyTipBubble: {
-    backgroundColor: '#FEF3C7',
-    borderWidth: 2,
-    borderColor: '#F59E0B',
-  },
-  dailyTipText: {
-    color: '#78350F',
-    fontWeight: '600' as const,
-  },
-
+  userAvatarInitials: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' as const },
+  userName: { fontSize: 16, fontWeight: '600' as const, color: '#1F2937' },
+  teamInfo: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  teamName: { fontSize: 14, color: '#1F2937' },
   mobileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2579,14 +1409,47 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E5E7EB',
     gap: 12,
   },
-  backButton: {
-    paddingVertical: 4,
+  backButton: { paddingVertical: 4 },
+  backButtonText: { fontSize: 16, color: '#2563EB', fontWeight: '600' as const },
+  chatTitle: { fontSize: 17, fontWeight: '600' as const, color: '#1F2937', flex: 1 },
+  content: { flex: 1, flexDirection: 'row' },
+  sidebar: {
+    width: 300,
+    backgroundColor: '#FFFFFF',
+    borderRightWidth: 1,
+    borderRightColor: '#E5E7EB',
+    padding: 16,
   },
-  backButtonText: {
-    fontSize: 16,
-    color: '#2563EB',
-    fontWeight: '600' as const,
+  sidebarMobile: { width: '100%', borderRightWidth: 0, flex: 1 },
+  newChatButton: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 12,
   },
+  newChatButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' as const },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  searchInput: { flex: 1, fontSize: 14, color: '#1F2937' },
+  contactsSection: { marginBottom: 16 },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  sectionTitle: { fontSize: 13, fontWeight: '600' as const, color: '#6B7280', textTransform: 'uppercase', letterSpacing: 0.5 },
+  clearChatIconButton: { padding: 4 },
+  contactItemActive: { backgroundColor: '#EFF6FF' },
   aiChatItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2608,94 +1471,189 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#2563EB',
   },
-  aiChatInfo: {
-    flex: 1,
+  aiChatInfo: { flex: 1 },
+  aiChatName: { fontSize: 15, fontWeight: '700' as const, color: '#1F2937', marginBottom: 2 },
+  aiChatDescription: { fontSize: 12, color: '#6B7280' },
+  chatArea: { flex: 1, backgroundColor: '#FFFFFF' },
+  chatAreaMobile: {
+    width: '100%',
+    position: 'absolute' as const,
+    top: 60,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
   },
-  aiChatName: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    color: '#1F2937',
-    marginBottom: 2,
-  },
-  aiChatDescription: {
-    fontSize: 12,
-    color: '#6B7280',
-  },
-  aiSparkle: {
-    padding: 4,
-  },
-  aiChatContainer: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  aiHeaderInfo: {
+  chatHeader: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
   },
-  previewModalOverlay: {
+  aiHeaderInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  aiChatContainer: { flex: 1, backgroundColor: '#FFFFFF' },
+  messagesContainer: { flex: 1, paddingVertical: 12 },
+  replyBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#F9FAFB',
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    gap: 8,
+  },
+  replyBarContent: { flex: 1 },
+  recorderContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    padding: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    gap: 8,
+    alignItems: 'flex-end',
+    backgroundColor: '#FFFFFF',
+  },
+  attachButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  messageInput: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    backgroundColor: '#F9FAFB',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: '#1F2937',
+    maxHeight: 100,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  sendButton: {
+    backgroundColor: '#2563EB',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  voiceButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noChatSelected: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  noChatText: { fontSize: 20, fontWeight: '600' as const, color: '#1F2937', marginTop: 16 },
+  noChatSubtext: { fontSize: 14, color: '#6B7280', marginTop: 8, textAlign: 'center' },
+  emptyState: { padding: 40, alignItems: 'center' },
+  emptyStateText: { fontSize: 16, fontWeight: '600' as const, color: '#6B7280' },
+  emptyStateSubtext: { fontSize: 14, color: '#9CA3AF', marginTop: 4, textAlign: 'center' },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  previewContainer: {
+  newChatModal: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     width: '100%',
     maxWidth: 500,
     maxHeight: '80%',
+    padding: 20,
   },
-  previewHeader: {
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 20, fontWeight: '700' as const, color: '#1F2937' },
+  selectedCount: { backgroundColor: '#EFF6FF', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginBottom: 12 },
+  selectedCountText: { fontSize: 14, color: '#2563EB', fontWeight: '600' as const },
+  personItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  previewTitle: {
-    fontSize: 18,
-    fontWeight: '700' as const,
-    color: '#1F2937',
-  },
-  previewImage: {
-    width: '100%',
-    height: 400,
-    backgroundColor: '#F3F4F6',
-  },
-  previewActions: {
-    flexDirection: 'row',
-    padding: 16,
-    gap: 12,
-  },
-  previewCancelButton: {
-    flex: 1,
-    paddingVertical: 14,
+    padding: 12,
     borderRadius: 8,
-    alignItems: 'center',
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#D1D5DB',
+    borderColor: '#E5E7EB',
   },
-  previewCancelText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#6B7280',
+  personItemSelected: { backgroundColor: '#EFF6FF', borderColor: '#2563EB' },
+  personInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  personAvatar: { width: 40, height: 40, borderRadius: 20 },
+  personAvatarPlaceholder: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#2563EB',
+    alignItems: 'center', justifyContent: 'center',
   },
+  personAvatarInitials: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' as const },
+  personDetails: { flex: 1 },
+  personName: { fontSize: 16, fontWeight: '600' as const, color: '#1F2937' },
+  personType: { fontSize: 14, color: '#6B7280' },
+  checkIcon: {
+    width: 24, height: 24, borderRadius: 12, backgroundColor: '#2563EB',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  createChatButton: {
+    backgroundColor: '#2563EB', paddingVertical: 14, borderRadius: 8,
+    alignItems: 'center', marginTop: 16,
+  },
+  createChatButtonDisabled: { backgroundColor: '#D1D5DB' },
+  createChatButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' as const },
+  attachModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  attachMenu: {
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 24, paddingBottom: 40, gap: 8,
+  },
+  attachOption: { flexDirection: 'row', alignItems: 'center', gap: 16, padding: 12 },
+  attachIconContainer: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  attachOptionText: { fontSize: 16, fontWeight: '500' as const, color: '#1F2937' },
+  imageModalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.95)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  closeImageButton: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 8 },
+  fullscreenImage: { width: '90%', height: '80%' },
+  previewModalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center', alignItems: 'center', padding: 20,
+  },
+  previewContainer: {
+    backgroundColor: '#FFFFFF', borderRadius: 16, width: '100%', maxWidth: 500, maxHeight: '80%',
+  },
+  previewHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    padding: 16, borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+  },
+  previewTitle: { fontSize: 18, fontWeight: '700' as const, color: '#1F2937' },
+  previewImage: { width: '100%', height: 400, backgroundColor: '#F3F4F6' },
+  videoPreviewPlaceholder: {
+    height: 200, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#F3F4F6', gap: 12,
+  },
+  videoPreviewText: { fontSize: 16, color: '#6B7280' },
+  previewActions: { flexDirection: 'row', padding: 16, gap: 12 },
+  previewCancelButton: {
+    flex: 1, paddingVertical: 14, borderRadius: 8, alignItems: 'center',
+    borderWidth: 1, borderColor: '#D1D5DB',
+  },
+  previewCancelText: { fontSize: 16, fontWeight: '600' as const, color: '#6B7280' },
   previewSendButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    backgroundColor: '#2563EB',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 8,
+    flex: 1, paddingVertical: 14, borderRadius: 8, alignItems: 'center',
+    backgroundColor: '#2563EB', flexDirection: 'row', justifyContent: 'center', gap: 8,
   },
-  previewSendText: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#FFFFFF',
-  },
+  previewSendText: { fontSize: 16, fontWeight: '600' as const, color: '#FFFFFF' },
 });

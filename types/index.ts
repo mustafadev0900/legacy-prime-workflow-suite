@@ -215,10 +215,19 @@ export interface ChatMessage {
   senderId: string;
   text?: string;
   timestamp: string;
-  type: 'text' | 'voice' | 'image' | 'file';
+  type: 'text' | 'voice' | 'image' | 'file' | 'video';
   content?: string;
   fileName?: string;
   duration?: number;
+  replyTo?: {
+    id: string;
+    senderId: string;
+    senderName?: string;
+    type: 'text' | 'voice' | 'image' | 'file' | 'video';
+    text?: string;
+    content?: string;
+  };
+  isDeleted?: boolean;
 }
 
 export interface ChatConversation {

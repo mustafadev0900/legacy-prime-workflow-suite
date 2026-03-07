@@ -62,6 +62,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           id,
           name,
           avatar
+        ),
+        reply_msg:reply_to (
+          id,
+          sender_id,
+          type,
+          content,
+          file_name,
+          users (
+            id,
+            name
+          )
         )
       `)
       .eq('conversation_id', conversationId)
@@ -73,23 +84,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error(messagesError.message);
     }
 
-    // Transform messages to include sender info
-    const transformedMessages = (messages || []).map(msg => ({
-      id: msg.id,
-      senderId: msg.sender_id,
-      type: msg.type,
-      content: msg.content,
-      text: msg.content, // Alias for compatibility
-      fileName: msg.file_name,
-      fileUrl: msg.file_url,
-      duration: msg.duration,
-      timestamp: new Date(msg.created_at).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit'
-      }),
-      createdAt: msg.created_at,
-      sender: msg.users || { id: msg.sender_id, name: 'Unknown', avatar: null },
-    }));
+    // Transform messages to include sender info and reply_to data
+    const transformedMessages = (messages || []).map(msg => {
+      const replyMsg = msg.reply_msg as any;
+      return {
+        id: msg.id,
+        senderId: msg.sender_id,
+        type: msg.type,
+        content: msg.content,
+        text: msg.content, // Alias for compatibility
+        fileName: msg.file_name,
+        fileUrl: msg.file_url,
+        duration: msg.duration,
+        timestamp: new Date(msg.created_at).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        createdAt: msg.created_at,
+        sender: msg.users || { id: msg.sender_id, name: 'Unknown', avatar: null },
+        replyTo: replyMsg ? {
+          id: replyMsg.id,
+          senderId: replyMsg.sender_id,
+          senderName: (replyMsg.users as any)?.name || 'Unknown',
+          type: replyMsg.type,
+          text: replyMsg.content,
+          content: replyMsg.content,
+          fileName: replyMsg.file_name,
+        } : undefined,
+      };
+    });
 
     console.log('[Get Messages] Fetched', transformedMessages.length, 'messages for conversation:', conversationId);
 
