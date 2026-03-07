@@ -208,7 +208,9 @@ export default function ChatScreen() {
           if (conv.lastMessageAt) {
             const knownAt = conversationLastMsgAtRef.current.get(conv.id);
             const isSelected = conv.id === selectedChat;
-            if (!isSelected && knownAt && conv.lastMessageAt > knownAt) {
+            // Only count as unread / notify if the message was sent by someone else
+            const isOwnMessage = conv.lastMessage?.sender_id === user?.id;
+            if (!isSelected && !isOwnMessage && knownAt && conv.lastMessageAt > knownAt) {
               setUnreadConversations((prev) => new Set(prev).add(conv.id));
               if (Platform.OS !== 'web') {
                 const lm = conv.lastMessage;
