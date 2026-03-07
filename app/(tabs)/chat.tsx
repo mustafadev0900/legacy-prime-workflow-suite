@@ -85,6 +85,9 @@ export default function ChatScreen() {
   const [locallyDeletedIds, setLocallyDeletedIds] = useState<Set<string>>(new Set());
 
   const conversationLastMsgAtRef = useRef<Map<string, string>>(new Map());
+  // Tracks whether we've already loaded persisted timestamps from AsyncStorage.
+  // Reset to false when user changes so a fresh load happens on re-login.
+  const seenLoadedRef = useRef(false);
   const [unreadConversations, setUnreadConversations] = useState<Set<string>>(new Set());
   const [conversationPreviews, setConversationPreviews] = useState<Map<string, PreviewEntry>>(new Map());
 
@@ -192,11 +195,35 @@ export default function ChatScreen() {
     fetchTeamMembers();
   }, [user?.id, user?.role]);
 
+  // Reset seen-timestamps state whenever the logged-in user changes so a fresh
+  // load from AsyncStorage happens on the next fetchConversations call.
+  useEffect(() => {
+    seenLoadedRef.current = false;
+    conversationLastMsgAtRef.current = new Map();
+  }, [user?.id]);
+
   // ─── Fetch conversations (poll 30s) ──────────────────────────────────────────
   useEffect(() => {
     const fetchConversations = async () => {
       if (!user?.id) return;
       setIsLoadingConversations(true);
+
+      // ── One-time: restore "last-seen" timestamps persisted from previous session ──
+      // This lets the first poll correctly detect messages that arrived while the
+      // user was logged out (knownAt will be populated, so the > comparison works).
+      if (!seenLoadedRef.current) {
+        seenLoadedRef.current = true;
+        try {
+          const raw = await AsyncStorage.getItem(`chat_seen_${user.id}`);
+          if (raw) {
+            const parsed = JSON.parse(raw) as Record<string, string>;
+            Object.entries(parsed).forEach(([id, ts]) => {
+              conversationLastMsgAtRef.current.set(id, ts);
+            });
+          }
+        } catch { /* non-fatal */ }
+      }
+
       try {
         const resp = await fetch(`${rorkApi}/api/team/get-conversations?userId=${user.id}`);
         const result = await resp.json();
@@ -266,6 +293,12 @@ export default function ChatScreen() {
         console.error('[Chat] fetchConversations error:', e);
       } finally {
         setIsLoadingConversations(false);
+        // Persist the current "last-seen" timestamps so the next app launch can
+        // compare against them and correctly mark messages as unread.
+        if (user?.id && conversationLastMsgAtRef.current.size > 0) {
+          const obj = Object.fromEntries(conversationLastMsgAtRef.current);
+          AsyncStorage.setItem(`chat_seen_${user.id}`, JSON.stringify(obj)).catch(() => {});
+        }
       }
     };
 
