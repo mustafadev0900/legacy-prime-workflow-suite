@@ -96,13 +96,27 @@ export default function ChatScreen() {
     conversationsRef.current = conversations;
   }, [conversations]);
 
-  // Scroll to the latest message whenever the keyboard slides up
+  // Track keyboard height on iOS to apply exact paddingBottom to the chat column.
+  // KeyboardAvoidingView is unreliable on iPad because it needs to know its own
+  // y-position relative to the screen, which changes with navigation headers,
+  // desktop headers, etc. Using the raw keyboard coordinates is always correct.
+  const [iosKbPadding, setIosKbPadding] = useState(0);
+
   useEffect(() => {
-    const event = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const sub = Keyboard.addListener(event, () => {
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
-    });
-    return () => sub.remove();
+    const show = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        if (Platform.OS === 'ios') setIosKbPadding(e.endCoordinates.height);
+        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
+      }
+    );
+    const hide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        if (Platform.OS === 'ios') setIosKbPadding(0);
+      }
+    );
+    return () => { show.remove(); hide.remove(); };
   }, []);
 
   const selectedConversation = conversations.find((c) => c.id === selectedChat);
@@ -1015,10 +1029,15 @@ export default function ChatScreen() {
                     </Text>
                   </View>
                 )}
+              {/* iOS: plain View + iosKbPadding from keyboard events (reliable on all devices).
+                  Android: KeyboardAvoidingView with behavior='height' (window resizes natively). */}
               <KeyboardAvoidingView
-                style={{ flex: 1 }}
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                keyboardVerticalOffset={isSmallScreen ? headerHeight : 0}
+                style={[
+                  { flex: 1 },
+                  Platform.OS === 'ios' && { paddingBottom: iosKbPadding },
+                ]}
+                behavior={Platform.OS === 'ios' ? undefined : 'height'}
+                keyboardVerticalOffset={0}
               >
                 {!isSmallScreen && (
                   <View style={styles.chatHeader}>
@@ -1088,7 +1107,10 @@ export default function ChatScreen() {
 
                 {/* Input area */}
                 {isAudioMode ? (
-                  <View style={[styles.recorderContainer, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+                  <View style={[
+                    styles.recorderContainer,
+                    { paddingBottom: iosKbPadding > 0 ? 10 : Math.max(insets.bottom, 10) },
+                  ]}>
                     <AudioRecorder
                       autoStart
                       onSend={handleAudioSend}
@@ -1096,7 +1118,12 @@ export default function ChatScreen() {
                     />
                   </View>
                 ) : (
-                  <View style={[styles.inputContainer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+                  <View style={[
+                    styles.inputContainer,
+                    // When keyboard is up: iosKbPadding already includes the safe-area
+                    // bottom (home indicator) so don't double-apply it.
+                    { paddingBottom: iosKbPadding > 0 ? 12 : Math.max(insets.bottom, 12) },
+                  ]}>
                     <TouchableOpacity
                       style={styles.attachButton}
                       onPress={() => setShowAttachMenu(true)}
