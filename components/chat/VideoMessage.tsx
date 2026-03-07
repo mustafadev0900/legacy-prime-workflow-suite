@@ -18,22 +18,47 @@ try {
   // expo-video not installed
 }
 
+/**
+ * Inner component — only mounts after the user taps play.
+ * Keeping useVideoPlayer + VideoView inside a child that mounts on-demand
+ * prevents AVAsset from loading synchronously at render time, which was the
+ * cause of FigApplicationStateMonitor err=-19431 and the "isPlayable accessed
+ * synchronously before being loaded" warning on iOS.
+ */
+function VideoPlayerContent({ uri }: { uri: string }) {
+  const player = useVideoPlayer(uri, (p: any) => {
+    p.loop = false;
+    // Start playing as soon as the player is configured
+    p.play();
+  });
+
+  const handleTap = () => {
+    try {
+      if (player.playing) {
+        player.pause();
+      } else {
+        player.play();
+      }
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <TouchableOpacity style={StyleSheet.absoluteFillObject} onPress={handleTap} activeOpacity={1}>
+      <VideoView
+        player={player}
+        style={styles.video}
+        allowsFullscreen
+        allowsPictureInPicture
+        contentFit="contain"
+      />
+    </TouchableOpacity>
+  );
+}
+
 function NativeVideoPlayer({ uri }: { uri: string }) {
   const [tapped, setTapped] = useState(false);
 
-  // Always initialize with null source — only load the asset when the user taps play.
-  // Passing the URI at render time causes AVAsset to load synchronously ("isPlayable"
-  // accessed before load) and triggers FigApplicationStateMonitor errors on iOS.
-  const player = useVideoPlayer
-    ? // eslint-disable-next-line react-hooks/rules-of-hooks
-      useVideoPlayer(tapped ? uri : null, (p: any) => {
-        if (tapped) {
-          p.loop = false;
-        }
-      })
-    : null;
-
-  if (!VideoView || !player) {
+  if (!VideoView || !useVideoPlayer) {
     return (
       <View style={styles.fallback}>
         <VideoIcon size={32} color="#9CA3AF" />
@@ -42,38 +67,12 @@ function NativeVideoPlayer({ uri }: { uri: string }) {
     );
   }
 
-  const handleTap = () => {
-    if (!tapped) {
-      setTapped(true);
-      // player.play() will be called after source is loaded in the setup callback
-      // Give expo-video one tick to attach the source before playing
-      setTimeout(() => {
-        try { player.play(); } catch { /* ignore if not ready */ }
-      }, 100);
-    } else {
-      // Toggle play/pause if already started
-      try {
-        if (player.playing) {
-          player.pause();
-        } else {
-          player.play();
-        }
-      } catch { /* ignore */ }
-    }
-  };
-
   return (
     <View style={styles.videoContainer}>
-      <VideoView
-        player={player}
-        style={styles.video}
-        allowsFullscreen
-        allowsPictureInPicture
-        contentFit="contain"
-      />
-      {/* Show play overlay until user taps */}
-      {!tapped && (
-        <TouchableOpacity style={styles.playOverlay} onPress={handleTap} activeOpacity={0.8}>
+      {tapped ? (
+        <VideoPlayerContent uri={uri} />
+      ) : (
+        <TouchableOpacity style={styles.playOverlay} onPress={() => setTapped(true)} activeOpacity={0.8}>
           <View style={styles.playButton}>
             <Play size={28} color="#FFFFFF" fill="#FFFFFF" />
           </View>

@@ -27,6 +27,26 @@ interface Props {
 const isUnsupportedOnIOS = (url: string) =>
   Platform.OS !== 'web' && /\.webm($|\?)/i.test(url);
 
+/**
+ * Module-level flag — setAudioModeAsync configures the iOS AVAudioSession and
+ * only needs to happen once per app session, not on every play tap.
+ * Calling it repeatedly adds ~50-200ms of latency to every press.
+ */
+let audioModeConfigured = false;
+async function ensureAudioMode() {
+  if (audioModeConfigured || Platform.OS === 'web') return;
+  try {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+    });
+    audioModeConfigured = true;
+  } catch {
+    // non-fatal — playback will still work
+  }
+}
+
 // Static waveform bar heights — deterministic per component instance
 const BAR_COUNT = 30;
 const WAVEFORM = Array.from({ length: BAR_COUNT }, (_, i) => {
@@ -92,11 +112,9 @@ export default function AudioPlayer({
     } else {
       const sound = soundRef.current;
       if (sound) {
-        const status = await sound.getStatusAsync().catch(() => null);
-        if (status?.isLoaded) {
-          await sound.pauseAsync().catch(() => {});
-          if (andReset) await sound.setPositionAsync(0).catch(() => {});
-        }
+        // Call pauseAsync directly — skip getStatusAsync() round-trip for snappier response
+        await sound.pauseAsync().catch(() => {});
+        if (andReset) await sound.setPositionAsync(0).catch(() => {});
       }
     }
     if (andReset) setPositionSec(0);
@@ -131,15 +149,14 @@ export default function AudioPlayer({
 
     // Native (iOS/Android)
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-      });
+      // Configure audio session once for the whole app session — not on every tap.
+      // Calling setAudioModeAsync repeatedly adds 50-200ms latency to every press.
+      await ensureAudioMode();
 
       let sound = soundRef.current;
 
       if (sound) {
+        // Verify the existing instance is still valid (can become invalid after app background)
         const status = await sound.getStatusAsync().catch(() => ({ isLoaded: false }));
         if (!status.isLoaded) {
           await sound.unloadAsync().catch(() => {});
@@ -149,6 +166,8 @@ export default function AudioPlayer({
       }
 
       if (!sound) {
+        // First play — load the file. This is the one-time network/decode cost.
+        // After this the Sound object stays alive so replays are instant.
         const { sound: newSound } = await Audio.Sound.createAsync(
           { uri },
           { shouldPlay: true, progressUpdateIntervalMillis: 250 },
@@ -161,15 +180,17 @@ export default function AudioPlayer({
               setTotalSec(status.durationMillis / 1000);
             }
             if (status.didJustFinish) {
+              // Keep the Sound loaded — seek back to start so the next play()
+              // call is instant (no createAsync round-trip required).
               setIsPlaying(false);
               setPositionSec(0);
-              newSound.unloadAsync().catch(() => {});
-              soundRef.current = null;
+              newSound.setPositionAsync(0).catch(() => {});
             }
           }
         );
         soundRef.current = newSound;
       } else {
+        // Already loaded — play is instant
         await sound.playAsync();
       }
 
