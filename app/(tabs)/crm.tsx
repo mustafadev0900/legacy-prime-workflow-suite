@@ -599,61 +599,82 @@ export default function CRMScreen() {
   };
 
   const sendMessage = async () => {
-    const recipients = singleRecipient 
+    const recipients = singleRecipient
       ? [clients.find(c => c.id === singleRecipient)!]
       : clients.filter(c => selectedClients.has(c.id));
 
     if (recipients.length === 0) {
-      Alert.alert('No Recipients', 'Please select at least one client.');
+      showAlert('No Recipients', 'Please select at least one client.');
       return;
     }
 
     if (!messageBody.trim()) {
-      Alert.alert('Error', 'Please enter a message.');
+      showAlert('Error', 'Please enter a message.');
       return;
     }
 
     if (messageType === 'email') {
-      const attachmentNote = attachments.length > 0 
+      // Guard: drop any recipients with no email address
+      const emailRecipients = recipients.filter(c => c.email && c.email.trim());
+      const skipped = recipients.length - emailRecipients.length;
+
+      if (emailRecipients.length === 0) {
+        showAlert('No Email Addresses', 'None of the selected clients have an email address on file.');
+        return;
+      }
+
+      const attachmentNote = attachments.length > 0
         ? `\n\n--- Attachments (${attachments.length}) ---\n${attachments.map(a => a.name).join('\n')}\n\nNote: Please attach these files manually to your email.`
         : '';
 
-      recipients.forEach(client => {
+      if (emailRecipients.length === 1) {
+        // Single recipient — personalized mailto
+        const client = emailRecipients[0];
         const personalizedBody = messageBody.replace('{name}', client.name.split(' ')[0]) + attachmentNote;
         const emailUrl = `mailto:${client.email}?subject=${encodeURIComponent(messageSubject)}&body=${encodeURIComponent(personalizedBody)}`;
-        
         if (Platform.OS === 'web') {
-          window.open(emailUrl, '_blank');
+          window.location.href = emailUrl;
         } else {
-          Linking.openURL(emailUrl).catch(() => {
-            Alert.alert('Error', 'Unable to open email client');
-          });
+          Linking.openURL(emailUrl).catch(() => showAlert('Error', 'Unable to open email client'));
         }
-      });
-      
-      const attachmentWarning = attachments.length > 0 
-        ? ' Remember to manually attach your files to the email.' 
-        : '';
-      
-      Alert.alert(
-        'Success', 
-        `Email${recipients.length > 1 ? 's' : ''} prepared for ${recipients.length} client${recipients.length > 1 ? 's' : ''}. Your email client should open.${attachmentWarning}`,
-        [{ text: 'OK', onPress: () => {
-          setShowMessageModal(false);
-          setSelectedClients(new Set());
-        }}]
-      );
+      } else {
+        // Multiple recipients — single mailto with BCC to avoid one-tab-per-client popup blocking
+        const bccList = emailRecipients.map(c => c.email).join(',');
+        const genericBody = messageBody.replace('{name}', 'there') + attachmentNote;
+        const emailUrl = `mailto:?bcc=${encodeURIComponent(bccList)}&subject=${encodeURIComponent(messageSubject)}&body=${encodeURIComponent(genericBody)}`;
+        if (Platform.OS === 'web') {
+          window.location.href = emailUrl;
+        } else {
+          Linking.openURL(emailUrl).catch(() => showAlert('Error', 'Unable to open email client'));
+        }
+      }
+
+      const attachmentWarning = attachments.length > 0 ? ' Remember to manually attach your files.' : '';
+      const skippedNote = skipped > 0 ? ` (${skipped} client${skipped > 1 ? 's' : ''} skipped — no email on file)` : '';
+      showAlert('Email Prepared', `Your email client has been opened for ${emailRecipients.length} recipient${emailRecipients.length > 1 ? 's' : ''}.${skippedNote}${attachmentWarning}`);
+      setShowMessageModal(false);
+      setSelectedClients(new Set());
+
     } else {
-      console.log('[CRM] Sending SMS via Twilio to', recipients.length, 'recipients');
-      
-      if (recipients.length === 1) {
-        const client = recipients[0];
-        const success = await sendSingleSMS(
-          client.phone,
-          messageBody,
-          client.name
-        );
-        
+      // SMS via Twilio
+      // Guard: drop any recipients with no phone number
+      const smsRecipients = recipients.filter(c => c.phone && c.phone.trim());
+      const skipped = recipients.length - smsRecipients.length;
+
+      if (smsRecipients.length === 0) {
+        showAlert('No Phone Numbers', 'None of the selected clients have a phone number on file.');
+        return;
+      }
+
+      if (skipped > 0) {
+        showAlert('Notice', `${skipped} client${skipped > 1 ? 's' : ''} skipped — no phone number on file. Sending to the remaining ${smsRecipients.length}.`);
+      }
+
+      console.log('[CRM] Sending SMS via Twilio to', smsRecipients.length, 'recipients');
+
+      if (smsRecipients.length === 1) {
+        const client = smsRecipients[0];
+        const success = await sendSingleSMS(client.phone, messageBody, client.name);
         if (success) {
           setShowMessageModal(false);
           setSelectedClients(new Set());
@@ -661,13 +682,11 @@ export default function CRMScreen() {
           setMessageSubject('');
         }
       } else {
-        const recipientList = recipients.map(client => ({
+        const recipientList = smsRecipients.map(client => ({
           phone: client.phone,
           name: client.name,
         }));
-        
         const result = await sendBulkSMSMessages(recipientList, messageBody);
-        
         if (result && result.success) {
           setShowMessageModal(false);
           setSelectedClients(new Set());

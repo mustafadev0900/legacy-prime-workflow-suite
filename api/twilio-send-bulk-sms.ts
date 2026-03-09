@@ -11,12 +11,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'recipients and body are required' });
   }
 
-  const accountSid = process.env.EXPO_PUBLIC_TWILIO_ACCOUNT_SID;
-  const authToken = process.env.EXPO_PUBLIC_TWILIO_AUTH_TOKEN;
-  const fromNumber = process.env.EXPO_PUBLIC_TWILIO_PHONE_NUMBER;
+  const accountSid = process.env.TWILIO_ACCOUNT_SID || process.env.EXPO_PUBLIC_TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN || process.env.EXPO_PUBLIC_TWILIO_AUTH_TOKEN;
+  const fromNumber = process.env.TWILIO_PHONE_NUMBER || process.env.EXPO_PUBLIC_TWILIO_PHONE_NUMBER;
 
   if (!accountSid || !authToken || !fromNumber) {
-    return res.status(500).json({ error: 'Twilio not configured.' });
+    return res.status(500).json({ error: 'Twilio not configured. Please add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER to your environment variables.' });
   }
 
   try {
