@@ -31,7 +31,7 @@ export default function ExpensesScreen() {
     await refreshExpenses();
     setRefreshing(false);
   }, [refreshing, refreshExpenses]);
-  const [expenseType, setExpenseType] = useState<string>('Subcontractor');
+  const [expenseType, setExpenseType] = useState<string>('');
   const [category, setCategory] = useState<string>('');
   const [amount, setAmount] = useState<string>('');
   const [store, setStore] = useState<string>('');
@@ -56,12 +56,12 @@ export default function ExpensesScreen() {
     refreshExpenses();
   }, [refreshExpenses]);
 
-  // Set first category when loaded
+  // Set first category when Subcontractor type is selected and category is empty
   useEffect(() => {
-    if (priceListCategories.length > 0 && !category) {
+    if (expenseType === 'Subcontractor' && priceListCategories.length > 0 && !category) {
       setCategory(priceListCategories[0]);
     }
-  }, [priceListCategories, category]);
+  }, [expenseType, priceListCategories, category]);
 
   // Clear validation error when user changes any field
   useEffect(() => {
@@ -236,6 +236,8 @@ export default function ExpensesScreen() {
 
       setAmount('');
       setStore('');
+      setExpenseType('');
+      setCategory('');
       setReceiptImage(null);
       setReceiptType(null);
       setReceiptFileName(null);
@@ -697,7 +699,7 @@ export default function ExpensesScreen() {
             style={styles.categoryPicker}
             onPress={() => setShowExpenseTypePicker(true)}
           >
-            <Text style={styles.pickerText}>{expenseType}</Text>
+            <Text style={[styles.pickerText, !expenseType && { color: '#9CA3AF' }]}>{expenseType || 'Select expense type...'}</Text>
             <ChevronDown size={16} color="#6B7280" />
           </TouchableOpacity>
 
@@ -708,7 +710,7 @@ export default function ExpensesScreen() {
                 style={styles.categoryPicker}
                 onPress={() => setShowSubcategoryPicker(true)}
               >
-                <Text style={styles.pickerText}>{category}</Text>
+                <Text style={[styles.pickerText, !category && { color: '#9CA3AF' }]}>{category || 'Select category...'}</Text>
                 <ChevronDown size={16} color="#6B7280" />
               </TouchableOpacity>
             </>
