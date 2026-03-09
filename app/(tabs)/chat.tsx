@@ -92,7 +92,7 @@ export default function ChatScreen() {
   const [unreadConversations, setUnreadConversations] = useState<Set<string>>(new Set());
   // Keep AppContext (and FloatingChatButton) in sync with the authoritative count.
   useEffect(() => {
-    setUnreadChatCount(unreadConversations.size);
+    setUnreadChatCount?.(unreadConversations.size);
   }, [unreadConversations]);
   const [conversationPreviews, setConversationPreviews] = useState<Map<string, PreviewEntry>>(new Map());
 
