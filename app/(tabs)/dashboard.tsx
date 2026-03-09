@@ -74,7 +74,7 @@ export default function DashboardScreen() {
   const [showAddTaskModal, setShowAddTaskModal] = useState<boolean>(false);
   const [taskFilter, setTaskFilter] = useState<'today' | 'upcoming' | 'all'>('today');
 
-  const activeProjects = projects.filter(p => p.status === 'active');
+  const activeProjects = projects.filter(p => p.status === 'active' || p.status === 'on-hold');
   const completedProjects = projects.filter(p => p.status === 'completed');
   const archivedProjects = projects.filter(p => p.status === 'archived');
 
