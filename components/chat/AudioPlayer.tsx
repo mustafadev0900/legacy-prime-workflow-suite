@@ -21,8 +21,7 @@ interface Props {
   shouldStop?: boolean;
 }
 
-// ─── Module-level persistent cache ───────────────────────────────────────────
-// Sounds survive component unmount/remount (navigation away and back).
+// ─── Module-level persistent sound cache ─────────────────────────────────────
 const MAX_CACHE = 30;
 const soundCache = new Map<string, Audio.Sound>();
 
@@ -63,6 +62,12 @@ const WAVEFORM = Array.from({ length: BAR_COUNT }, (_, i) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// 'idle'    → play button visible, duration shown, nothing loaded yet
+// 'loading' → spinner, user just tapped play
+// 'ready'   → sound loaded & playing/paused
+// 'error'   → load failed
+type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+
 export default function AudioPlayer({
   uri,
   duration,
@@ -74,7 +79,7 @@ export default function AudioPlayer({
   const [isPlaying, setIsPlaying] = useState(false);
   const [positionSec, setPositionSec] = useState(0);
   const [totalSec, setTotalSec] = useState(duration || 0);
-  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [loadState, setLoadState] = useState<LoadState>('idle');
 
   const soundRef = useRef<Audio.Sound | null>(null);
   const webAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -84,7 +89,7 @@ export default function AudioPlayer({
 
   const progress = totalSec > 0 ? Math.min(positionSec / totalSec, 1) : 0;
 
-  // ─── Build status callback ────────────────────────────────────────────────
+  // ─── Status callback ──────────────────────────────────────────────────────
   const makeStatusHandler = (sound: Audio.Sound) => (status: any) => {
     if (!mountedRef.current || !status.isLoaded) return;
     if (!isSeeking.current) {
@@ -100,66 +105,41 @@ export default function AudioPlayer({
     }
   };
 
-  // ─── Load / cache sound ───────────────────────────────────────────────────
-  const loadSound = useCallback(async () => {
-    if (Platform.OS === 'web') {
-      setLoadState('ready');
-      return;
-    }
-
-    setLoadState('loading');
-    await ensureAudioMode();
-
-    // ── Cache hit ───────────────────────────────────────────────────────────
-    const cached = soundCache.get(uri);
-    if (cached) {
-      try {
-        const status = await cached.getStatusAsync();
-        if (status.isLoaded) {
-          cached.setOnPlaybackStatusUpdate(makeStatusHandler(cached));
-          soundRef.current = cached;
-          if (status.durationMillis) setTotalSec(status.durationMillis / 1000);
-          setPositionSec((status.positionMillis || 0) / 1000);
-          if (mountedRef.current) setLoadState('ready');
-          return;
-        }
-      } catch { /* fall through to reload */ }
-      soundCache.delete(uri);
-      await cached.unloadAsync().catch(() => {});
-    }
-
-    // ── Cache miss — load from network ──────────────────────────────────────
-    try {
-      evictIfNeeded();
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: false, progressUpdateIntervalMillis: 250 },
-        undefined
-      );
-
-      sound.setOnPlaybackStatusUpdate(makeStatusHandler(sound));
-      soundCache.set(uri, sound);
-
-      if (!mountedRef.current) return;
-
-      soundRef.current = sound;
-      setLoadState('ready');
-    } catch (e: any) {
-      if (!mountedRef.current) return;
-      console.warn('[AudioPlayer] load error:', e?.message || e);
-      setLoadState('error');
-    }
-  }, [uri]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  // ─── Mount / URI change ───────────────────────────────────────────────────
+  // Only check the cache — never eagerly load from network on mount.
+  // This prevents simultaneous AVURLAsset loads across all visible messages
+  // which causes the "isPlayable accessed synchronously" warning.
   useEffect(() => {
     mountedRef.current = true;
-    loadSound();
+
+    if (Platform.OS !== 'web') {
+      const cached = soundCache.get(uri);
+      if (cached) {
+        cached.getStatusAsync()
+          .then((status) => {
+            if (!mountedRef.current) return;
+            if (status.isLoaded) {
+              cached.setOnPlaybackStatusUpdate(makeStatusHandler(cached));
+              soundRef.current = cached;
+              if (status.durationMillis) setTotalSec(status.durationMillis / 1000);
+              setLoadState('ready');
+            }
+          })
+          .catch(() => {});
+      }
+      // else: stay 'idle', load lazily on first tap
+    } else {
+      // Web: always ready (HTML Audio is lazy by nature)
+      setLoadState('ready');
+    }
+
     return () => {
       mountedRef.current = false;
       soundRef.current = null;
     };
   }, [uri]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Cleanup web audio on unmount
   useEffect(() => {
     return () => {
       if (webAudioRef.current) {
@@ -169,12 +149,48 @@ export default function AudioPlayer({
     };
   }, []);
 
+  // Stop when parent signals another player started
   useEffect(() => {
     if (shouldStop && isPlaying) handlePauseStop(false);
   }, [shouldStop]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Playback controls ────────────────────────────────────────────────────
+  // ─── Load + play (lazy — triggered on first tap) ──────────────────────────
+  const loadAndPlay = useCallback(async () => {
+    setLoadState('loading');
+    await ensureAudioMode();
 
+    try {
+      evictIfNeeded();
+
+      // Pass the status callback directly into createAsync so expo-av
+      // sets it up before the first status event fires.
+      let soundInstance: Audio.Sound;
+      ({ sound: soundInstance } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: true, progressUpdateIntervalMillis: 250 },
+        undefined // set below after we have the reference
+      ));
+
+      if (!mountedRef.current) {
+        soundInstance.unloadAsync().catch(() => {});
+        return;
+      }
+
+      soundInstance.setOnPlaybackStatusUpdate(makeStatusHandler(soundInstance));
+      soundCache.set(uri, soundInstance);
+      soundRef.current = soundInstance;
+
+      onPlay?.(messageId);
+      setLoadState('ready');
+      setIsPlaying(true);
+    } catch (e: any) {
+      if (!mountedRef.current) return;
+      console.warn('[AudioPlayer] load error:', e?.message || e);
+      setLoadState('error');
+    }
+  }, [uri, messageId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Playback controls ────────────────────────────────────────────────────
   const handlePauseStop = async (andReset: boolean) => {
     setIsPlaying(false);
     if (Platform.OS === 'web') {
@@ -193,7 +209,6 @@ export default function AudioPlayer({
   };
 
   const handlePlay = async () => {
-    if (loadState !== 'ready') return;
     onPlay?.(messageId);
 
     if (Platform.OS === 'web') {
@@ -214,7 +229,6 @@ export default function AudioPlayer({
 
     const sound = soundRef.current;
     if (!sound) return;
-
     try {
       await sound.playAsync();
       setIsPlaying(true);
@@ -226,11 +240,17 @@ export default function AudioPlayer({
 
   const togglePlayback = () => {
     if (loadState === 'loading') return;
+    if (loadState === 'idle') {
+      // First tap: load from network and auto-play
+      loadAndPlay();
+      return;
+    }
     if (isPlaying) handlePauseStop(false);
     else handlePlay();
   };
 
   const seekToFraction = async (fraction: number) => {
+    if (loadState !== 'ready') return;
     const total = totalSec > 0 ? totalSec : duration || 0;
     const target = Math.max(0, Math.min(1, fraction)) * total;
     setPositionSec(target);
@@ -247,8 +267,8 @@ export default function AudioPlayer({
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => waveWidthRef.current > 0,
-      onMoveShouldSetPanResponder: () => waveWidthRef.current > 0,
+      onStartShouldSetPanResponder: () => waveWidthRef.current > 0 && loadState === 'ready',
+      onMoveShouldSetPanResponder: () => waveWidthRef.current > 0 && loadState === 'ready',
       onPanResponderGrant: (evt) => {
         isSeeking.current = true;
         seekToFraction(evt.nativeEvent.locationX / waveWidthRef.current);
@@ -280,7 +300,7 @@ export default function AudioPlayer({
         <AlertCircle size={14} color={errColor} />
         <Text style={[styles.errorText, { color: errColor }]}>Audio unavailable</Text>
         <TouchableOpacity
-          onPress={() => { setLoadState('loading'); loadSound(); }}
+          onPress={() => { setPositionSec(0); loadAndPlay(); }}
           style={styles.retryBtn}
           activeOpacity={0.7}
         >
