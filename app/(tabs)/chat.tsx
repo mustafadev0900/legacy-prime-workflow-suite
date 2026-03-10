@@ -72,7 +72,7 @@ export default function ChatScreen() {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [newChatSearch, setNewChatSearch] = useState<string>('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [previewVideo, setPreviewVideo] = useState<{ uri: string; mimeType: string } | null>(null);
+  const [previewVideo, setPreviewVideo] = useState<{ uri: string; mimeType: string; duration?: number } | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState<boolean>(false);
   const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
   const [dailyTipSent, setDailyTipSent] = useState<boolean>(false);
@@ -710,7 +710,7 @@ export default function ChatScreen() {
   const sendMediaMessage = async (
     type: 'image' | 'video' | 'file',
     publicUrl: string,
-    extras?: { fileName?: string }
+    extras?: { fileName?: string; duration?: number }
   ) => {
     if (!selectedChat) return;
     const resp = await fetch(`${rorkApi}/api/team/send-message`, {
@@ -721,7 +721,8 @@ export default function ChatScreen() {
         senderId: user?.id,
         type,
         content: publicUrl,
-        ...extras,
+        fileName: extras?.fileName,
+        duration: extras?.duration,
       }),
     });
     const result = await resp.json();
@@ -732,6 +733,7 @@ export default function ChatScreen() {
         type,
         content: publicUrl,
         fileName: extras?.fileName,
+        duration: extras?.duration,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       });
     } else {
@@ -787,7 +789,8 @@ export default function ChatScreen() {
         const rawMime = asset.mimeType || `video/${asset.uri.split('.').pop()?.toLowerCase() || 'mp4'}`;
         // iOS returns .mov files — ensure correct MIME type
         const mime = rawMime === 'video/mov' ? 'video/quicktime' : rawMime;
-        setPreviewVideo({ uri: asset.uri, mimeType: mime });
+        const durationSec = asset.duration ? Math.round(asset.duration / 1000) : undefined;
+        setPreviewVideo({ uri: asset.uri, mimeType: mime, duration: durationSec });
       }
     } catch {
       Alert.alert('Error', 'Failed to pick video');
@@ -808,13 +811,14 @@ export default function ChatScreen() {
         console.log('[Video] uploading', previewVideo.uri, previewVideo.mimeType);
         const { publicUrl } = await uploadToS3(previewVideo.uri, previewVideo.mimeType);
         console.log('[Video] uploaded, publicUrl:', publicUrl);
-        await sendMediaMessage('video', publicUrl);
+        await sendMediaMessage('video', publicUrl, { duration: previewVideo.duration });
       } else {
         addMessageToConversation(selectedChat, {
           id: Date.now().toString(),
           senderId: user?.id || '',
           type: 'video',
           content: previewVideo.uri,
+          duration: previewVideo.duration,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         });
       }
@@ -1467,48 +1471,55 @@ export default function ChatScreen() {
         </View>
       </Modal>
 
-      {/* ─── Send Video Preview Modal ─────────────────────────────────────────── */}
+      {/* ─── Send Video Preview Modal (WhatsApp-style full-screen) ──────────────── */}
       <Modal
         visible={previewVideo != null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setPreviewVideo(null)}
+        transparent={false}
+        animationType="slide"
+        onRequestClose={() => !isUploadingVideo && setPreviewVideo(null)}
       >
-        <View style={styles.previewModalOverlay}>
-          <View style={styles.previewContainer}>
-            <View style={styles.previewHeader}>
-              <Text style={styles.previewTitle}>Send Video</Text>
-              <TouchableOpacity onPress={() => setPreviewVideo(null)}>
-                <X size={24} color="#1F2937" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.videoPreviewPlaceholder}>
-              <VideoIcon size={48} color="#9CA3AF" />
-              <Text style={styles.videoPreviewText}>Video selected</Text>
-            </View>
-            <View style={styles.previewActions}>
-              <TouchableOpacity
-                style={styles.previewCancelButton}
-                onPress={() => setPreviewVideo(null)}
-                disabled={isUploadingVideo}
-              >
-                <Text style={styles.previewCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.previewSendButton}
-                onPress={handleSendVideo}
-                disabled={isUploadingVideo}
-              >
-                {isUploadingVideo ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <>
-                    <Send size={20} color="#FFFFFF" />
-                    <Text style={styles.previewSendText}>Send</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
+        <View style={styles.videoPreviewScreen}>
+          {/* Top bar */}
+          <View style={styles.videoPreviewTopBar}>
+            <TouchableOpacity
+              onPress={() => !isUploadingVideo && setPreviewVideo(null)}
+              style={styles.videoPreviewBackBtn}
+              disabled={isUploadingVideo}
+            >
+              <X size={26} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.videoPreviewTopTitle}>Send to {
+              conversations.find(c => c.id === selectedChat)?.name || 'Chat'
+            }</Text>
+            {previewVideo?.duration != null && (
+              <View style={styles.videoPreviewDurationBadge}>
+                <Text style={styles.videoPreviewDurationText}>
+                  {Math.floor(previewVideo.duration / 60)}:{String(previewVideo.duration % 60).padStart(2, '0')}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Video preview area */}
+          <View style={styles.videoPreviewContent}>
+            <VideoIcon size={64} color="rgba(255,255,255,0.3)" />
+            <Text style={styles.videoPreviewReadyText}>Video ready to send</Text>
+          </View>
+
+          {/* Bottom bar */}
+          <View style={styles.videoPreviewBottomBar}>
+            <TouchableOpacity
+              style={[styles.videoSendBtn, isUploadingVideo && styles.videoSendBtnDisabled]}
+              onPress={handleSendVideo}
+              disabled={isUploadingVideo}
+              activeOpacity={0.85}
+            >
+              {isUploadingVideo ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Send size={24} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1794,4 +1805,46 @@ const styles = StyleSheet.create({
     backgroundColor: '#2563EB', flexDirection: 'row', justifyContent: 'center', gap: 8,
   },
   previewSendText: { fontSize: 16, fontWeight: '600' as const, color: '#FFFFFF' },
+  // ─── WhatsApp-style full-screen video preview ───────────────────────────────
+  videoPreviewScreen: {
+    flex: 1, backgroundColor: '#000',
+  },
+  videoPreviewTopBar: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingTop: 56, paddingBottom: 16, paddingHorizontal: 16,
+    gap: 12,
+  },
+  videoPreviewBackBtn: {
+    width: 40, height: 40, alignItems: 'center', justifyContent: 'center',
+  },
+  videoPreviewTopTitle: {
+    flex: 1, color: '#FFFFFF', fontSize: 16, fontWeight: '600' as const,
+  },
+  videoPreviewDurationBadge: {
+    backgroundColor: 'rgba(255,255,255,0.18)', borderRadius: 6,
+    paddingHorizontal: 8, paddingVertical: 3,
+  },
+  videoPreviewDurationText: {
+    color: '#FFFFFF', fontSize: 13, fontWeight: '600' as const,
+  },
+  videoPreviewContent: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16,
+  },
+  videoPreviewReadyText: {
+    color: 'rgba(255,255,255,0.55)', fontSize: 15,
+  },
+  videoPreviewBottomBar: {
+    flexDirection: 'row', justifyContent: 'flex-end',
+    alignItems: 'center', paddingHorizontal: 24, paddingBottom: 48, paddingTop: 16,
+  },
+  videoSendBtn: {
+    width: 60, height: 60, borderRadius: 30,
+    backgroundColor: '#25D366',
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 4, elevation: 4,
+  },
+  videoSendBtnDisabled: {
+    opacity: 0.6,
+  },
 });

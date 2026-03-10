@@ -1,10 +1,11 @@
 import { View, StyleSheet, TouchableOpacity, Platform, Text } from 'react-native';
 import { useState } from 'react';
-import { Play, Video as VideoIcon } from 'lucide-react-native';
+import { Play } from 'lucide-react-native';
 
 interface Props {
   uri: string;
   isOwn: boolean;
+  duration?: number; // seconds
 }
 
 // Import expo-video lazily to avoid module-level side effects
@@ -18,27 +19,22 @@ try {
   // expo-video not installed
 }
 
-/**
- * Inner component — only mounts after the user taps play.
- * Keeping useVideoPlayer + VideoView inside a child that mounts on-demand
- * prevents AVAsset from loading synchronously at render time, which was the
- * cause of FigApplicationStateMonitor err=-19431 and the "isPlayable accessed
- * synchronously before being loaded" warning on iOS.
- */
+function formatDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 function VideoPlayerContent({ uri }: { uri: string }) {
   const player = useVideoPlayer(uri, (p: any) => {
     p.loop = false;
-    // Start playing as soon as the player is configured
     p.play();
   });
 
   const handleTap = () => {
     try {
-      if (player.playing) {
-        player.pause();
-      } else {
-        player.play();
-      }
+      if (player.playing) player.pause();
+      else player.play();
     } catch { /* ignore */ }
   };
 
@@ -55,14 +51,22 @@ function VideoPlayerContent({ uri }: { uri: string }) {
   );
 }
 
-function NativeVideoPlayer({ uri }: { uri: string }) {
+function NativeVideoPlayer({ uri, duration }: { uri: string; duration?: number }) {
   const [tapped, setTapped] = useState(false);
 
   if (!VideoView || !useVideoPlayer) {
     return (
-      <View style={styles.fallback}>
-        <VideoIcon size={32} color="#9CA3AF" />
-        <Text style={styles.fallbackText}>Video</Text>
+      <View style={styles.videoContainer}>
+        <View style={styles.playOverlay}>
+          <View style={styles.playButton}>
+            <Play size={28} color="#FFFFFF" fill="#FFFFFF" />
+          </View>
+        </View>
+        {duration != null && (
+          <View style={styles.durationBadge}>
+            <Text style={styles.durationText}>{formatDuration(duration)}</Text>
+          </View>
+        )}
       </View>
     );
   }
@@ -72,51 +76,87 @@ function NativeVideoPlayer({ uri }: { uri: string }) {
       {tapped ? (
         <VideoPlayerContent uri={uri} />
       ) : (
-        <TouchableOpacity style={styles.playOverlay} onPress={() => setTapped(true)} activeOpacity={0.8}>
-          <View style={styles.playButton}>
-            <Play size={28} color="#FFFFFF" fill="#FFFFFF" />
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          onPress={() => setTapped(true)}
+          activeOpacity={1}
+        >
+          <View style={styles.playOverlay}>
+            <View style={styles.playButton}>
+              <Play size={28} color="#FFFFFF" fill="#FFFFFF" />
+            </View>
           </View>
+          {duration != null && (
+            <View style={styles.durationBadge}>
+              <Text style={styles.durationText}>{formatDuration(duration)}</Text>
+            </View>
+          )}
         </TouchableOpacity>
       )}
     </View>
   );
 }
 
-function WebVideoPlayer({ uri }: { uri: string }) {
+function WebVideoPlayer({ uri, duration }: { uri: string; duration?: number }) {
+  const [tapped, setTapped] = useState(false);
+
+  if (!tapped) {
+    return (
+      <View style={styles.videoContainer}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFillObject}
+          onPress={() => setTapped(true)}
+          activeOpacity={1}
+        >
+          <View style={styles.playOverlay}>
+            <View style={styles.playButton}>
+              <Play size={28} color="#FFFFFF" fill="#FFFFFF" />
+            </View>
+          </View>
+          {duration != null && (
+            <View style={styles.durationBadge}>
+              <Text style={styles.durationText}>{formatDuration(duration)}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.webContainer}>
       {/* @ts-ignore — web-only element */}
       <video
         src={uri}
         controls
+        autoPlay
         preload="metadata"
-        style={{ width: '100%', maxHeight: 240, borderRadius: 8, objectFit: 'contain' }}
+        style={{ width: '100%', maxHeight: 180, borderRadius: 8, objectFit: 'contain' }}
       />
     </View>
   );
 }
 
-export default function VideoMessage({ uri, isOwn }: Props) {
+export default function VideoMessage({ uri, duration }: Props) {
   if (Platform.OS === 'web') {
-    return <WebVideoPlayer uri={uri} />;
+    return <WebVideoPlayer uri={uri} duration={duration} />;
   }
-  return <NativeVideoPlayer uri={uri} />;
+  return <NativeVideoPlayer uri={uri} duration={duration} />;
 }
 
 const styles = StyleSheet.create({
   videoContainer: {
     width: 240,
-    height: 180,
-    borderRadius: 8,
+    height: 160,
+    borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#000',
-    position: 'relative',
+    backgroundColor: '#1a1a1a',
   },
   webContainer: {
     width: 240,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#000',
+    backgroundColor: '#1a1a1a',
   },
   video: {
     width: '100%',
@@ -135,18 +175,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.8)',
   },
-  fallback: {
-    width: 240,
-    height: 180,
-    borderRadius: 8,
-    backgroundColor: '#1F2937',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+  durationBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
   },
-  fallbackText: {
-    color: '#9CA3AF',
-    fontSize: 14,
+  durationText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600' as const,
   },
 });

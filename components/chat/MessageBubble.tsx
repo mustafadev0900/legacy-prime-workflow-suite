@@ -249,7 +249,7 @@ function BubbleContent({
       );
 
     case 'video':
-      return <VideoMessage uri={message.content || ''} isOwn={isOwn} />;
+      return <VideoMessage uri={message.content || ''} isOwn={isOwn} duration={message.duration} />;
 
     case 'file': {
       const url = message.content;
