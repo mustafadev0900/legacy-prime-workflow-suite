@@ -37,7 +37,7 @@ import { Image } from 'expo-image';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useApp } from '@/contexts/AppContext';
 import { ChatMessage } from '@/types';
 import GlobalAIChat from '@/components/GlobalAIChatSimple';
@@ -695,7 +695,7 @@ export default function ChatScreen() {
       console.log('[uploadToS3] uploading', localUri, mimeType);
       const uploadResult = await FileSystem.uploadAsync(urlResult.uploadUrl, localUri, {
         httpMethod: 'PUT',
-        uploadType: 1 as any, // FileSystemUploadType.BINARY_CONTENT — enum not exported in expo-file-system v19
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
         headers: { 'Content-Type': mimeType },
       });
       console.log('[uploadToS3] result status:', uploadResult.status);
