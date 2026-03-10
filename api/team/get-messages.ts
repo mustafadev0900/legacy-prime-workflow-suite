@@ -76,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         )
       `)
       .eq('conversation_id', conversationId)
-      .eq('is_deleted', false)
+      .or('is_deleted.eq.false,is_deleted.is.null')
       .order('created_at', { ascending: true });
 
     if (messagesError) {

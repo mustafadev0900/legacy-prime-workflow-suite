@@ -82,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from('messages')
           .select('content, type, created_at, sender_id')
           .eq('conversation_id', conv.id)
-          .eq('is_deleted', false)
+          .or('is_deleted.eq.false,is_deleted.is.null')
           .order('created_at', { ascending: false })
           .limit(1)
           .single();

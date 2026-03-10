@@ -8,7 +8,7 @@ import {
   LayoutChangeEvent,
   ActivityIndicator,
 } from 'react-native';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Play, Pause, AlertCircle } from 'lucide-react-native';
 import { Audio } from 'expo-av';
 
@@ -107,75 +107,67 @@ export default function AudioPlayer({
     }
   };
 
-  // ─── Load / cache sound ───────────────────────────────────────────────────
-  useEffect(() => {
-    mountedRef.current = true;
-
+  // ─── Load / cache sound (also used by retry) ─────────────────────────────
+  const loadSound = useCallback(async () => {
     if (Platform.OS === 'web' || isUnsupportedOnIOS(uri)) {
       if (isUnsupportedOnIOS(uri)) setFormatError(true);
       setLoadState('ready');
-      return () => { mountedRef.current = false; };
+      return;
     }
 
-    const attach = async () => {
-      await ensureAudioMode();
+    setLoadState('loading');
+    await ensureAudioMode();
 
-      // ── Cache hit ─────────────────────────────────────────────────────────
-      const cached = soundCache.get(uri);
-      if (cached) {
-        try {
-          const status = await cached.getStatusAsync();
-          if (status.isLoaded) {
-            // Re-attach callback so this instance gets position updates
-            cached.setOnPlaybackStatusUpdate(makeStatusHandler(cached));
-            soundRef.current = cached;
-            if (status.durationMillis) setTotalSec(status.durationMillis / 1000);
-            setPositionSec((status.positionMillis || 0) / 1000);
-            if (mountedRef.current) setLoadState('ready');
-            return;
-          }
-        } catch { /* fall through to reload */ }
-        // Cached sound became invalid — remove and reload
-        soundCache.delete(uri);
-        await cached.unloadAsync().catch(() => {});
-      }
-
-      // ── Cache miss — load from network ────────────────────────────────────
+    // ── Cache hit ───────────────────────────────────────────────────────────
+    const cached = soundCache.get(uri);
+    if (cached) {
       try {
-        evictIfNeeded();
-        const { sound } = await Audio.Sound.createAsync(
-          { uri },
-          { shouldPlay: false, progressUpdateIntervalMillis: 250 },
-          // Status handler set via makeStatusHandler below after we have ref
-          undefined
-        );
-
-        sound.setOnPlaybackStatusUpdate(makeStatusHandler(sound));
-        soundCache.set(uri, sound);
-
-        if (!mountedRef.current) {
-          // Component unmounted while loading — leave in cache, don't reference
+        const status = await cached.getStatusAsync();
+        if (status.isLoaded) {
+          cached.setOnPlaybackStatusUpdate(makeStatusHandler(cached));
+          soundRef.current = cached;
+          if (status.durationMillis) setTotalSec(status.durationMillis / 1000);
+          setPositionSec((status.positionMillis || 0) / 1000);
+          if (mountedRef.current) setLoadState('ready');
           return;
         }
+      } catch { /* fall through to reload */ }
+      soundCache.delete(uri);
+      await cached.unloadAsync().catch(() => {});
+    }
 
-        soundRef.current = sound;
-        setLoadState('ready');
-      } catch (e: any) {
-        if (!mountedRef.current) return;
-        console.warn('[AudioPlayer] load error:', e?.message || e);
-        if (String(e?.message).includes('format') || String(e?.message).includes('supported')) {
-          setFormatError(true);
-        }
-        setLoadState('error');
+    // ── Cache miss — load from network ──────────────────────────────────────
+    try {
+      evictIfNeeded();
+      const { sound } = await Audio.Sound.createAsync(
+        { uri },
+        { shouldPlay: false, progressUpdateIntervalMillis: 250 },
+        undefined
+      );
+
+      sound.setOnPlaybackStatusUpdate(makeStatusHandler(sound));
+      soundCache.set(uri, sound);
+
+      if (!mountedRef.current) return;
+
+      soundRef.current = sound;
+      setLoadState('ready');
+    } catch (e: any) {
+      if (!mountedRef.current) return;
+      console.warn('[AudioPlayer] load error:', e?.message || e);
+      if (String(e?.message).includes('format') || String(e?.message).includes('supported')) {
+        setFormatError(true);
       }
-    };
+      setLoadState('error');
+    }
+  }, [uri]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    attach();
-
+  useEffect(() => {
+    mountedRef.current = true;
+    loadSound();
     return () => {
       mountedRef.current = false;
       // ⚠️ Do NOT unload — sound stays in soundCache across navigation.
-      // Just drop the component's reference; cache owns the Sound object.
       soundRef.current = null;
     };
   }, [uri]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -295,13 +287,26 @@ export default function AudioPlayer({
 
   const effectiveTotal = totalSec > 0 ? totalSec : duration || 1;
 
-  if (formatError) {
+  if (formatError || loadState === 'error') {
+    const errColor = isOwn ? '#6B7280' : 'rgba(255,255,255,0.7)';
     return (
       <View style={styles.errorContainer}>
-        <AlertCircle size={14} color={isOwn ? '#6B7280' : 'rgba(255,255,255,0.7)'} />
-        <Text style={[styles.errorText, { color: isOwn ? '#6B7280' : 'rgba(255,255,255,0.7)' }]}>
-          Audio not supported on this device
+        <AlertCircle size={14} color={errColor} />
+        <Text style={[styles.errorText, { color: errColor }]}>
+          {formatError ? 'Audio not supported on this device' : 'Failed to load audio'}
         </Text>
+        {loadState === 'error' && !formatError && (
+          <TouchableOpacity
+            onPress={() => {
+              setPositionSec(0);
+              loadSound();
+            }}
+            style={styles.retryBtn}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.retryText, { color: errColor }]}>Retry</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -392,9 +397,20 @@ const styles = StyleSheet.create({
     gap: 6,
     minWidth: 180,
     paddingVertical: 4,
+    flexWrap: 'wrap',
   },
   errorText: {
     fontSize: 12,
     fontStyle: 'italic',
+    flex: 1,
+  },
+  retryBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  retryText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    textDecorationLine: 'underline',
   },
 });

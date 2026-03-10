@@ -143,6 +143,8 @@ PODS:
     - ExpoModulesCore
   - ExpoSystemUI (6.0.8):
     - ExpoModulesCore
+  - ExpoVideo (3.0.16):
+    - ExpoModulesCore
   - ExpoWebBrowser (15.0.9):
     - ExpoModulesCore
   - FBLazyVector (0.81.5)
@@ -1514,6 +1516,51 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - react-native-slider (5.0.1):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - react-native-slider/common (= 5.0.1)
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - react-native-slider/common (5.0.1):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - React-NativeModulesApple (0.81.5):
     - hermes-engine
     - React-callinvoker
@@ -2305,6 +2352,7 @@ DEPENDENCIES:
   - ExpoSplashScreen (from `../node_modules/expo-splash-screen/ios`)
   - ExpoSymbols (from `../node_modules/expo-symbols/ios`)
   - ExpoSystemUI (from `../node_modules/expo-system-ui/ios`)
+  - ExpoVideo (from `../node_modules/expo-video/ios`)
   - ExpoWebBrowser (from `../node_modules/expo-web-browser/ios`)
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
@@ -2343,6 +2391,7 @@ DEPENDENCIES:
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
+  - "react-native-slider (from `../node_modules/@react-native-community/slider`)"
   - React-NativeModulesApple (from `../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios`)
   - React-oscompat (from `../node_modules/react-native/ReactCommon/oscompat`)
   - React-perflogger (from `../node_modules/react-native/ReactCommon/reactperflogger`)
@@ -2472,6 +2521,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/expo-symbols/ios"
   ExpoSystemUI:
     :path: "../node_modules/expo-system-ui/ios"
+  ExpoVideo:
+    :path: "../node_modules/expo-video/ios"
   ExpoWebBrowser:
     :path: "../node_modules/expo-web-browser/ios"
   FBLazyVector:
@@ -2547,6 +2598,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
   react-native-safe-area-context:
     :path: "../node_modules/react-native-safe-area-context"
+  react-native-slider:
+    :path: "../node_modules/@react-native-community/slider"
   React-NativeModulesApple:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios"
   React-oscompat:
@@ -2663,6 +2716,7 @@ SPEC CHECKSUMS:
   ExpoSplashScreen: cbb839de72110dea1851dd3e85080b7923af2540
   ExpoSymbols: 1ae04ce686de719b9720453b988d8bc5bf776c68
   ExpoSystemUI: 2761aa6875849af83286364811d46e8ed8ea64c7
+  ExpoVideo: 8d9e8a1acd0c4c210e538b4355e34ae8ff5e04f7
   ExpoWebBrowser: b973e1351fdcf5fec0c400997b1851f5a8219ec3
   FBLazyVector: e95a291ad2dadb88e42b06e0c5fb8262de53ec12
   hermes-engine: 9f4dfe93326146a1c99eb535b1cb0b857a3cd172
@@ -2703,6 +2757,7 @@ SPEC CHECKSUMS:
   React-Mapbuffer: 9050ee10c19f4f7fca8963d0211b2854d624973e
   React-microtasksnativemodule: f775db9e991c6f3b8ccbc02bfcde22770f96e23b
   react-native-safe-area-context: 42a1b4f8774b577d03b53de7326e3d5757fe9513
+  react-native-slider: 8c562583722c396a3682f451f0b6e68e351ec3b9
   React-NativeModulesApple: 8969913947d5b576de4ed371a939455a8daf28aa
   React-oscompat: ce47230ed20185e91de62d8c6d139ae61763d09c
   React-perflogger: 02b010e665772c7dcb859d85d44c1bfc5ac7c0e4
