@@ -51,6 +51,30 @@ import AudioRecorder from '@/components/chat/AudioRecorder';
 
 type PreviewEntry = { text: string; timestamp: string; senderId: string; type?: string };
 
+// ─── Inline video preview (expo-video, lazy) ─────────────────────────────────
+let _VideoView: any = null;
+let _useVideoPlayer: any = null;
+try {
+  const ev = require('expo-video');
+  _VideoView = ev.VideoView;
+  _useVideoPlayer = ev.useVideoPlayer;
+} catch { /* not installed */ }
+
+function VideoPreviewPlayer({ uri }: { uri: string }) {
+  if (!_VideoView || !_useVideoPlayer) return null;
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const player = _useVideoPlayer(uri, (p: any) => { p.loop = true; p.play(); });
+  return (
+    <_VideoView
+      player={player}
+      style={{ flex: 1 }}
+      contentFit="contain"
+      allowsFullscreen={false}
+    />
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function ChatScreen() {
   const { t } = useTranslation();
   const { user, conversations, addConversation, addMessageToConversation, setUnreadChatCount } =
@@ -1500,10 +1524,20 @@ export default function ChatScreen() {
             )}
           </View>
 
-          {/* Video preview area */}
+          {/* Video preview area — plays the local file with expo-video */}
           <View style={styles.videoPreviewContent}>
-            <VideoIcon size={64} color="rgba(255,255,255,0.3)" />
-            <Text style={styles.videoPreviewReadyText}>Video ready to send</Text>
+            {previewVideo && Platform.OS !== 'web' ? (
+              <VideoPreviewPlayer uri={previewVideo.uri} />
+            ) : previewVideo && Platform.OS === 'web' ? (
+              /* @ts-ignore web-only */
+              <video
+                src={previewVideo.uri}
+                autoPlay
+                loop
+                muted
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              />
+            ) : null}
           </View>
 
           {/* Bottom bar */}
@@ -1828,10 +1862,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF', fontSize: 13, fontWeight: '600' as const,
   },
   videoPreviewContent: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16,
-  },
-  videoPreviewReadyText: {
-    color: 'rgba(255,255,255,0.55)', fontSize: 15,
+    flex: 1,
   },
   videoPreviewBottomBar: {
     flexDirection: 'row', justifyContent: 'flex-end',
