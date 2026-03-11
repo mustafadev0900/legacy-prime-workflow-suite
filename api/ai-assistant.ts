@@ -4033,6 +4033,20 @@ Based on the store and items, intelligently categorize this expense:
 
           const { data, error } = await q;
           if (!error && data) {
+            // Merge lunch break data from appData (frontend local state) into DB rows.
+            // lunch_breaks may be null in DB if the employee started lunch before the
+            // /api/update-lunch-break endpoint existed, or before it had time to persist.
+            // appData.clockEntries always reflects real-time local state.
+            const appDataLunchMap: Record<string, any[]> = {};
+            (appData.clockEntries || []).forEach((e: any) => {
+              if (e.lunchBreaks?.length) appDataLunchMap[e.id] = e.lunchBreaks;
+            });
+            data.forEach((row: any) => {
+              if ((!row.lunch_breaks || row.lunch_breaks.length === 0) && appDataLunchMap[row.id]) {
+                row.lunch_breaks = appDataLunchMap[row.id];
+              }
+            });
+
             // Resolve names from DB — never trust stale appData maps for identity
             const usersMap: Record<string, string> = {};
             const projectsMap: Record<string, string> = {};
