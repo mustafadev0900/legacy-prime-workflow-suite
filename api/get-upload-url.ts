@@ -70,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ContentType: fileType,
     });
 
-    const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 300 }); // 5 minutes
+    const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 900 }); // 15 minutes
 
     // Generate the final public URL
     const publicUrl = `https://${AWS_S3_BUCKET}.s3.${AWS_REGION}.amazonaws.com/${uniqueFileName}`;
