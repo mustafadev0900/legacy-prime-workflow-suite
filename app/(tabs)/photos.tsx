@@ -11,7 +11,8 @@ import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { supabase } from '@/lib/supabase';
 
 export default function PhotosScreen() {
-  const { photos, addPhoto, updatePhoto, photoCategories, priceListCategories, addPhotoCategory, updatePhotoCategory, deletePhotoCategory, company, projects, refreshPhotos, isLoading, isCompanyReloading } = useApp();
+  const { user, photos, addPhoto, updatePhoto, photoCategories, priceListCategories, addPhotoCategory, updatePhotoCategory, deletePhotoCategory, company, projects, refreshPhotos, isLoading, isCompanyReloading } = useApp();
+  const isEmployee = user?.role === 'employee' || user?.role === 'field-employee';
 
   // Merge price-list categories with photo-specific categories (deduped, price list first).
   const allCategories = useMemo(() => {
@@ -821,9 +822,11 @@ export default function PhotosScreen() {
                   >
                     <View style={styles.projectOptionContent}>
                       <Text style={styles.projectOptionName}>{project.name}</Text>
-                      <Text style={styles.projectOptionBudget}>
-                        Budget: ${project.budget.toLocaleString()}
-                      </Text>
+                      {!isEmployee && (
+                        <Text style={styles.projectOptionBudget}>
+                          Budget: ${project.budget.toLocaleString()}
+                        </Text>
+                      )}
                     </View>
                     {selectedProjectId === project.id && (
                       <Check size={20} color="#2563EB" />
