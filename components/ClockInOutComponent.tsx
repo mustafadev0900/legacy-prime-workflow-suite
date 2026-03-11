@@ -1,6 +1,12 @@
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Modal, Alert, Platform } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
+
+// Always renders as "9:05 AM" / "1:30 PM" — no seconds, no locale variance
+function formatTime(isoOrDate: string | Date): string {
+  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
 import { Clock, CheckCircle, Coffee, FileText, Calendar, MapPin } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
@@ -41,6 +47,14 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
   const [clockInCategory, setClockInCategory] = useState<string>('');
   const [clockInDescription, setClockInDescription] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  // Ticker to keep elapsed hours / earnings live-updating every 30 s
+  const [, setTick] = useState(0);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    tickRef.current = setInterval(() => setTick(t => t + 1), 30_000);
+    return () => { if (tickRef.current) clearInterval(tickRef.current); };
+  }, []);
 
   useEffect(() => {
     requestLocationPermission();
@@ -148,7 +162,7 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
       const savedEntry = await addClockEntry(entry);
       // Update currentEntry with the database ID
       setCurrentEntry(savedEntry);
-      console.log(`[Clock In] ${user.name} clocked in to ${projectName} at ${new Date().toLocaleTimeString()}`);
+      console.log(`[Clock In] ${user.name} clocked in to ${projectName} at ${formatTime(new Date())}`);
       console.log(`[Clock In] Category: ${categoryForLog}`);
       console.log(`[Clock In] Description: ${descriptionForLog || 'N/A'}`);
       console.log(`[Clock In] Entry ID: ${savedEntry.id}`);
@@ -268,7 +282,7 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
       lunchBreaks: updatedLunchBreaks,
     });
     
-    console.log(`[Lunch] ${user?.name} started lunch break at ${new Date().toLocaleTimeString()}`);
+    console.log(`[Lunch] ${user?.name} started lunch break at ${formatTime(new Date())}`);
     Alert.alert('Lunch Break', 'Lunch break started. Time won\'t count towards payroll.');
   };
 
@@ -297,7 +311,7 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
     const lunchEnd = new Date(updatedLunchBreaks[activeLunchIndex].endTime!);
     const lunchDuration = ((lunchEnd.getTime() - lunchStart.getTime()) / (1000 * 60)).toFixed(0);
     
-    console.log(`[Lunch] ${user?.name} ended lunch break at ${new Date().toLocaleTimeString()}`);
+    console.log(`[Lunch] ${user?.name} ended lunch break at ${formatTime(new Date())}`);
     console.log(`[Lunch] Duration: ${lunchDuration} minutes`);
     Alert.alert('Back to Work', `Lunch break ended. Duration: ${lunchDuration} minutes`);
   };
@@ -497,7 +511,7 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
               <Text style={styles.activeText}>Active Session</Text>
             </View>
             <Text style={styles.clockedInTime}>
-              Clocked in: {new Date(currentEntry.clockIn).toLocaleTimeString()}
+              Clocked in: {formatTime(currentEntry.clockIn)}
             </Text>
             {currentEntry.category && (
               <Text style={styles.categoryBadge}>{currentEntry.category}</Text>
@@ -609,7 +623,7 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
             </View>
             <Text style={styles.activeTime}>{calculateCurrentHours().toFixed(2)}h</Text>
           </View>
-          <Text style={styles.clockedInTime}>Started: {new Date(currentEntry.clockIn).toLocaleTimeString()}</Text>
+          <Text style={styles.clockedInTime}>Started: {formatTime(currentEntry.clockIn)}</Text>
           {currentEntry.category && (
             <View style={styles.activeInfoRow}>
               <Text style={styles.activeInfoLabel}>Category:</Text>
@@ -696,21 +710,26 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
           todayEntries.map((entry) => {
             const start = new Date(entry.clockIn);
             const end = entry.clockOut ? new Date(entry.clockOut) : null;
-            const hours = end ? (end.getTime() - start.getTime()) / (1000 * 60 * 60) : 0;
 
-            const lunchMinutes = entry.lunchBreaks?.reduce((sum, lunch) => {
+            const lunchMs = entry.lunchBreaks?.reduce((sum, lunch) => {
               const lunchStart = new Date(lunch.startTime).getTime();
               const lunchEnd = lunch.endTime ? new Date(lunch.endTime).getTime() : new Date().getTime();
-              return sum + (lunchEnd - lunchStart) / (1000 * 60);
+              return sum + (lunchEnd - lunchStart);
             }, 0) || 0;
+            const lunchMinutes = lunchMs / (1000 * 60);
+
+            // Net hours = gross − lunch
+            const netHours = end
+              ? (end.getTime() - start.getTime() - lunchMs) / (1000 * 60 * 60)
+              : 0;
 
             return (
               <View key={entry.id} style={styles.historyEntry}>
                 <View style={styles.historyTime}>
                   <Text style={styles.historyTimeText}>
-                    {start.toLocaleTimeString()} - {end ? end.toLocaleTimeString() : 'Active'}
+                    {formatTime(start)} - {end ? formatTime(end) : 'Active'}
                   </Text>
-                  {entry.clockOut && <Text style={styles.historyHours}>{hours.toFixed(2)}h</Text>}
+                  {entry.clockOut && <Text style={styles.historyHours}>{netHours.toFixed(2)}h</Text>}
                 </View>
                 {entry.category && <Text style={styles.historyCategory}>{entry.category}</Text>}
                 {lunchMinutes > 0 && (
