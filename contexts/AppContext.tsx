@@ -1606,12 +1606,17 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     if (updates.lunchBreaks && !updates.clockOut) {
       try {
         const apiUrl = getApiBaseUrl();
-        await fetch(`${apiUrl}/api/update-lunch-break`, {
+        const resp = await fetch(`${apiUrl}/api/update-lunch-break`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ entryId: id, lunchBreaks: updates.lunchBreaks }),
         });
-        console.log('[App] Lunch break saved to DB for entry:', id);
+        const result = await resp.json();
+        if (!resp.ok) {
+          console.error('[App] Failed to persist lunch break to DB:', result.error);
+        } else {
+          console.log('[App] Lunch break saved to DB for entry:', id, 'breaks:', result.lunchBreaks);
+        }
       } catch (err) {
         console.warn('[App] Failed to persist lunch break to DB (non-fatal):', err);
       }
