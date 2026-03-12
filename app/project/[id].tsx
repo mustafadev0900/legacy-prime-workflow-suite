@@ -141,10 +141,10 @@ export default function ProjectDetailScreen() {
   // Removed - budgetRemaining and budgetUsedPercentage are now calculated after adjustedProjectTotal and totalJobCost
   
   const daysElapsed = useMemo(() => {
-    if (!project) return 0;
-    const start = new Date(project.startDate);
-    const now = new Date();
-    return Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+    if (!project?.startDate) return 0;
+    const startMs = new Date(project.startDate).getTime();
+    if (isNaN(startMs)) return 0;
+    return Math.max(0, Math.floor((Date.now() - startMs) / (1000 * 60 * 60 * 24)));
   }, [project]);
 
   const projectExpenses = useMemo(() => {
@@ -432,13 +432,18 @@ export default function ProjectDetailScreen() {
 
   const totalLaborHours = useMemo(() => {
     return projectClockEntries.reduce((sum, entry) => {
-      if (!entry.clockOut) return sum;
-      let totalMs = new Date(entry.clockOut).getTime() - new Date(entry.clockIn).getTime();
+      if (!entry.clockOut || !entry.clockIn) return sum;
+      const clockInMs = new Date(entry.clockIn).getTime();
+      const clockOutMs = new Date(entry.clockOut).getTime();
+      if (isNaN(clockInMs) || isNaN(clockOutMs)) return sum;
+      let totalMs = clockOutMs - clockInMs;
       if (entry.lunchBreaks) {
         entry.lunchBreaks.forEach(lunch => {
           const lunchStart = new Date(lunch.startTime).getTime();
-          const lunchEnd = lunch.endTime ? new Date(lunch.endTime).getTime() : new Date(entry.clockOut!).getTime();
-          totalMs -= (lunchEnd - lunchStart);
+          const lunchEnd = lunch.endTime ? new Date(lunch.endTime).getTime() : clockOutMs;
+          if (!isNaN(lunchStart) && !isNaN(lunchEnd)) {
+            totalMs -= (lunchEnd - lunchStart);
+          }
         });
       }
       return sum + Math.max(0, totalMs / (1000 * 60 * 60));
@@ -446,7 +451,8 @@ export default function ProjectDetailScreen() {
   }, [projectClockEntries]);
 
   const laborHoursCost = useMemo(() => {
-    if (totalLaborHours === 0) return 0;
+    if (!totalLaborHours || !isFinite(totalLaborHours)) return 0;
+    if (!totalLaborCost || !isFinite(totalLaborCost)) return 0;
     return totalLaborCost / totalLaborHours;
   }, [totalLaborCost, totalLaborHours]);
 
@@ -2724,9 +2730,11 @@ export default function ProjectDetailScreen() {
 
             const totalExpenses = projectExpenses.reduce((sum, e) => sum + e.amount, 0);
             const totalLaborHours = projectClockEntries.reduce((sum, entry) => {
-              if (!entry.clockOut) return sum;
-              const hours = (new Date(entry.clockOut).getTime() - new Date(entry.clockIn).getTime()) / (1000 * 60 * 60);
-              return sum + hours;
+              if (!entry.clockOut || !entry.clockIn) return sum;
+              const inMs = new Date(entry.clockIn).getTime();
+              const outMs = new Date(entry.clockOut).getTime();
+              if (isNaN(inMs) || isNaN(outMs)) return sum;
+              return sum + Math.max(0, (outMs - inMs) / (1000 * 60 * 60));
             }, 0);
 
             const projectData: ProjectReportData = {
