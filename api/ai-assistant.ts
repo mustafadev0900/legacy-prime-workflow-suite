@@ -4127,16 +4127,24 @@ Based on the store and items, intelligently categorize this expense:
           const { data, error } = await q;
           if (!error && data) {
             // Merge lunch break data from appData (frontend local state) into DB rows.
-            // lunch_breaks may be null in DB if the employee started lunch before the
-            // /api/update-lunch-break endpoint existed, or before it had time to persist.
-            // appData.clockEntries always reflects real-time local state.
+            // appData.clockEntries is the source of truth for real-time lunch state because:
+            // 1. The DB write may still be in flight (optimistic UI)
+            // 2. The DB may only have older completed breaks, missing the newly started one
             const appDataLunchMap: Record<string, any[]> = {};
             (appData.clockEntries || []).forEach((e: any) => {
               if (e.lunchBreaks?.length) appDataLunchMap[e.id] = e.lunchBreaks;
             });
             data.forEach((row: any) => {
-              if ((!row.lunch_breaks || row.lunch_breaks.length === 0) && appDataLunchMap[row.id]) {
-                row.lunch_breaks = appDataLunchMap[row.id];
+              const appBreaks = appDataLunchMap[row.id];
+              if (!appBreaks) return;
+              const dbBreaks: any[] = Array.isArray(row.lunch_breaks) ? row.lunch_breaks : [];
+              const dbHasActiveLunch = dbBreaks.some((lb: any) => lb.startTime && !lb.endTime);
+              const appHasActiveLunch = appBreaks.some((lb: any) => lb.startTime && !lb.endTime);
+              // Use appData whenever:
+              // - DB has no data at all, OR
+              // - appData shows an active lunch that the DB doesn't yet reflect
+              if (dbBreaks.length === 0 || (!dbHasActiveLunch && appHasActiveLunch)) {
+                row.lunch_breaks = appBreaks;
               }
             });
 
@@ -4251,7 +4259,9 @@ Based on the store and items, intelligently categorize this expense:
       const { clockEntries = [], users = [] } = appData;
       let filtered = clockEntries;
       const today = new Date().toISOString().split('T')[0];
-      const filterDate = args.date === 'today' ? today : args.date;
+      // Handle both dateRange and legacy date param
+      const isToday = args.dateRange === 'today' || args.date === 'today';
+      const filterDate = isToday ? today : (args.dateRange ? null : args.date);
       if (filterDate) {
         filtered = filtered.filter((entry: any) => {
           const entryDate = entry.clockIn?.split('T')[0];
