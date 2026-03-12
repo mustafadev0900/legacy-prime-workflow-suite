@@ -10,6 +10,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Audio } from 'expo-av';
 import { usePathname, useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
+import { usePermissions } from '@/hooks/usePermissions';
 // Removed tRPC dependency - using OpenAI API directly
 // priceListItems now comes from AppContext
 import { sendEstimate } from '@/utils/sendEstimate';
@@ -153,7 +154,10 @@ function useOpenAIChat(appData: {
   proposals: any[];
   dailyTasks: any[];
   updateClient?: (clientId: string, updates: any) => Promise<void>;
-  userId?: string; // User ID for persistent chat history
+  userId?: string;
+  userName?: string;
+  userRole?: string;
+  customPermissions?: Record<string, boolean>; // Per-user feature overrides set by admin
   currentPageContext?: string | null; // Current page context for "this project" etc.
 }) {
   const [messages, setMessages] = useState<any[]>([]);
@@ -262,6 +266,9 @@ function useOpenAIChat(appData: {
           pageContext: appData.currentPageContext || null,
           companyId: appData.company?.id,
           userId: appData.userId,
+          userName: appData.userName,
+          userRole: appData.userRole,
+          customPermissions: appData.customPermissions,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           appData: {
             projects: appData.projects,
@@ -638,6 +645,7 @@ export default function GlobalAIChatSimple({ currentPageContext, inline = false 
   const isOnChatScreen = pathname === '/chat';
   const isOnAuthScreen = pathname?.includes('/login') || pathname?.includes('/subscription') || pathname?.includes('/signup');
   const { user } = useApp();
+  const { hasFeatureAccess, shouldBlockChatbotQuery } = usePermissions();
 
   const {
     projects,
@@ -720,10 +728,13 @@ export default function GlobalAIChatSimple({ currentPageContext, inline = false 
     changeOrders,
     subcontractors,
     callLogs,
-    users: [], // TODO: Add users from AppContext when available
+    users: [],
     proposals,
     dailyTasks: dailyTasks || [],
-    userId: user?.id, // User ID for persistent chat history
+    userId: user?.id,
+    userName: user?.name,
+    userRole: user?.role,
+    customPermissions: user?.customPermissions,
     currentPageContext, // Pass page context from component prop
   });
 
@@ -3196,6 +3207,37 @@ Generate appropriate line items from the price list that fit this scope of work$
 
   const handleSend = async (speakResponse = false) => {
     if (!input.trim() && attachedFiles.length === 0) return;
+
+    // --- Permission check (client-side fast path) ---
+    if (!hasFeatureAccess('chatbot')) {
+      addMessage({
+        id: Date.now().toString(),
+        role: 'assistant',
+        text: "You don't have access to the AI assistant. Contact your admin to enable it.",
+        parts: [{ type: 'text', text: "You don't have access to the AI assistant. Contact your admin to enable it." }],
+      });
+      return;
+    }
+    const queryText = input.trim();
+    if (queryText) {
+      const { shouldBlock, reason } = shouldBlockChatbotQuery(queryText);
+      if (shouldBlock && reason) {
+        addMessage({
+          id: Date.now().toString(),
+          role: 'user',
+          text: queryText,
+          parts: [{ type: 'text', text: queryText }],
+        });
+        addMessage({
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          text: reason,
+          parts: [{ type: 'text', text: reason }],
+        });
+        setInput('');
+        return;
+      }
+    }
 
     const hasImages = attachedFiles.some(f => f.mimeType.startsWith('image/'));
     const hasPDFs = attachedFiles.some(f => f.mimeType === 'application/pdf');

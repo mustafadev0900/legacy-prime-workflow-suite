@@ -2111,7 +2111,7 @@ const priceListCategories = [
 ];
 
 // System prompt for dual-purpose assistant with knowledge base rules
-const systemPrompt = `You are Legacy AI, the AI assistant for Legacy Prime Construction's workflow management platform.
+const systemPrompt = `You are Legacy AI, the AI assistant for a construction and contractor management platform.
 
 ## CRITICAL RULES (MUST FOLLOW)
 
@@ -2298,10 +2298,21 @@ AI: "✓ Expense added to home office (Claudia's project)"
 
 You have **direct, real-time access** to the company database through your query tools. This is not a cached snapshot — every query tool fetches live records from the database at the moment you call it.
 
+### REAL-TIME DATA REQUIREMENT — This is critical:
+All query tools hit the live database on every call. This means the data is always current — not a cached snapshot.
+- A project created 1 minute ago will appear in query_projects results
+- An expense just entered will appear in query_expenses results
+- An employee who just clocked in will appear in query_clock_entries results
+- A task that was just updated reflects its current status in query_tasks results
+
+**NEVER guess or infer data from conversation history. ALWAYS call the appropriate query tool to get current facts.**
+
 ### When to ALWAYS call a query tool first (NEVER answer from memory):
 - Any question about current state: who is clocked in, what happened today, this week's expenses, pending tasks
 - Any factual question about records: total hours, expense amounts, project status, who uploaded photos
 - Any time-based question: "today", "this week", "this month", "this year", or a specific date
+- Any count question: "how many projects", "total expenses", "how many employees clocked in"
+- Any status question: "is X complete?", "what's the balance?", "are there pending items?"
 
 ### Date range values for query tools:
 - **"today"** → today's records only
@@ -2329,22 +2340,29 @@ You have **direct, real-time access** to the company database through your query
 - "Is anyone on lunch?" or "Who is on lunch?" → call query_clock_entries with dateRange: "today", check currentlyOnLunch in result — each entry has employee, project, lunchStartedAt, status: "On Lunch Break"
 - "What is [employee] doing?" → call query_clock_entries with dateRange: "today" + employeeName, then check their entry status field: "Currently Working", "On Lunch Break", or "Completed"
 - "What is scheduled this week?" → call query_schedule with dateRange: "this_week"
+- "What estimates do we have for client X?" → call query_estimates with clientName: "X"
+- "What estimates are approved?" → call query_estimates with status: "approved"
+- "What tasks do I have today?" → call query_daily_tasks with filter: "today"
+- "What is overdue?" → call query_daily_tasks with filter: "overdue"
+- "How many proposals are pending?" → call query_proposals with status: "submitted"
 
 ### Data sources you can query:
 - query_clock_entries — time tracking, who clocked in/out, hours worked, lunch breaks. Result includes: currentlyClockedIn (working now), currentlyOnLunch (on active lunch break), entries[].status ("Currently Working" | "On Lunch Break" | "Completed"), entries[].lunchBreaks[].startTime (local time), entries[].lunchBreaks[].endTime (local time or null if still on lunch), entries[].lunchBreaks[].durationMinutes (null if still on lunch), entries[].lunchBreaks[].active. ALWAYS show startTime and endTime from lunchBreaks — never say times are "unknown" if the data is present.
-- query_expenses — expenses by project, date, category
-- query_projects — project list, status, budgets
-- query_clients — CRM, customer information
-- query_tasks — project tasks, pending items
-- query_photos — photos by project, category, uploader
-- query_daily_logs — daily work logs, notes, issues
-- query_change_orders — change orders by status, project
-- query_subcontractors — subcontractor list, availability
-- query_team_members — employees, roles, rates
-- query_payments — payments received, revenue
-- query_call_logs — incoming call logs from AI receptionist
-- query_schedule — scheduled tasks and project phases
-- query_proposals — subcontractor proposals and bids
+- query_expenses — expenses by project, date, category. Fields: type, subcategory, amount, store, date, hasReceipt.
+- query_projects — project list, status (active/completed/on-hold/archived), budgets, start/end dates, address, contract amount.
+- query_clients — CRM: client name, email, phone, address, source (Google/Referral/etc), notes.
+- query_tasks — project tasks: title, status (pending/in-progress/completed), priority, assignee, due date, project.
+- query_photos — photos by project, category, uploader, date. Use to answer "how many photos on project X?" or "who took photos today?"
+- query_daily_logs — daily work logs: date, project, work performed, issues, weather, labor hours, materials used, notes, employee notes.
+- query_change_orders — change orders: description, amount, status (pending/approved/rejected), project.
+- query_subcontractors — subcontractor profiles: name, trade, phone, email, availability, notes.
+- query_team_members — employees/team: name, role (admin/employee/field-employee/salesperson), hourly rate, phone, email, active status.
+- query_payments — payments received: amount, method, date, project, client, notes.
+- query_call_logs — AI receptionist call logs: caller name, phone, message, date, assigned to.
+- query_schedule — scheduled tasks and project phases: task name, phase, start/end date, assigned employees, project.
+- query_proposals — subcontractor proposals/bids: subcontractor, amount, timeline, status (submitted/accepted/rejected), project.
+- query_estimates — estimates/quotes sent to clients: name, total amount, status (draft/sent/approved/rejected), line items, created date, client.
+- query_daily_tasks — personal to-do tasks: title, due date, due time, completed status, reminder. Filter by today/tomorrow/this_week/overdue/completed/pending.
 
 ## CLIENT MANAGEMENT
 
@@ -2830,19 +2848,112 @@ async function executeToolCall(
     }
 
     case 'query_estimates': {
+      // LIVE DB PATH — always fresh data from estimates table
+      if (supabase && companyId) {
+        try {
+          let q = supabase
+            .from('estimates')
+            .select('*')
+            .eq('company_id', companyId)
+            .order('created_date', { ascending: false })
+            .limit(200);
+
+          if (args.status) q = q.eq('status', args.status);
+
+          const { data, error } = await q;
+          if (!error && data) {
+            let dbEstimates = data.map((row: any) => ({
+              id: row.id,
+              name: row.name,
+              total: parseFloat(row.total) || 0,
+              subtotal: parseFloat(row.subtotal) || 0,
+              taxRate: parseFloat(row.tax_rate) || 0,
+              taxAmount: parseFloat(row.tax_amount) || 0,
+              status: row.status,
+              createdDate: row.created_date,
+              clientId: row.client_id,
+              items: row.items || [],
+            }));
+
+            let clientFoundDb: any = null;
+            if (args.clientName) {
+              clientFoundDb = clients.find((c: any) =>
+                c.name?.toLowerCase().includes(args.clientName.toLowerCase())
+              );
+              if (!clientFoundDb) {
+                // Try live DB client lookup
+                const { data: clientData } = await supabase
+                  .from('clients')
+                  .select('id, name')
+                  .eq('company_id', companyId)
+                  .ilike('name', `%${args.clientName}%`)
+                  .limit(1);
+                clientFoundDb = clientData?.[0] || null;
+              }
+              if (!clientFoundDb) {
+                return {
+                  result: {
+                    count: 0,
+                    estimates: [],
+                    message: `No client found matching "${args.clientName}". Please check the client name and try again.`,
+                  },
+                };
+              }
+              dbEstimates = dbEstimates.filter((e: any) => e.clientId === clientFoundDb.id);
+            }
+
+            if (args.projectId) {
+              dbEstimates = dbEstimates.filter((e: any) => e.projectId === args.projectId);
+            }
+
+            if (clientFoundDb && dbEstimates.length === 0) {
+              return {
+                result: {
+                  count: 0,
+                  estimates: [],
+                  clientName: clientFoundDb.name,
+                  message: `${clientFoundDb.name} doesn't have any estimates yet. Would you like me to create one?`,
+                },
+              };
+            }
+
+            const totalValue = dbEstimates.reduce((sum: number, e: any) => sum + e.total, 0);
+            const byStatus: Record<string, number> = {};
+            dbEstimates.forEach((e: any) => { byStatus[e.status] = (byStatus[e.status] || 0) + 1; });
+
+            return {
+              result: {
+                count: dbEstimates.length,
+                totalValue,
+                byStatus,
+                clientName: clientFoundDb?.name,
+                estimates: dbEstimates.map((e: any) => ({
+                  id: e.id,
+                  name: e.name,
+                  total: e.total,
+                  status: e.status,
+                  createdDate: e.createdDate,
+                  clientId: e.clientId,
+                })),
+              },
+            };
+          }
+        } catch (dbErr) {
+          console.error('[AI Assistant] DB error in query_estimates, falling back to appData:', dbErr);
+        }
+      }
+
+      // FALLBACK: stale appData
       let filtered = estimates;
       let clientFound = null;
 
       if (args.clientName) {
-        // Find the client by name
         clientFound = clients.find((c: any) =>
           c.name?.toLowerCase().includes(args.clientName.toLowerCase())
         );
         if (clientFound) {
-          // Filter estimates by client ID - estimates are now linked directly to clients
           filtered = filtered.filter((e: any) => e.clientId === clientFound.id);
         } else {
-          // Client not found - return empty result with helpful message
           return {
             result: {
               count: 0,
@@ -2859,7 +2970,6 @@ async function executeToolCall(
         filtered = filtered.filter((e: any) => e.status === args.status);
       }
 
-      // If client was specified but no estimates found, provide helpful message
       if (clientFound && filtered.length === 0) {
         return {
           result: {
@@ -6819,6 +6929,91 @@ Based on the store and items, intelligently categorize this expense:
     }
 
     case 'query_daily_tasks': {
+      // LIVE DB PATH — queries daily_tasks table directly for always-fresh data
+      if (supabase && companyId) {
+        try {
+          const today = new Date();
+          const todayStr = today.toISOString().split('T')[0];
+          const tomorrowStr = new Date(today.getTime() + 86400000).toISOString().split('T')[0];
+          const weekEndStr = new Date(today.getTime() + 7 * 86400000).toISOString().split('T')[0];
+          const nextWeekEndStr = new Date(today.getTime() + 14 * 86400000).toISOString().split('T')[0];
+
+          let q = supabase
+            .from('daily_tasks')
+            .select('*')
+            .eq('company_id', companyId)
+            .order('due_date', { ascending: true })
+            .limit(500);
+
+          // Apply date range filters at DB level where possible
+          if (args.filter === 'today') {
+            q = q.eq('due_date', todayStr);
+          } else if (args.filter === 'tomorrow') {
+            q = q.eq('due_date', tomorrowStr);
+          } else if (args.filter === 'overdue') {
+            q = q.lt('due_date', todayStr).eq('completed', false);
+          } else if (args.filter === 'completed') {
+            q = q.eq('completed', true);
+          } else if (args.filter === 'pending') {
+            q = q.eq('completed', false);
+          } else if (args.filter === 'this_week') {
+            q = q.gte('due_date', todayStr).lte('due_date', weekEndStr);
+          } else if (args.filter === 'next_week') {
+            q = q.gt('due_date', weekEndStr).lte('due_date', nextWeekEndStr);
+          }
+
+          if (args.startDate) {
+            const startDate = parseNaturalDate(args.startDate);
+            q = q.gte('due_date', startDate);
+          }
+          if (args.endDate) {
+            const endDate = parseNaturalDate(args.endDate);
+            q = q.lte('due_date', endDate);
+          }
+          if (args.completed !== undefined) {
+            q = q.eq('completed', args.completed);
+          }
+
+          const { data, error } = await q;
+          if (!error && data) {
+            const dbTasks = data.map((row: any) => ({
+              id: row.id,
+              title: row.title,
+              dueDate: row.due_date,
+              dueTime: row.due_time,
+              reminder: row.reminder,
+              reminderSent: row.reminder_sent,
+              completed: row.completed,
+              notes: row.notes,
+            }));
+
+            const pendingCount = dbTasks.filter((t: any) => !t.completed).length;
+            const completedCount = dbTasks.filter((t: any) => t.completed).length;
+
+            return {
+              result: {
+                count: dbTasks.length,
+                pendingCount,
+                completedCount,
+                tasks: dbTasks.map((t: any) => {
+                  let timeDisplay = '';
+                  if (t.dueTime) {
+                    const [hours, minutes] = t.dueTime.split(':').map(Number);
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    const hour12 = hours % 12 || 12;
+                    timeDisplay = `${hour12}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+                  }
+                  return { ...t, timeDisplay };
+                }),
+              },
+            };
+          }
+        } catch (dbErr) {
+          console.error('[AI Assistant] DB error in query_daily_tasks, falling back to appData:', dbErr);
+        }
+      }
+
+      // FALLBACK: stale appData
       const { dailyTasks = [] } = appData;
       const today = new Date();
       const todayStr = today.toISOString().split('T')[0];
@@ -6914,10 +7109,28 @@ Based on the store and items, intelligently categorize this expense:
     case 'update_daily_task': {
       const { dailyTasks = [] } = appData;
 
-      // Find task by title match
-      const task = dailyTasks.find((t: any) =>
+      // Find task by title match — try appData first, fall back to live DB
+      let task: any = dailyTasks.find((t: any) =>
         t.title?.toLowerCase().includes(args.taskTitle.toLowerCase())
       );
+
+      if (!task && supabase && companyId) {
+        // appData may be stale — query DB directly for recently added tasks
+        try {
+          const { data: dbTasks } = await supabase
+            .from('daily_tasks')
+            .select('id, title, due_date, due_time, completed, reminder, notes')
+            .eq('company_id', companyId)
+            .ilike('title', `%${args.taskTitle}%`)
+            .limit(1);
+          if (dbTasks && dbTasks.length > 0) {
+            const row = dbTasks[0];
+            task = { id: row.id, title: row.title, dueDate: row.due_date, dueTime: row.due_time, completed: row.completed, reminder: row.reminder, notes: row.notes };
+          }
+        } catch (dbErr) {
+          console.error('[AI Assistant] Live DB lookup failed in update_daily_task:', dbErr);
+        }
+      }
 
       if (!task) {
         const taskTitles = dailyTasks.map((t: any) => t.title).slice(0, 5).join(', ');
@@ -6990,37 +7203,67 @@ Based on the store and items, intelligently categorize this expense:
       let tasksToDelete: string[] = [];
       let message = '';
 
+      // Helper: fetch IDs from live DB if appData result is empty (stale guard)
+      const fetchFromDB = async (filterFn: (q: any) => any): Promise<string[] | null> => {
+        if (!supabase || !companyId) return null;
+        try {
+          let q = supabase.from('daily_tasks').select('id').eq('company_id', companyId);
+          q = filterFn(q);
+          const { data } = await q;
+          return (data || []).map((r: any) => r.id);
+        } catch {
+          return null;
+        }
+      };
+
       if (args.bulkFilter) {
         switch (args.bulkFilter) {
           case 'today':
             tasksToDelete = dailyTasks.filter((t: any) => t.dueDate === todayStr).map((t: any) => t.id);
+            if (tasksToDelete.length === 0) tasksToDelete = (await fetchFromDB((q: any) => q.eq('due_date', todayStr))) || [];
             message = `Deleting ${tasksToDelete.length} task(s) for today`;
             break;
           case 'tomorrow':
             tasksToDelete = dailyTasks.filter((t: any) => t.dueDate === tomorrowStr).map((t: any) => t.id);
+            if (tasksToDelete.length === 0) tasksToDelete = (await fetchFromDB((q: any) => q.eq('due_date', tomorrowStr))) || [];
             message = `Deleting ${tasksToDelete.length} task(s) for tomorrow`;
             break;
           case 'this_week':
             tasksToDelete = dailyTasks.filter((t: any) => t.dueDate >= todayStr && t.dueDate <= weekEndStr).map((t: any) => t.id);
+            if (tasksToDelete.length === 0) tasksToDelete = (await fetchFromDB((q: any) => q.gte('due_date', todayStr).lte('due_date', weekEndStr))) || [];
             message = `Deleting ${tasksToDelete.length} task(s) for this week`;
             break;
           case 'completed':
             tasksToDelete = dailyTasks.filter((t: any) => t.completed).map((t: any) => t.id);
+            if (tasksToDelete.length === 0) tasksToDelete = (await fetchFromDB((q: any) => q.eq('completed', true))) || [];
             message = `Deleting ${tasksToDelete.length} completed task(s)`;
             break;
           case 'overdue':
             tasksToDelete = dailyTasks.filter((t: any) => t.dueDate < todayStr && !t.completed).map((t: any) => t.id);
+            if (tasksToDelete.length === 0) tasksToDelete = (await fetchFromDB((q: any) => q.lt('due_date', todayStr).eq('completed', false))) || [];
             message = `Deleting ${tasksToDelete.length} overdue task(s)`;
             break;
           case 'all':
             tasksToDelete = dailyTasks.map((t: any) => t.id);
+            if (tasksToDelete.length === 0) tasksToDelete = (await fetchFromDB((q: any) => q)) || [];
             message = `Deleting all ${tasksToDelete.length} task(s)`;
             break;
         }
       } else if (args.taskTitle) {
-        const task = dailyTasks.find((t: any) =>
+        let task: any = dailyTasks.find((t: any) =>
           t.title?.toLowerCase().includes(args.taskTitle.toLowerCase())
         );
+        if (!task && supabase && companyId) {
+          try {
+            const { data } = await supabase
+              .from('daily_tasks')
+              .select('id, title')
+              .eq('company_id', companyId)
+              .ilike('title', `%${args.taskTitle}%`)
+              .limit(1);
+            if (data && data.length > 0) task = data[0];
+          } catch { /* ignore */ }
+        }
         if (task) {
           tasksToDelete = [task.id];
           message = `Deleting task: "${task.title}"`;
@@ -7082,6 +7325,19 @@ Based on the store and items, intelligently categorize this expense:
           break;
       }
 
+      // If appData returned nothing, fall back to live DB (stale state guard)
+      if (tasksToUpdate.length === 0 && supabase && companyId) {
+        try {
+          let q = supabase.from('daily_tasks').select('id, title').eq('company_id', companyId);
+          if (args.filter === 'today') q = q.eq('due_date', todayStr);
+          else if (args.filter === 'tomorrow') q = q.eq('due_date', tomorrowStr);
+          else if (args.filter === 'this_week') q = q.gte('due_date', todayStr).lte('due_date', weekEndStr);
+          else if (args.filter === 'next_week') q = q.gt('due_date', weekEndStr).lte('due_date', nextWeekEndStr);
+          const { data: dbRows } = await q;
+          if (dbRows && dbRows.length > 0) tasksToUpdate = dbRows;
+        } catch { /* ignore */ }
+      }
+
       if (tasksToUpdate.length === 0) {
         return {
           result: { message: 'No tasks found matching the criteria' },
@@ -7115,7 +7371,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { messages, appData, pageContext, companyId, userId, timezone } = req.body;
+    const { messages, appData, pageContext, companyId, userId, userName, userRole, timezone } = req.body;
 
     if (!messages || !Array.isArray(messages)) {
       return res.status(400).json({ error: 'Messages array is required' });
@@ -7132,13 +7388,99 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? createClient(supabaseUrl, supabaseServiceKey)
       : null;
 
+    // ---------------------------------------------------------------------------
+    // PERMISSION ENFORCEMENT — fetch from DB, never trust client claims
+    // ---------------------------------------------------------------------------
+    // Inlined permission logic (mirrors lib/permissions.ts — no @/ imports in API routes)
+    const ROLE_CHATBOT_LEVEL: Record<string, 'unrestricted' | 'no-financials' | 'basic-only'> = {
+      'super-admin': 'unrestricted', 'admin': 'unrestricted',
+      'salesperson': 'no-financials',
+      'field-employee': 'basic-only', 'employee': 'basic-only',
+    };
+    // Feature → tools that are blocked when that feature is disabled for a user
+    const FEATURE_BLOCKED_TOOLS: Record<string, string[]> = {
+      crm:       ['query_clients', 'add_client', 'update_client'],
+      expenses:  ['query_expenses', 'add_expense'],
+      projects:  ['query_projects', 'query_tasks', 'create_project', 'update_project'],
+      reports:   ['generate_report'],
+      subs:      ['query_subcontractors', 'query_proposals'],
+      schedule:  ['query_schedule'],
+      estimates: ['query_estimates', 'create_estimate', 'send_estimate'],
+    };
+    const FINANCIAL_TOOLS = ['query_estimates', 'query_payments', 'generate_report', 'create_estimate', 'send_estimate', 'query_change_orders'];
+    const BASIC_ONLY_ALLOWED_TOOLS = [
+      'query_clock_entries', 'query_photos', 'query_tasks', 'query_schedule',
+      'query_daily_tasks', 'add_daily_task', 'update_daily_task', 'delete_daily_tasks',
+      'bulk_update_daily_task_reminders', 'add_expense', 'query_expenses',
+    ];
+
+    let serverChatbotLevel: 'unrestricted' | 'no-financials' | 'basic-only' = 'basic-only';
+    let serverChatbotEnabled = true;
+    let serverFeatures: Record<string, boolean> = {};
+    let serverUserRole: string = userRole || 'employee';
+
+    if (supabase && (userId || appData?.user?.id)) {
+      const lookupId = userId || appData?.user?.id;
+      try {
+        const { data: dbUser } = await supabase
+          .from('users')
+          .select('role, custom_permissions, is_active')
+          .eq('id', lookupId)
+          .single();
+
+        if (dbUser) {
+          serverUserRole = dbUser.role || 'employee';
+          const customPerms: Record<string, boolean> = dbUser.custom_permissions || {};
+
+          // chatbot enabled: customPermissions.chatbot overrides role default
+          if ('chatbot' in customPerms) {
+            serverChatbotEnabled = customPerms.chatbot;
+          } else {
+            serverChatbotEnabled = ROLE_CHATBOT_LEVEL[serverUserRole] !== undefined;
+          }
+
+          serverChatbotLevel = ROLE_CHATBOT_LEVEL[serverUserRole] || 'basic-only';
+
+          // Build effective feature states — custom override takes precedence over role default
+          const ROLE_DEFAULT_FEATURES: Record<string, string[]> = {
+            'super-admin': ['dashboard','crm','clock','expenses','photos','chat','schedule','subs','chatbot','projects','reports'],
+            'admin':       ['dashboard','crm','clock','expenses','photos','chat','schedule','subs','chatbot','projects','reports'],
+            'salesperson': ['crm','photos','chat','schedule','subs','chatbot','projects'],
+            'field-employee': ['photos','clock','expenses','chat','chatbot'],
+            'employee':    ['photos','clock','chat','chatbot'],
+          };
+          const roleFeatures = ROLE_DEFAULT_FEATURES[serverUserRole] || [];
+          const allFeatureKeys = ['dashboard','crm','clock','expenses','photos','chat','schedule','subs','chatbot','projects','reports'];
+          for (const key of allFeatureKeys) {
+            serverFeatures[key] = key in customPerms ? customPerms[key] : roleFeatures.includes(key);
+          }
+        }
+      } catch (permErr) {
+        console.error('[AI Assistant] Failed to fetch user permissions:', permErr);
+        serverChatbotLevel = 'basic-only'; // fail-safe: most restrictive
+      }
+    }
+
+    // Block entire request if chatbot is disabled for this user
+    if (!serverChatbotEnabled) {
+      return res.status(403).json({
+        error: "You don't have access to the AI assistant. Contact your admin to enable it.",
+        blocked: true,
+      });
+    }
+
+    console.log('[AI Assistant] Permission level:', serverUserRole, '| Chatbot:', serverChatbotLevel, '| Features:', JSON.stringify(serverFeatures));
+
     // Resolve effective companyId — prefer explicit param, fall back to appData
     const effectiveCompanyId: string | undefined = companyId || appData?.company?.id;
     const effectiveUserId: string | undefined = userId || appData?.user?.id;
+    const effectiveUserName: string | undefined = userName || appData?.user?.name;
+    const effectiveUserRole: string | undefined = userRole || appData?.user?.role;
+    const effectiveCompanyName: string | undefined = appData?.company?.name;
 
     console.log('[AI Assistant] Processing request with', messages.length, 'messages');
     console.log('[AI Assistant] Page context:', pageContext || 'none');
-    console.log('[AI Assistant] Company ID:', effectiveCompanyId || 'none', '| User ID:', effectiveUserId || 'none');
+    console.log('[AI Assistant] Company ID:', effectiveCompanyId || 'none', '| User ID:', effectiveUserId || 'none', '| Role:', effectiveUserRole || 'none');
     console.log('[AI Assistant] App data (cache):', {
       projects: appData?.projects?.length || 0,
       clients: appData?.clients?.length || 0,
@@ -7158,6 +7500,76 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Build context-aware system prompt
     let contextAwarePrompt = systemPrompt;
+
+    // Inject identity and company context so AI knows who it's talking to
+    // Use server-verified role/level — never trust client-provided values
+    {
+      const isAdmin = serverUserRole === 'admin' || serverUserRole === 'super-admin';
+      const isFieldEmployee = serverUserRole === 'field-employee' || serverUserRole === 'employee';
+      const isSalesperson = serverUserRole === 'salesperson';
+
+      let roleDescription = '';
+      let roleVisibility = '';
+
+      if (isAdmin) {
+        roleDescription = 'administrator (full access)';
+        roleVisibility = `- You have full access to all company data: all employees' clock entries, budgets, labor costs, hourly rates, revenues, and financials.
+- When showing financial data (budgets, rates, costs), include all details freely.`;
+      } else if (isSalesperson) {
+        roleDescription = 'salesperson';
+        roleVisibility = `- You have access to: CRM clients, estimates, proposals, project overview (no budgets or labor costs).
+- Do NOT show hourly rates, labor costs, or internal financial details to this user.
+- Focus on client-facing data: client status, estimate totals, project status.`;
+      } else if (isFieldEmployee) {
+        roleDescription = 'field employee';
+        roleVisibility = `- When this user asks about "my hours", "my clock entries", or "my time", automatically filter by their userId: "${effectiveUserId}".
+- Do NOT show other employees' hourly rates or salaries.
+- Show project budgets and overall project status — they need this for context on their work.
+- They can see their own clock entries and the projects they're assigned to.`;
+      } else {
+        roleDescription = effectiveUserRole || 'user';
+        roleVisibility = `- Apply standard visibility: show project and task data, avoid surfacing other employees' personal rates.`;
+      }
+
+      contextAwarePrompt += `
+
+## SESSION CONTEXT (CRITICAL — use this for every response)
+
+**Company:** ${effectiveCompanyName || 'this company'} (ID: ${effectiveCompanyId || 'unknown'})
+**Current user:** ${effectiveUserName || 'Unknown'} — Role: ${roleDescription}
+**User ID:** ${effectiveUserId || 'unknown'}
+**Today's date:** ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+**Timezone:** ${timezone || 'UTC'}
+
+### Pronoun Resolution
+- "my" / "I" / "me" always refers to **${effectiveUserName || 'the current user'}** (userId: ${effectiveUserId || 'unknown'})
+- "my hours" → filter clock entries by userId: "${effectiveUserId}"
+- "my expenses" → filter expenses by uploadedBy: "${effectiveUserId}"
+- "my tasks" → filter tasks assigned to: "${effectiveUserId}"
+- "my projects" → projects where this user has clock entries or is assigned
+
+### Role-Based Data Visibility
+${roleVisibility}
+
+### Company Scope
+- ALL queries are automatically scoped to company ID: "${effectiveCompanyId}"
+- Never return data from other companies
+
+### Access Level: ${serverChatbotLevel === 'unrestricted' ? 'FULL ACCESS' : serverChatbotLevel === 'no-financials' ? 'NO FINANCIALS' : 'BASIC ONLY'}
+${serverChatbotLevel === 'unrestricted' ? `- No restrictions. You may answer all questions about all business data.` : ''}
+${serverChatbotLevel === 'no-financials' ? `- BLOCKED topics (do NOT answer or reveal): budget amounts, hourly rates, total labor costs, estimate totals, payment amounts, revenue, profit, payroll, salary, wages, expense totals, financial reports, contract values, change order amounts.
+- If user asks about a blocked topic, reply: "I'm sorry, I'm not able to share financial details with your account. Please contact your admin."
+- Allowed: project status, task progress, schedules, team info (names/roles only, no rates), photos, client names.` : ''}
+${serverChatbotLevel === 'basic-only' ? `- BLOCKED topics (do NOT answer or reveal): ANY financial data (budgets, costs, rates, payments, estimates, expenses of others), CRM client details, subcontractor info, reports, other employees' work hours.
+- Only allowed: your own clock entries, tasks assigned to you, site photos, project names/status (no financials), your own expenses, daily tasks.
+- If user asks about anything outside this scope, reply: "I'm sorry, I don't have access to that information. Contact your admin if you need more access."` : ''}
+${!serverFeatures.crm ? `- CRM access is disabled for this user. Do NOT answer questions about clients or add/edit client records.` : ''}
+${!serverFeatures.expenses ? `- Expenses access is disabled. Do NOT answer questions about expense data or help add expenses.` : ''}
+${!serverFeatures.projects ? `- Project access is disabled. Do NOT show project details or task information.` : ''}
+${!serverFeatures.reports ? `- Reports access is disabled. Do NOT generate reports or show summary financials.` : ''}
+${!serverFeatures.subs ? `- Subcontractor access is disabled. Do NOT show subcontractor or proposal data.` : ''}
+${!serverFeatures.schedule ? `- Schedule access is disabled. Do NOT show schedule data.` : ''}`;
+    }
 
     // Add file attachment context if files are present
     if (attachedFiles.length > 0) {
@@ -7284,8 +7696,38 @@ When the user says "this project", "this client", "this estimate", etc., they ar
       // Execute each tool call
       for (const toolCall of response.tool_calls) {
         const tc = toolCall as any;
+        const toolName = tc.function.name;
         const args = JSON.parse(tc.function.arguments);
-        const toolResult = await executeToolCall(tc.function.name, args, appData || {}, openai, messages, attachedFiles, supabase, effectiveCompanyId, timezone || 'UTC');
+
+        // --- Server-side tool permission gate ---
+        let blockedByPermission = false;
+
+        // Check feature-level blocks (admin disabled a specific feature for this user)
+        for (const [feature, blockedTools] of Object.entries(FEATURE_BLOCKED_TOOLS)) {
+          if (serverFeatures[feature] === false && blockedTools.includes(toolName)) {
+            blockedByPermission = true;
+            openaiMessages.push({ role: 'tool', tool_call_id: toolCall.id,
+              content: JSON.stringify({ error: `Access denied: the "${feature}" feature is disabled for your account.` }) });
+            break;
+          }
+        }
+
+        // Check chatbot restriction level — block restricted tools
+        if (!blockedByPermission) {
+          if (serverChatbotLevel === 'no-financials' && FINANCIAL_TOOLS.includes(toolName)) {
+            blockedByPermission = true;
+            openaiMessages.push({ role: 'tool', tool_call_id: toolCall.id,
+              content: JSON.stringify({ error: "Access denied: financial data queries are not available for your account." }) });
+          } else if (serverChatbotLevel === 'basic-only' && !BASIC_ONLY_ALLOWED_TOOLS.includes(toolName)) {
+            blockedByPermission = true;
+            openaiMessages.push({ role: 'tool', tool_call_id: toolCall.id,
+              content: JSON.stringify({ error: "Access denied: this query is not available for your account level." }) });
+          }
+        }
+
+        if (blockedByPermission) continue;
+
+        const toolResult = await executeToolCall(toolName, args, appData || {}, openai, messages, attachedFiles, supabase, effectiveCompanyId, timezone || 'UTC');
 
         console.log('[AI Assistant] Tool result for', tc.function.name, ':', toolResult.result);
 
