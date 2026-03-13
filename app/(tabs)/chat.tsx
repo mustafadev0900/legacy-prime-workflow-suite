@@ -191,7 +191,8 @@ export default function ChatScreen() {
     const voiceUris = messages
       .filter((m) => m.type === 'voice' && !m.isDeleted && m.content)
       .map((m) => m.content as string)
-      .reverse(); // newest first — most likely to be played
+      .slice(-3)   // cap at 3 most recent — limits AVFoundation warning spam
+      .reverse();  // newest first — most likely to be played
     if (voiceUris.length === 0) return;
     let cancelled = false;
     (async () => {
