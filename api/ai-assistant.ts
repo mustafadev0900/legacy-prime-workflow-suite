@@ -5398,32 +5398,35 @@ Based on the store and items, intelligently categorize this expense:
       // LIVE DB PATH — queries scheduled_tasks + schedule_phases directly
       if (supabase && companyId) {
         try {
+          // Resolve company's projects first — filter by project_id IN (company projects)
+          // so results are correct even for rows where company_id was not stored (legacy data).
+          const { data: compProjects } = await supabase
+            .from('projects')
+            .select('id, name')
+            .eq('company_id', companyId);
+          const schedProjectsMap: Record<string, string> = {};
+          const companyProjectIds: string[] = [];
+          (compProjects || []).forEach((p: any) => {
+            schedProjectsMap[p.id] = p.name;
+            companyProjectIds.push(p.id);
+          });
+
+          if (companyProjectIds.length === 0) {
+            return { result: { phasesCount: 0, tasksCount: 0, phases: [], tasks: [] } };
+          }
+
           const [phasesRes, tasksRes] = await Promise.all([
             supabase
               .from('schedule_phases')
               .select('*')
-              .eq('company_id', companyId),
+              .in('project_id', companyProjectIds),
             supabase
               .from('scheduled_tasks')
               .select('*')
-              .eq('company_id', companyId)
+              .in('project_id', companyProjectIds)
               .order('start_date', { ascending: true })
               .limit(300),
           ]);
-
-          // Resolve project names from DB — not stale appData
-          const schedProjectsMap: Record<string, string> = {};
-          const allSchedProjIds = [...new Set([
-            ...(phasesRes.data || []).map((p: any) => p.project_id),
-            ...(tasksRes.data || []).map((t: any) => t.project_id),
-          ].filter(Boolean))];
-          if (allSchedProjIds.length > 0) {
-            const { data: projData } = await supabase
-              .from('projects')
-              .select('id, name')
-              .in('id', allSchedProjIds);
-            (projData || []).forEach((p: any) => { schedProjectsMap[p.id] = p.name; });
-          }
 
           let phases: any[] = phasesRes.data || [];
           let tasks: any[] = tasksRes.data || [];

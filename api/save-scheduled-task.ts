@@ -47,6 +47,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Resolve company_id from the project so scheduled_tasks are company-scoped
+    const { data: projectRow } = await supabase
+      .from('projects')
+      .select('company_id')
+      .eq('id', projectId)
+      .single();
+    const companyId = projectRow?.company_id || null;
+
     // Generate ID if not provided
     const taskId = id || `scheduled-task-${Date.now()}`;
 
@@ -56,6 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .insert({
         id: taskId,
         project_id: projectId,
+        company_id: companyId,
         category,
         start_date: startDate,
         end_date: endDate,
