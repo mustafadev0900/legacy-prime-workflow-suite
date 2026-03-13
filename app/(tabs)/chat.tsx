@@ -48,7 +48,6 @@ import ChatTabs, { ChatTab } from '@/components/chat/ChatTabs';
 import MessageBubble from '@/components/chat/MessageBubble';
 import ReplyPreview from '@/components/chat/ReplyPreview';
 import AudioRecorder from '@/components/chat/AudioRecorder';
-import { preloadAudio } from '@/components/chat/AudioPlayer';
 
 type PreviewEntry = { text: string; timestamp: string; senderId: string; type?: string };
 
@@ -389,30 +388,6 @@ export default function ChatScreen() {
     const interval = setInterval(fetchMessages, 5000);
     return () => clearInterval(interval);
   }, [selectedChat, user?.id]);
-
-  // ─── Preload voice messages when a conversation is opened ────────────────────
-  // Stagger by 300 ms per track so we don't slam AVAudioSession with simultaneous
-  // createAsync calls, which causes "isPlayable accessed synchronously" warnings.
-  useEffect(() => {
-    if (!selectedConversation || Platform.OS === 'web') return;
-
-    // Only preload the 5 most recent voice messages.
-    // Preloading too many simultaneously triggers AVAudioSession "isPlayable
-    // accessed synchronously" warnings and saturates the audio session on iOS.
-    const voiceUris = selectedConversation.messages
-      .filter((m) => m.type === 'voice' && !m.isDeleted && m.content)
-      .slice(-5)
-      .map((m) => m.content as string);
-
-    if (voiceUris.length === 0) return;
-
-    // 500 ms stagger — gives AVAudioSession time to settle between loads
-    const timers = voiceUris.map((uri, i) =>
-      setTimeout(() => { preloadAudio(uri); }, i * 500)
-    );
-
-    return () => timers.forEach(clearTimeout);
-  }, [selectedConversation?.id, selectedConversation?.messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Daily tip ────────────────────────────────────────────────────────────────
   useEffect(() => {
