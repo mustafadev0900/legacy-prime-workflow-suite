@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Play, Pause, AlertCircle } from 'lucide-react-native';
-import { Audio } from 'expo-av';
+import { AudioModule, createAudioPlayer, AudioPlayer as ExpoAudioPlayer } from 'expo-audio';
 
 interface Props {
   uri: string;
@@ -23,12 +23,12 @@ interface Props {
 
 // ─── Module-level persistent sound cache ─────────────────────────────────────
 const MAX_CACHE = 30;
-const soundCache = new Map<string, Audio.Sound>();
+const soundCache = new Map<string, ExpoAudioPlayer>();
 
 function evictIfNeeded() {
   if (soundCache.size >= MAX_CACHE) {
     const oldest = soundCache.keys().next().value as string;
-    soundCache.get(oldest)?.unloadAsync().catch(() => {});
+    soundCache.get(oldest)?.remove();
     soundCache.delete(oldest);
   }
 }
@@ -38,10 +38,9 @@ let audioModeConfigured = false;
 async function ensureAudioMode() {
   if (audioModeConfigured || Platform.OS === 'web') return;
   try {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: false,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
+    await AudioModule.setAudioModeAsync({
+      allowsRecording: false,
+      playsInSilentMode: true,
     });
     audioModeConfigured = true;
   } catch { /* non-fatal */ }
@@ -81,7 +80,7 @@ export default function AudioPlayer({
   const [totalSec, setTotalSec] = useState(duration || 0);
   const [loadState, setLoadState] = useState<LoadState>('idle');
 
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const soundRef = useRef<ExpoAudioPlayer | null>(null);
   const webAudioRef = useRef<HTMLAudioElement | null>(null);
   const isSeeking = useRef(false);
   const waveWidthRef = useRef(0);
@@ -90,18 +89,18 @@ export default function AudioPlayer({
   const progress = totalSec > 0 ? Math.min(positionSec / totalSec, 1) : 0;
 
   // ─── Status callback ──────────────────────────────────────────────────────
-  const makeStatusHandler = (sound: Audio.Sound) => (status: any) => {
-    if (!mountedRef.current || !status.isLoaded) return;
+  const makeStatusHandler = (player: ExpoAudioPlayer) => (status: any) => {
+    if (!mountedRef.current) return;
     if (!isSeeking.current) {
-      setPositionSec((status.positionMillis || 0) / 1000);
+      setPositionSec(status.currentTime || 0);
     }
-    if (status.durationMillis) {
-      setTotalSec(status.durationMillis / 1000);
+    if (status.duration) {
+      setTotalSec(status.duration);
     }
     if (status.didJustFinish) {
       setIsPlaying(false);
       setPositionSec(0);
-      sound.setPositionAsync(0).catch(() => {});
+      try { player.seekTo(0); } catch { /* non-fatal */ }
     }
   };
 
@@ -115,17 +114,12 @@ export default function AudioPlayer({
     if (Platform.OS !== 'web') {
       const cached = soundCache.get(uri);
       if (cached) {
-        cached.getStatusAsync()
-          .then((status) => {
-            if (!mountedRef.current) return;
-            if (status.isLoaded) {
-              cached.setOnPlaybackStatusUpdate(makeStatusHandler(cached));
-              soundRef.current = cached;
-              if (status.durationMillis) setTotalSec(status.durationMillis / 1000);
-              setLoadState('ready');
-            }
-          })
-          .catch(() => {});
+        if (mountedRef.current) {
+          cached.addListener('playbackStatusUpdate',makeStatusHandler(cached));
+          soundRef.current = cached;
+          if (cached.duration) setTotalSec(cached.duration);
+          setLoadState('ready');
+        }
       }
       // else: stay 'idle', load lazily on first tap
     } else {
@@ -162,23 +156,18 @@ export default function AudioPlayer({
     try {
       evictIfNeeded();
 
-      // Pass the status callback directly into createAsync so expo-av
-      // sets it up before the first status event fires.
-      let soundInstance: Audio.Sound;
-      ({ sound: soundInstance } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true, progressUpdateIntervalMillis: 250 },
-        undefined // set below after we have the reference
-      ));
+      const player = createAudioPlayer({ uri });
 
       if (!mountedRef.current) {
-        soundInstance.unloadAsync().catch(() => {});
+        player.remove();
         return;
       }
 
-      soundInstance.setOnPlaybackStatusUpdate(makeStatusHandler(soundInstance));
-      soundCache.set(uri, soundInstance);
-      soundRef.current = soundInstance;
+      player.addListener('playbackStatusUpdate',makeStatusHandler(player));
+      player.play();
+
+      soundCache.set(uri, player);
+      soundRef.current = player;
 
       onPlay?.(messageId);
       setLoadState('ready');
@@ -201,8 +190,8 @@ export default function AudioPlayer({
     } else {
       const sound = soundRef.current;
       if (sound) {
-        await sound.pauseAsync().catch(() => {});
-        if (andReset) await sound.setPositionAsync(0).catch(() => {});
+        try { sound.pause(); } catch { /* non-fatal */ }
+        if (andReset) try { sound.seekTo(0); } catch { /* non-fatal */ }
       }
     }
     if (andReset) setPositionSec(0);
@@ -230,7 +219,7 @@ export default function AudioPlayer({
     const sound = soundRef.current;
     if (!sound) return;
     try {
-      await sound.playAsync();
+      sound.play();
       setIsPlaying(true);
     } catch (e: any) {
       console.warn('[AudioPlayer] play error:', e?.message || e);
@@ -259,8 +248,7 @@ export default function AudioPlayer({
     } else {
       const sound = soundRef.current;
       if (sound) {
-        const status = await sound.getStatusAsync().catch(() => null);
-        if (status?.isLoaded) await sound.setPositionAsync(target * 1000).catch(() => {});
+        try { sound.seekTo(target); } catch { /* non-fatal */ }
       }
     }
   };

@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { createRorkTool, useRorkAgent } from '@rork-ai/toolkit-sdk';
 import { z } from 'zod';
-import { Audio } from 'expo-av';
+import { AudioModule, useAudioRecorder, RecordingPresets } from 'expo-audio';
 
 type UploadedFile = {
   id: string;
@@ -25,7 +25,7 @@ export default function InspectionScreen() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [scopeOfWork, setScopeOfWork] = useState<string>('');
   const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const nativeRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   useEffect(() => {
     if (token) {
       const params = new URLSearchParams(token);
@@ -72,25 +72,21 @@ export default function InspectionScreen() {
   const startRecording = async () => {
     try {
       console.log('[Inspection] Requesting audio permissions...');
-      const permission = await Audio.requestPermissionsAsync();
-      
-      if (permission.status !== 'granted') {
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+
+      if (!permission.granted) {
         Alert.alert('Permission Required', 'Please grant audio recording permission to continue.');
         return;
       }
 
       console.log('[Inspection] Setting audio mode...');
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
+      await AudioModule.setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
       });
 
       console.log('[Inspection] Starting recording...');
-      const { recording: newRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      
-      setRecording(newRecording);
+      nativeRecorder.record();
       setIsRecording(true);
       console.log('[Inspection] Recording started');
     } catch (err) {
@@ -100,22 +96,20 @@ export default function InspectionScreen() {
   };
 
   const stopRecording = async () => {
-    if (!recording) return;
+    if (!isRecording) return;
 
     try {
       console.log('[Inspection] Stopping recording...');
       setIsRecording(false);
-      await recording.stopAndUnloadAsync();
-      
+      await nativeRecorder.stop();
+
       if (Platform.OS !== 'web') {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-        });
+        await AudioModule.setAudioModeAsync({ allowsRecording: false });
       }
-      
-      const uri = recording.getURI();
+
+      const uri = nativeRecorder.uri;
       console.log('[Inspection] Recording stopped, URI:', uri);
-      
+
       if (uri) {
         const fileName = `voice-note-${Date.now()}.m4a`;
         setUploadedFiles(prev => [...prev, {
@@ -127,8 +121,6 @@ export default function InspectionScreen() {
         }]);
         Alert.alert('Success', 'Voice recording saved!');
       }
-      
-      setRecording(null);
     } catch (err) {
       console.error('[Inspection] Failed to stop recording:', err);
       Alert.alert('Error', 'Failed to stop recording.');

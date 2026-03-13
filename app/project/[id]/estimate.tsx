@@ -12,7 +12,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as pdfjsLib from 'pdfjs-dist';
-import { Audio } from 'expo-av';
+import { AudioModule, useAudioRecorder, RecordingPresets } from 'expo-audio';
 import Constants from 'expo-constants';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -3234,7 +3234,7 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
   const [textInput, setTextInput] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const nativeRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [attachedFiles, setAttachedFiles] = useState<Array<{uri: string; type: string; name: string}>>([]);
   const [conversationHistory, setConversationHistory] = useState<Array<{role: 'user' | 'assistant'; content: string}>>([]);
 
@@ -3247,17 +3247,16 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
 
   const handleMicrophone = async () => {
     try {
-      if (isRecording && recording) {
+      if (isRecording) {
         // Stop recording
         console.log('[AI Estimate] Stopping recording...');
         setIsRecording(false);
 
-        await recording.stopAndUnloadAsync();
-        const uri = recording.getURI();
+        await nativeRecorder.stop();
+        const uri = nativeRecorder.uri;
 
         if (!uri) {
           Alert.alert('Error', 'Failed to get recording');
-          setRecording(null);
           return;
         }
 
@@ -3294,7 +3293,6 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
         const apiKey = Constants.expoConfig?.extra?.openaiApiKey || process.env.EXPO_PUBLIC_OPENAI_API_KEY;
         if (!apiKey) {
           Alert.alert('Error', 'OpenAI API key not configured');
-          setRecording(null);
           return;
         }
 
@@ -3315,8 +3313,6 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
           },
           body: formData,
         });
-
-        setRecording(null);
 
         if (!response.ok) {
           const errorText = await response.text();
@@ -3340,20 +3336,19 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
         }
       } else {
         // Clean up any existing recording first
-        if (recording) {
+        if (isRecording) {
           console.log('[AI Estimate] Cleaning up existing recording...');
           try {
-            await recording.stopAndUnloadAsync();
+            await nativeRecorder.stop();
           } catch (cleanupError) {
             console.warn('[AI Estimate] Error cleaning up existing recording:', cleanupError);
           }
-          setRecording(null);
           setIsRecording(false);
         }
 
         // Start recording
         console.log('[AI Estimate] Requesting microphone permissions...');
-        const permission = await Audio.requestPermissionsAsync();
+        const permission = await AudioModule.requestRecordingPermissionsAsync();
 
         if (!permission.granted) {
           Alert.alert('Permission Required', 'Microphone permission is required for voice input');
@@ -3361,16 +3356,12 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
         }
 
         console.log('[AI Estimate] Starting recording...');
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
+        await AudioModule.setAudioModeAsync({
+          allowsRecording: true,
+          playsInSilentMode: true,
         });
 
-        const { recording: newRecording } = await Audio.Recording.createAsync(
-          Audio.RecordingOptionsPresets.HIGH_QUALITY
-        );
-
-        setRecording(newRecording);
+        nativeRecorder.record();
         setIsRecording(true);
         console.log('[AI Estimate] Recording started');
       }
@@ -3379,14 +3370,13 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
       setIsRecording(false);
 
       // Properly clean up the recording on error
-      if (recording) {
+      if (isRecording) {
         try {
-          await recording.stopAndUnloadAsync();
+          await nativeRecorder.stop();
         } catch (cleanupError) {
           console.warn('[AI Estimate] Error during cleanup:', cleanupError);
         }
       }
-      setRecording(null);
 
       Alert.alert('Error', 'Failed to record audio');
     }

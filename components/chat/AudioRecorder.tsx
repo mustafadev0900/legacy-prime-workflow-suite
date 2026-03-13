@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, Platform, Animated } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Mic, X, Send, Square } from 'lucide-react-native';
-import { Audio } from 'expo-av';
+import { AudioModule, useAudioRecorder, RecordingPresets } from 'expo-audio';
 
 type RecorderState = 'idle' | 'recording' | 'preview';
 
@@ -59,8 +59,9 @@ export default function AudioRecorder({ onSend, onCancel, autoStart }: Props) {
   const [amplitudes, setAmplitudes] = useState<number[]>(Array(20).fill(6));
   const [previewResult, setPreviewResult] = useState<RecordingResult | null>(null);
 
-  // Native (expo-av)
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  // Native (expo-audio)
+  const nativeRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const animIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Web (Web Audio API)
   const streamRef = useRef<MediaStream | null>(null);
@@ -85,8 +86,8 @@ export default function AudioRecorder({ onSend, onCancel, autoStart }: Props) {
     if (state === 'recording') {
       const anim = Animated.loop(
         Animated.sequence([
-          Animated.timing(dotOpacity, { toValue: 0.2, duration: 500, useNativeDriver: true }),
-          Animated.timing(dotOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.timing(dotOpacity, { toValue: 0.2, duration: 500, useNativeDriver: Platform.OS !== 'web' }),
+          Animated.timing(dotOpacity, { toValue: 1, duration: 500, useNativeDriver: Platform.OS !== 'web' }),
         ])
       );
       anim.start();
@@ -147,26 +148,21 @@ export default function AudioRecorder({ onSend, onCancel, autoStart }: Props) {
         processor.connect(ctx.destination);
         scriptProcessorRef.current = processor;
       } else {
-        const { status } = await Audio.requestPermissionsAsync();
-        if (status !== 'granted') return;
+        const permission = await AudioModule.requestRecordingPermissionsAsync();
+        if (!permission.granted) return;
 
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-          staysActiveInBackground: false,
+        await AudioModule.setAudioModeAsync({
+          allowsRecording: true,
+          playsInSilentMode: true,
         });
 
         // HIGH_QUALITY → MPEG4AAC → .m4a — natively supported on iOS & Android
-        const { recording } = await Audio.Recording.createAsync(
-          Audio.RecordingOptionsPresets.HIGH_QUALITY
-        );
-        recordingRef.current = recording;
+        nativeRecorder.record();
 
         // Pseudo-random waveform (avoids isMeteringEnabled iOS audio-session errors)
-        const animInterval = setInterval(() => {
+        animIntervalRef.current = setInterval(() => {
           setAmplitudes(() => Array.from({ length: 20 }, () => Math.random() * 22 + 4));
         }, 150);
-        (recordingRef as any)._animInterval = animInterval;
       }
 
       setState('recording');
@@ -210,20 +206,17 @@ export default function AudioRecorder({ onSend, onCancel, autoStart }: Props) {
       const wavBuffer = encodeWAV(combined, sampleRate);
       const blob = new Blob([wavBuffer], { type: 'audio/wav' });
       return { uri: null, blob, durationSec, mimeType: 'audio/wav' };
-    } else if (recordingRef.current) {
-      if ((recordingRef as any)._animInterval) {
-        clearInterval((recordingRef as any)._animInterval);
-        (recordingRef as any)._animInterval = null;
+    } else {
+      if (animIntervalRef.current) {
+        clearInterval(animIntervalRef.current);
+        animIntervalRef.current = null;
       }
-      await recordingRef.current.stopAndUnloadAsync();
-      await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
+      await nativeRecorder.stop();
+      await AudioModule.setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      const uri = nativeRecorder.uri;
       // audio/mp4 is the correct IANA MIME type for .m4a (AAC in MPEG-4 container)
       return { uri: uri ?? null, durationSec, mimeType: 'audio/mp4' };
     }
-
-    return null;
   };
 
   const handleStop = async () => {

@@ -2,7 +2,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, Platform } from 'react
 import { useState, useEffect, useRef } from 'react';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { Camera } from 'expo-camera';
-import { Video } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { Loader, Video as VideoIcon, Upload, Check, X, RotateCw } from 'lucide-react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { supabase } from '@/lib/supabase';
@@ -20,6 +20,12 @@ export default function InspectionVideoScreen() {
   const cameraRef = useRef<Camera>(null);
 
   const [tokenError, setTokenError] = useState<boolean>(false);
+
+  const videoPlayer = useVideoPlayer(null, (player) => { player.loop = true; });
+  useEffect(() => {
+    if (videoUri) videoPlayer.replaceAsync({ uri: videoUri }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoUri]);
 
   useEffect(() => {
     if (!token) { setIsValidating(false); setTokenError(true); return; }
@@ -282,12 +288,11 @@ export default function InspectionVideoScreen() {
 
         <View style={styles.cameraContainer}>
           {status === 'recorded' && videoUri ? (
-            <Video
-              source={{ uri: videoUri }}
+            <VideoView
+              player={videoPlayer}
               style={styles.camera}
-              useNativeControls
-              resizeMode="contain"
-              isLooping
+              nativeControls
+              contentFit="contain"
             />
           ) : (
             <View style={[styles.camera, { backgroundColor: '#000000', alignItems: 'center', justifyContent: 'center' }]}>

@@ -7,7 +7,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useState, useRef, useEffect, useCallback } from 'react';
 // Removed Rork AI dependency - using OpenAI directly
-import { Audio } from 'expo-av';
+import { AudioModule, useAudioRecorder, createAudioPlayer, AudioPlayer, AndroidOutputFormat, AndroidAudioEncoder, IOSOutputFormat, IOSAudioQuality } from 'expo-audio';
 import { usePathname, useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -622,8 +622,12 @@ export default function GlobalAIChatSimple({ currentPageContext, inline = false 
   const microphoneSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const conversationModeInitialized = useRef<boolean>(false);
-  const [recordingInstance, setRecordingInstance] = useState<Audio.Recording | null>(null);
-  const [soundInstance, setSoundInstance] = useState<Audio.Sound | null>(null);
+  const nativeRecorder = useAudioRecorder({
+    android: { extension: '.m4a', outputFormat: AndroidOutputFormat.MPEG_4, audioEncoder: AndroidAudioEncoder.AAC, sampleRate: 44100, numberOfChannels: 2, bitRate: 128000 },
+    ios: { extension: '.wav', outputFormat: IOSOutputFormat.LINEARPCM, audioQuality: IOSAudioQuality.HIGH, sampleRate: 44100, numberOfChannels: 2, bitRate: 128000, linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false },
+    web: { mimeType: 'audio/webm', bitsPerSecond: 128000 },
+  });
+  const [soundInstance, setSoundInstance] = useState<AudioPlayer | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
   const isProcessingActionRef = useRef<boolean>(false);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -2217,41 +2221,13 @@ Generate appropriate line items from the price list that fit this scope of work$
           startSilenceDetection(stream);
         }
       } else {
-        await Audio.requestPermissionsAsync();
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
+        await AudioModule.requestRecordingPermissionsAsync();
+        await AudioModule.setAudioModeAsync({
+          allowsRecording: true,
+          playsInSilentMode: true,
         });
 
-        const recording = new Audio.Recording();
-        await recording.prepareToRecordAsync({
-          android: {
-            extension: '.m4a',
-            outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-            audioEncoder: Audio.AndroidAudioEncoder.AAC,
-            sampleRate: 44100,
-            numberOfChannels: 2,
-            bitRate: 128000,
-          },
-          ios: {
-            extension: '.wav',
-            outputFormat: Audio.IOSOutputFormat.LINEARPCM,
-            audioQuality: Audio.IOSAudioQuality.HIGH,
-            sampleRate: 44100,
-            numberOfChannels: 2,
-            bitRate: 128000,
-            linearPCMBitDepth: 16,
-            linearPCMIsBigEndian: false,
-            linearPCMIsFloat: false,
-          },
-          web: {
-            mimeType: 'audio/webm',
-            bitsPerSecond: 128000,
-          },
-        });
-
-        await recording.startAsync();
-        setRecordingInstance(recording);
+        nativeRecorder.record();
         setIsRecording(true);
       }
     } catch (error) {
@@ -2323,28 +2299,24 @@ Generate appropriate line items from the price list that fit this scope of work$
           streamRef.current = null;
         }
       } else {
-        if (recordingInstance) {
+        if (nativeRecorder.isRecording) {
           try {
-            const status = await recordingInstance.getStatusAsync();
-            if (status.canRecord || status.isRecording) {
-              await recordingInstance.stopAndUnloadAsync();
-              const uri = recordingInstance.getURI();
-              if (uri) {
-                const base64 = await FileSystem.readAsStringAsync(uri, {
-                  encoding: 'base64' as any,
-                });
-                await transcribeAudioBase64(base64, sendImmediately);
-              }
+            await nativeRecorder.stop();
+            const uri = nativeRecorder.uri;
+            if (uri) {
+              const base64 = await FileSystem.readAsStringAsync(uri, {
+                encoding: 'base64' as any,
+              });
+              await transcribeAudioBase64(base64, sendImmediately);
             }
           } catch (recordError) {
             console.error('Error stopping recording:', recordError);
           } finally {
             try {
-              await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
+              await AudioModule.setAudioModeAsync({ allowsRecording: false });
             } catch (audioModeError) {
               console.error('Error resetting audio mode:', audioModeError);
             }
-            setRecordingInstance(null);
           }
         }
       }
@@ -2466,11 +2438,8 @@ Generate appropriate line items from the price list that fit this scope of work$
     // Stop mobile audio
     if (soundInstance) {
       try {
-        const status = await soundInstance.getStatusAsync();
-        if (status.isLoaded) {
-          await soundInstance.stopAsync();
-          await soundInstance.unloadAsync();
-        }
+        soundInstance.pause();
+        soundInstance.remove();
       } catch (error) {
         console.error('Error stopping sound:', error);
       } finally {
@@ -2552,18 +2521,14 @@ Generate appropriate line items from the price list that fit this scope of work$
 
         console.log('[TTS] Audio generated, playing...');
 
-        const { sound } = await Audio.Sound.createAsync(
-          { uri: `data:audio/mpeg;base64,${audioBase64}` },
-          { shouldPlay: true }
-        );
+        const player = createAudioPlayer({ uri: `data:audio/mpeg;base64,${audioBase64}` });
+        setSoundInstance(player);
 
-        setSoundInstance(sound);
-
-        sound.setOnPlaybackStatusUpdate((status) => {
-          if (status.isLoaded && status.didJustFinish) {
+        player.addListener('playbackStatusUpdate',(status) => {
+          if (status.didJustFinish) {
             console.log('[TTS] Finished speaking');
             setIsSpeaking(false);
-            sound.unloadAsync().catch(console.error);
+            player.remove();
             setSoundInstance(null);
 
             if (autoStartRecording && isConversationMode && conversationModeInitialized.current) {
@@ -2576,6 +2541,7 @@ Generate appropriate line items from the price list that fit this scope of work$
             }
           }
         });
+        player.play();
       }
     } catch (error) {
       console.error('[TTS] Error:', error);
@@ -2702,21 +2668,13 @@ Generate appropriate line items from the price list that fit this scope of work$
         streamRef.current.getTracks().forEach(track => track.stop());
       }
       if (soundInstance) {
-        soundInstance.getStatusAsync().then((status) => {
-          if (status.isLoaded) {
-            soundInstance.unloadAsync().catch(console.error);
-          }
-        }).catch(console.error);
+        try { soundInstance.remove(); } catch { /* non-fatal */ }
       }
-      if (recordingInstance) {
-        recordingInstance.getStatusAsync().then((status) => {
-          if (status.canRecord || status.isRecording) {
-            recordingInstance.stopAndUnloadAsync().catch(console.error);
-          }
-        }).catch(console.error);
+      if (nativeRecorder.isRecording) {
+        nativeRecorder.stop().catch(console.error);
       }
     };
-  }, [soundInstance, recordingInstance]);
+  }, [soundInstance, nativeRecorder]);
 
   const handlePickFile = async () => {
     try {
