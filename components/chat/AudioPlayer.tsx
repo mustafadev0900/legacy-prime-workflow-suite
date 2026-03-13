@@ -21,9 +21,11 @@ interface Props {
   shouldStop?: boolean;
 }
 
-// ─── Module-level persistent sound cache ─────────────────────────────────────
+// ─── Module-level caches ──────────────────────────────────────────────────────
 const MAX_CACHE = 30;
 const soundCache = new Map<string, ExpoAudioPlayer>();
+// URIs that failed to load — skip re-attempting preload for these
+const failedUriCache = new Set<string>();
 
 function evictIfNeeded() {
   if (soundCache.size >= MAX_CACHE) {
@@ -47,15 +49,29 @@ async function ensureAudioMode() {
 }
 
 // ─── Background preload (called from parent when chat opens) ──────────────────
+// Waits for the sound to confirm it's loadable before committing to cache.
+// Broken/expired S3 URLs are added to failedUriCache so they're not retried.
 export async function preloadAudio(uri: string): Promise<void> {
-  if (Platform.OS === 'web' || !uri || soundCache.has(uri)) return;
+  if (Platform.OS === 'web' || !uri || soundCache.has(uri) || failedUriCache.has(uri)) return;
+  let player: ExpoAudioPlayer | null = null;
   try {
     await ensureAudioMode();
     evictIfNeeded();
-    const player = createAudioPlayer({ uri });
+    player = createAudioPlayer({ uri });
+
+    // Wait for first successful status (isLoaded !== false) or fast error
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => { sub.remove(); resolve(); }, 8000);
+      const sub = player!.addListener('playbackStatusUpdate', (s: any) => {
+        if (s.error) { clearTimeout(timer); sub.remove(); reject(new Error('load failed')); return; }
+        if (s.isLoaded !== false) { clearTimeout(timer); sub.remove(); resolve(); }
+      });
+    });
+
     soundCache.set(uri, player);
-  } catch (e: any) {
-    console.warn('[AudioPlayer] preloadAudio error:', e?.message || e);
+  } catch {
+    failedUriCache.add(uri);
+    player?.remove();
   }
 }
 
@@ -148,7 +164,17 @@ export default function AudioPlayer({
       const cached = soundCache.get(uri);
       if (cached) {
         if (mountedRef.current) {
-          cached.addListener('playbackStatusUpdate', makeStatusHandler(cached));
+          cached.addListener('playbackStatusUpdate', (status: any) => {
+            if (!mountedRef.current) return;
+            // Cached player may emit error if it was broken (e.g. expired URL)
+            if (status.error) {
+              setLoadState('error');
+              soundCache.delete(uri);
+              failedUriCache.add(uri);
+              return;
+            }
+            makeStatusHandler(cached)(status);
+          });
           soundRef.current = cached;
           if (cached.duration) setTotalSec(cached.duration);
           setLoadState('ready');

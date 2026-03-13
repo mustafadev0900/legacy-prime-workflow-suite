@@ -112,18 +112,26 @@ export function createAudioPlayer(source: any): CompatAudioPlayer {
     let _sound: any = null;
     let _isLoaded = false;
     let _pendingPlay = false;
+    let _hasError = false;
+
+    const emitError = () =>
+      statusListeners.forEach((cb) => cb({ error: true, isLoaded: false }));
 
     (_av.Audio as any).Sound.createAsync(
       source,
       { shouldPlay: false },
       (avStatus: any) => {
         const nowLoaded = avStatus.isLoaded ?? false;
-        // Fire any queued play() once the sound is ready
         if (nowLoaded && !_isLoaded) {
           _isLoaded = true;
-          if (_pendingPlay) {
+          // ── Race-condition fix ────────────────────────────────────────────
+          // expo-av fires this status callback BEFORE the createAsync promise
+          // resolves, so _sound is still null here. Only fire playAsync() if
+          // _sound is already assigned; otherwise leave _pendingPlay=true and
+          // let the .then() handler below do it once _sound is available.
+          if (_pendingPlay && _sound) {
             _pendingPlay = false;
-            _sound?.playAsync().catch(() => {});
+            _sound.playAsync().catch(() => {});
           }
         }
         const mapped = {
@@ -135,19 +143,27 @@ export function createAudioPlayer(source: any): CompatAudioPlayer {
         statusListeners.forEach((cb) => cb(mapped));
       }
     )
-      .then(({ sound }: any) => { _sound = sound; })
+      .then(({ sound }: any) => {
+        _sound = sound;
+        // The status callback fired isLoaded=true before _sound was assigned
+        // (the common case). Fire the queued play() now that _sound exists.
+        if (_pendingPlay && _isLoaded) {
+          _pendingPlay = false;
+          sound.playAsync().catch(() => {});
+        }
+      })
       .catch((e: any) => {
+        _hasError = true;
         console.warn('[expo-audio-compat] expo-av Sound create failed:', e?.message || e);
-        // Propagate the error to AudioPlayer via the status channel
-        statusListeners.forEach((cb) => cb({ error: true, isLoaded: false }));
+        emitError();
       });
 
     return {
       play: () => {
+        if (_hasError) { emitError(); return; }
         if (_sound && _isLoaded) {
           _sound.playAsync().catch(() => {});
         } else {
-          // Sound not ready yet — queue the play for when it loads
           _pendingPlay = true;
         }
       },
