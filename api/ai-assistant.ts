@@ -811,7 +811,7 @@ const tools: OpenAI.Chat.Completions.ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'query_tasks',
-      description: 'Query tasks. Use for "pending tasks", "completed tasks", "tasks for project".',
+      description: 'Query project checklist tasks assigned by admin. Use for "tasks scheduled", "tasks assigned to me", "pending tasks", "completed tasks", "tasks for project", "what tasks do I have". NOTE: use query_schedule for Gantt/calendar schedule blocks.',
       parameters: {
         type: 'object',
         properties: {
@@ -2351,7 +2351,7 @@ All query tools hit the live database on every call. This means the data is alwa
 - query_expenses — expenses by project, date, category. Fields: type, subcategory, amount, store, date, hasReceipt.
 - query_projects — project list, status (active/completed/on-hold/archived), budgets, start/end dates, address, contract amount.
 - query_clients — CRM: client name, email, phone, address, source (Google/Referral/etc), notes.
-- query_tasks — project tasks: title, status (pending/in-progress/completed), priority, assignee, due date, project.
+- query_tasks — project checklist tasks created by admin: name, date, completed (true/false), project name. Use for tasks assigned/scheduled by admin. NOTE: for Gantt/calendar schedule blocks use query_schedule instead.
 - query_photos — photos by project, category, uploader, date. Use to answer "how many photos on project X?" or "who took photos today?"
 - query_daily_logs — daily work logs: date, project, work performed, issues, weather, labor hours, materials used, notes, employee notes.
 - query_change_orders — change orders: description, amount, status (pending/approved/rejected), project.
@@ -4670,6 +4670,7 @@ Based on the store and items, intelligently categorize this expense:
           let q = supabase
             .from('tasks')
             .select('*')
+            .eq('company_id', companyId)
             .order('date', { ascending: true })
             .limit(500);
 
