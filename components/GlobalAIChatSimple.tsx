@@ -7,7 +7,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useState, useRef, useEffect, useCallback } from 'react';
 // Removed Rork AI dependency - using OpenAI directly
-import { AudioModule, useAudioRecorder, createAudioPlayer, AudioPlayer, AndroidOutputFormat, AndroidAudioEncoder, IOSOutputFormat, IOSAudioQuality } from 'expo-audio';
+import { AudioModule, useAudioRecorder, createAudioPlayer, AudioPlayer, RecordingPresets } from 'expo-audio';
 import { usePathname, useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -622,11 +622,7 @@ export default function GlobalAIChatSimple({ currentPageContext, inline = false 
   const microphoneSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const conversationModeInitialized = useRef<boolean>(false);
-  const nativeRecorder = useAudioRecorder({
-    android: { extension: '.m4a', outputFormat: AndroidOutputFormat.MPEG_4, audioEncoder: AndroidAudioEncoder.AAC, sampleRate: 44100, numberOfChannels: 2, bitRate: 128000 },
-    ios: { extension: '.wav', outputFormat: IOSOutputFormat.LINEARPCM, audioQuality: IOSAudioQuality.HIGH, sampleRate: 44100, numberOfChannels: 2, bitRate: 128000, linearPCMBitDepth: 16, linearPCMIsBigEndian: false, linearPCMIsFloat: false },
-    web: { mimeType: 'audio/webm', bitsPerSecond: 128000 },
-  });
+  const nativeRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [soundInstance, setSoundInstance] = useState<AudioPlayer | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
   const isProcessingActionRef = useRef<boolean>(false);
