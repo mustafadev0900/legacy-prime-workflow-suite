@@ -600,13 +600,30 @@ export default function ProfileScreen() {
         <View style={styles.headerSection}>
           <View style={styles.avatarContainer}>
             {(localAvatarUri || user.avatar) ? (
-              <Image
-                key={localAvatarUri || user.avatar}
-                source={{ uri: localAvatarUri || user.avatar }}
-                style={styles.avatar}
-                contentFit="cover"
-                cachePolicy="none"
-              />
+              Platform.OS === 'web' ? (
+                // expo-image on web doesn't reliably render data: URLs or freshly
+                // uploaded S3 URLs — use a native <img> element which always works
+                // @ts-ignore – HTML element valid in React Native Web context
+                <img
+                  src={localAvatarUri || user.avatar}
+                  style={{
+                    width: 120,
+                    height: 120,
+                    borderRadius: 60,
+                    border: '4px solid #FFFFFF',
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                />
+              ) : (
+                <Image
+                  key={localAvatarUri || user.avatar}
+                  source={{ uri: localAvatarUri || user.avatar }}
+                  style={styles.avatar}
+                  contentFit="cover"
+                  cachePolicy="none"
+                />
+              )
             ) : (
               <View style={styles.avatarPlaceholder}>
                 <Text style={styles.avatarInitials}>{initials}</Text>
