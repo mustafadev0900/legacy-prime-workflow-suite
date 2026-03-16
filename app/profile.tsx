@@ -13,8 +13,8 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
 import * as WebBrowser from 'expo-web-browser';
+import { compressImage } from '@/lib/upload-utils';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import Svg, { Path } from 'react-native-svg';
 import { useApp } from '@/contexts/AppContext';
@@ -86,15 +86,59 @@ export default function ProfileScreen() {
     .toUpperCase()
     .slice(0, 2);
 
+  const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+
+  const doUpload = async (imageUri: string, errorKey: string = 'profile.photoUploadError') => {
+    setIsUploadingPhoto(true);
+    try {
+      console.log('[Profile] Uploading profile picture to S3...');
+
+      let imageData: string;
+      if (Platform.OS === 'web') {
+        // Web: blob/object URL → data URL via FileReader
+        const response = await fetch(imageUri);
+        const blob = await response.blob();
+        imageData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        // Native: compress to JPEG, get raw base64, wrap in data URL
+        const { base64 } = await compressImage(imageUri, { maxWidth: 400, maxHeight: 400, quality: 0.85 });
+        imageData = `data:image/jpeg;base64,${base64}`;
+      }
+
+      const uploadResponse = await fetch(`${API_BASE}/api/upload-profile-picture`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData, userId: user.id }),
+      });
+
+      const uploadResult = await uploadResponse.json();
+
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || 'Failed to upload profile picture');
+      }
+
+      console.log('[Profile] Profile picture uploaded successfully:', uploadResult.url);
+      setUser({ ...user, avatar: uploadResult.url });
+      Alert.alert(t('common.success'), t('profile.photoUpdated'));
+    } catch (error: any) {
+      console.error('[Profile] Error uploading profile picture:', error);
+      Alert.alert(t('common.error'), error.message || t(errorKey));
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
   const handlePickImage = async () => {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (!permissionResult.granted) {
-        Alert.alert(
-          t('common.error'),
-          t('profile.photoPermissionRequired')
-        );
+        Alert.alert(t('common.error'), t('profile.photoPermissionRequired'));
         return;
       }
 
@@ -102,67 +146,11 @@ export default function ProfileScreen() {
         mediaTypes: 'images' as any,
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 1,
       });
 
-      if (!result.canceled && result.assets && result.assets[0]) {
-        setIsUploadingPhoto(true);
-        const imageUri = result.assets[0].uri;
-
-        try {
-          console.log('[Profile] Uploading profile picture to S3...');
-
-          // Convert image to base64
-          let base64Image: string;
-          if (Platform.OS === 'web') {
-            // Web: Fetch and convert to base64
-            const response = await fetch(imageUri);
-            const blob = await response.blob();
-            base64Image = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-          } else {
-            // Mobile: Read file as base64
-            const base64 = await FileSystem.readAsStringAsync(imageUri, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            // Determine file extension
-            const fileExtension = imageUri.split('.').pop() || 'jpg';
-            base64Image = `data:image/${fileExtension};base64,${base64}`;
-          }
-
-          // Upload to S3 and update database
-          const uploadResponse = await fetch('/api/upload-profile-picture', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              imageData: base64Image,
-              userId: user.id,
-            }),
-          });
-
-          const uploadResult = await uploadResponse.json();
-
-          if (!uploadResult.success) {
-            throw new Error(uploadResult.error || 'Failed to upload profile picture');
-          }
-
-          console.log('[Profile] Profile picture uploaded successfully:', uploadResult.url);
-
-          // Update local user state with S3 URL
-          const updatedUser = { ...user, avatar: uploadResult.url };
-          await setUser(updatedUser);
-
-          Alert.alert(t('common.success'), t('profile.photoUpdated'));
-        } catch (error: any) {
-          console.error('[Profile] Error uploading profile picture:', error);
-          Alert.alert(t('common.error'), error.message || t('profile.photoUploadError'));
-        } finally {
-          setIsUploadingPhoto(false);
-        }
+      if (!result.canceled && result.assets?.[0]) {
+        await doUpload(result.assets[0].uri, 'profile.photoUploadError');
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -176,77 +164,18 @@ export default function ProfileScreen() {
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
 
       if (!permissionResult.granted) {
-        Alert.alert(
-          t('common.error'),
-          t('profile.cameraPermissionRequired')
-        );
+        Alert.alert(t('common.error'), t('profile.cameraPermissionRequired'));
         return;
       }
 
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [1, 1],
-        quality: 0.8,
+        quality: 1,
       });
 
-      if (!result.canceled && result.assets && result.assets[0]) {
-        setIsUploadingPhoto(true);
-        const imageUri = result.assets[0].uri;
-
-        try {
-          console.log('[Profile] Uploading profile picture to S3...');
-
-          // Convert image to base64
-          let base64Image: string;
-          if (Platform.OS === 'web') {
-            // Web: Fetch and convert to base64
-            const response = await fetch(imageUri);
-            const blob = await response.blob();
-            base64Image = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-          } else {
-            // Mobile: Read file as base64
-            const base64 = await FileSystem.readAsStringAsync(imageUri, {
-              encoding: FileSystem.EncodingType.Base64,
-            });
-            // Determine file extension
-            const fileExtension = imageUri.split('.').pop() || 'jpg';
-            base64Image = `data:image/${fileExtension};base64,${base64}`;
-          }
-
-          // Upload to S3 and update database
-          const uploadResponse = await fetch('/api/upload-profile-picture', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              imageData: base64Image,
-              userId: user.id,
-            }),
-          });
-
-          const uploadResult = await uploadResponse.json();
-
-          if (!uploadResult.success) {
-            throw new Error(uploadResult.error || 'Failed to upload profile picture');
-          }
-
-          console.log('[Profile] Profile picture uploaded successfully:', uploadResult.url);
-
-          // Update local user state with S3 URL
-          const updatedUser = { ...user, avatar: uploadResult.url };
-          await setUser(updatedUser);
-
-          Alert.alert(t('common.success'), t('profile.photoUpdated'));
-        } catch (error: any) {
-          console.error('[Profile] Error uploading profile picture:', error);
-          Alert.alert(t('common.error'), error.message || t('profile.photoTakeError'));
-        } finally {
-          setIsUploadingPhoto(false);
-        }
+      if (!result.canceled && result.assets?.[0]) {
+        await doUpload(result.assets[0].uri, 'profile.photoTakeError');
       }
     } catch (error) {
       console.error('Error taking photo:', error);
@@ -256,24 +185,17 @@ export default function ProfileScreen() {
   };
 
   const handleChangePhoto = () => {
-    Alert.alert(
-      t('profile.changePhotoTitle'),
-      t('profile.selectOption'),
-      [
-        {
-          text: t('profile.takePhoto'),
-          onPress: handleTakePhoto,
-        },
-        {
-          text: t('profile.selectFromGallery'),
-          onPress: handlePickImage,
-        },
-        {
-          text: t('common.cancel'),
-          style: 'cancel',
-        },
-      ]
-    );
+    const options: any[] = [];
+
+    // Camera not available on web desktop — only show on native or mobile web
+    if (Platform.OS !== 'web') {
+      options.push({ text: t('profile.takePhoto'), onPress: handleTakePhoto });
+    }
+
+    options.push({ text: t('profile.selectFromGallery'), onPress: handlePickImage });
+    options.push({ text: t('common.cancel'), style: 'cancel' });
+
+    Alert.alert(t('profile.changePhotoTitle'), t('profile.selectOption'), options);
   };
 
   const startResetCooldown = (seconds: number) => {
