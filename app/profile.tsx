@@ -28,8 +28,12 @@ export default function ProfileScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
-  // Local URI for instant preview — shown immediately after pick, before S3 URL resolves
+  // Local data: URI for instant preview — shown immediately after pick.
+  // Avoids depending on S3 public-read access for same-session display.
   const [localAvatarUri, setLocalAvatarUri] = useState<string | null>(null);
+  // True when the persisted S3 URL (user.avatar) fails to load in the browser.
+  // Prevents the broken URL from being retried and shows initials instead.
+  const [avatarLoadError, setAvatarLoadError] = useState<boolean>(false);
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
   const [isSendingReset, setIsSendingReset] = useState<boolean>(false);
   const [resetCooldown, setResetCooldown] = useState<number>(0);
@@ -92,6 +96,7 @@ export default function ProfileScreen() {
 
   const doUpload = async (imageUri: string, errorKey: string = 'profile.photoUploadError') => {
     setIsUploadingPhoto(true);
+    setAvatarLoadError(false);
     // Show local image instantly — don't wait for S3 round-trip
     setLocalAvatarUri(imageUri);
     try {
@@ -625,7 +630,7 @@ export default function ProfileScreen() {
       <ScrollView style={styles.scrollView}>
         <View style={styles.headerSection}>
           <View style={styles.avatarContainer}>
-            {(localAvatarUri || user.avatar) ? (
+            {(localAvatarUri || (!avatarLoadError && user.avatar)) ? (
               Platform.OS === 'web' ? (
                 // expo-image on web doesn't reliably render data: URLs or freshly
                 // uploaded S3 URLs — use a native <img> element which always works
@@ -633,8 +638,10 @@ export default function ProfileScreen() {
                 <img
                   src={localAvatarUri || user.avatar}
                   onError={() => {
-                    // S3 URL inaccessible in browser — clear so we fall back to initials
-                    setLocalAvatarUri(null);
+                    // S3 URL inaccessible — set error flag so we fall back to initials
+                    // (clearing localAvatarUri alone isn't enough since user.avatar
+                    // would still satisfy the condition and loop the broken URL)
+                    setAvatarLoadError(true);
                   }}
                   style={{
                     width: 120,
