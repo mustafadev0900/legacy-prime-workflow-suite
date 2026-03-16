@@ -159,8 +159,9 @@ export default function ProfileScreen() {
       }
 
       console.log('[Profile] Profile picture uploaded successfully:', uploadResult.url);
-      // Replace local preview with the permanent S3 URL
-      setLocalAvatarUri(uploadResult.url);
+      // Keep localAvatarUri as the local data: URL — it renders instantly without
+      // needing S3 public access. user.avatar gets the S3 URL for persistence
+      // so it loads correctly on subsequent logins (once S3 access is confirmed).
       setUser({ ...user, avatar: uploadResult.url });
       Alert.alert(t('common.success'), t('profile.photoUpdated'));
     } catch (error: any) {
@@ -631,6 +632,10 @@ export default function ProfileScreen() {
                 // @ts-ignore – HTML element valid in React Native Web context
                 <img
                   src={localAvatarUri || user.avatar}
+                  onError={() => {
+                    // S3 URL inaccessible in browser — clear so we fall back to initials
+                    setLocalAvatarUri(null);
+                  }}
                   style={{
                     width: 120,
                     height: 120,

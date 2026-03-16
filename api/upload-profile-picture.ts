@@ -77,12 +77,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('[Upload Profile Picture] Uploading to S3:', uniqueFileName);
 
-    // Upload to S3
+    // Upload to S3 with public-read ACL so the URL is directly accessible
+    // in browsers without presigned URLs (requires bucket to have
+    // "Block public access via ACLs" disabled in S3 settings)
     const uploadCommand = new PutObjectCommand({
       Bucket: AWS_S3_BUCKET,
       Key: uniqueFileName,
       Body: buffer,
       ContentType: `image/${fileExtension}`,
+      ACL: 'public-read',
     });
 
     await s3Client.send(uploadCommand);
