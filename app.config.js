@@ -21,6 +21,13 @@ module.exports = {
       bundleIdentifier: "app.rork.legacy-prime-workflow-suite",
       icon: "./assets/images/logo.png",
       usesAppleSignIn: true,
+      googleServicesFile: "./GoogleService-Info.plist",
+      infoPlist: {
+        UIBackgroundModes: ["remote-notification", "fetch", "audio", "location"],
+        NSPhotoLibraryUsageDescription: "Allow $(PRODUCT_NAME) to access your photos",
+        NSCameraUsageDescription: "Allow $(PRODUCT_NAME) to access your camera",
+        NSMicrophoneUsageDescription: "Allow $(PRODUCT_NAME) to access your microphone",
+      },
     },
     android: {
       adaptiveIcon: {
@@ -28,7 +35,8 @@ module.exports = {
         backgroundColor: "#ffffff"
       },
       icon: "./assets/images/app-icon-1024.png",
-      package: "app.rork.legacy_prime_workflow_suite"
+      package: "app.rork.legacy_prime_workflow_suite",
+      googleServicesFile: "./google-services.json",
     },
     web: {
       favicon: "./assets/images/favicon.png",
@@ -37,9 +45,18 @@ module.exports = {
     plugins: [
       "react-native-document-scanner-plugin",
       "expo-apple-authentication",
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging",
+      [
+        "expo-notifications",
+        {
+          icon: "./assets/images/app-icon-1024.png",
+          color: "#ffffff",
+          sounds: []
+        }
+      ],
     ],
     extra: {
-      // Make environment variables available to the app
       openaiApiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY,
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,

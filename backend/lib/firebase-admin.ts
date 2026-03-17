@@ -1,0 +1,34 @@
+import { getApps, initializeApp, cert } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
+
+/**
+ * Lazily initializes Firebase Admin SDK using service account credentials
+ * from environment variables. Safe to call multiple times — only initializes once.
+ *
+ * Required env vars (Vercel secrets):
+ *   FIREBASE_PROJECT_ID
+ *   FIREBASE_CLIENT_EMAIL
+ *   FIREBASE_PRIVATE_KEY  (newlines stored as \n — we unescape here)
+ */
+function initFirebaseAdmin() {
+  if (getApps().length > 0) return;
+
+  const projectId   = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey  = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error(
+      '[firebase-admin] Missing credentials — set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY in Vercel env vars'
+    );
+  }
+
+  initializeApp({
+    credential: cert({ projectId, clientEmail, privateKey }),
+  });
+}
+
+export function getFirebaseMessaging() {
+  initFirebaseAdmin();
+  return getMessaging();
+}
