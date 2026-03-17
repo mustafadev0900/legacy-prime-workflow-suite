@@ -91,6 +91,19 @@ export function useNotificationSetup(
           const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
           console.log('[Notifications] Service worker registered');
 
+          // Pass Firebase config to the service worker via postMessage.
+          // This avoids hardcoding config values in the SW file (which lives in the public repo).
+          const swConfig = {
+            apiKey:            process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+            authDomain:        process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+            projectId:         process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+            storageBucket:     process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+            messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+            appId:             process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+          };
+          const sw = registration.active || registration.waiting || registration.installing;
+          sw?.postMessage({ type: 'FIREBASE_CONFIG', config: swConfig });
+
           // Dynamically import Firebase web SDK (avoids loading on native)
           const { getFirebaseMessagingWeb } = await import('@/lib/firebase');
           const { getToken }                = await import('firebase/messaging');
