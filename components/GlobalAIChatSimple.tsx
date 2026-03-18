@@ -133,7 +133,193 @@ const getDefaultEstimateItems = (projectType: string, budget: number, priceList:
   return items;
 };
 
+/**
+ * Builds a two-tier message context window for the AI assistant.
+ *
+ * Sending a flat slice of 50 raw messages has two problems:
+ *   1. Token waste — 50 full messages (including verbose AI responses) can exceed
+ *      4,000 tokens of context that adds little value over 15-20 messages.
+ *   2. Context loss — conversations longer than 50 messages silently drop earlier
+ *      context (client names discussed, decisions made, actions confirmed).
+ *
+ * Two-tier approach:
+ *   - Last 15 messages  → full content (recent turns, full fidelity)
+ *   - Messages 16–50    → user turns only, truncated to 120 chars (key facts)
+ *   - Messages 50+      → dropped (stale, rarely actionable)
+ *
+ * The older tier is injected as a synthetic context block at the start of the
+ * messages array so the model treats it as prior conversation memory.
+ */
+function buildMessageContext(allMessages: any[]): Array<{ role: string; text: string; files?: any[] }> {
+  const FULL_WINDOW = 15;
+  const PARTIAL_WINDOW = 35; // messages 16–50
+  const TRUNCATE_AT = 120;
+
+  if (allMessages.length <= FULL_WINDOW) {
+    return allMessages.map(m => ({ role: m.role, text: m.text, files: m.files }));
+  }
+
+  const fullMessages = allMessages.slice(-FULL_WINDOW);
+  const partialStart = Math.max(0, allMessages.length - FULL_WINDOW - PARTIAL_WINDOW);
+  const partialMessages = allMessages.slice(partialStart, allMessages.length - FULL_WINDOW);
+
+  // Only user turns from the older window — AI responses are verbose and
+  // add little incremental value once the recent window captures the flow.
+  const condensedLines = partialMessages
+    .filter((m: any) => m.role === 'user' && m.text?.trim()?.length > 10)
+    .map((m: any) => m.text.length > TRUNCATE_AT
+      ? m.text.substring(0, TRUNCATE_AT) + '…'
+      : m.text
+    )
+    .join('\n');
+
+  if (!condensedLines) {
+    // Older window had no substantive user turns — just return the full window
+    return fullMessages.map(m => ({ role: m.role, text: m.text, files: m.files }));
+  }
+
+  // Synthetic context block — injected as a user/assistant exchange so the
+  // model treats it as memory of prior conversation, not a new instruction.
+  const contextBlock = {
+    role: 'user' as const,
+    text: `[Context from earlier in our conversation]\n${condensedLines}`,
+    files: [],
+  };
+  const contextAck = {
+    role: 'assistant' as const,
+    text: 'Got it, I remember our earlier discussion.',
+    files: [],
+  };
+
+  return [
+    contextBlock,
+    contextAck,
+    ...fullMessages.map((m: any) => ({ role: m.role, text: m.text, files: m.files })),
+  ];
+}
+
 // Custom hook to replace Rork AI with direct OpenAI - now with app data awareness and persistent chat history
+/**
+ * Builds a compact appData payload for the AI assistant API.
+ *
+ * The backend does live Supabase queries for all read tools — appData is only
+ * used as a DB-failure fallback and for entity name→ID lookups in write ops.
+ * Sending full arrays (100+ projects × all fields) wastes tokens and increases
+ * latency on every message. This function sends:
+ *   - Full detail: company, priceList, clockEntries, dailyTasks
+ *     (needed for estimate generation, lunch-state merge, personal tasks)
+ *   - Compact (id + lookup fields only): projects, clients, users,
+ *     subcontractors, estimates
+ *     (needed for name→ID resolution in write operations)
+ *   - Omitted: expenses, payments, dailyLogs, tasks, photos, changeOrders,
+ *     callLogs, proposals — live DB queries handle these; stale fallback
+ *     data provides no meaningful value over a "DB unavailable" message
+ */
+function buildCompactAppData(appData: any) {
+  return {
+    company: appData.company,
+    priceList: appData.priceList ?? [],
+    clockEntries: appData.clockEntries ?? [],   // needed for lunch state merge
+    dailyTasks: appData.dailyTasks ?? [],       // user's personal tasks (small set)
+    // Compact summaries — enough for name→ID lookups in write operations
+    projects: (appData.projects ?? []).map((p: any) => ({
+      id: p.id,
+      name: p.name,
+      status: p.status,
+      budget: p.budget,
+      estimateId: p.estimateId ?? p.estimate_id,
+      clientId: p.clientId ?? p.client_id,
+    })),
+    clients: (appData.clients ?? []).map((c: any) => ({
+      id: c.id,
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+    })),
+    estimates: (appData.estimates ?? []).map((e: any) => ({
+      id: e.id,
+      name: e.name,
+      status: e.status,
+      clientId: e.clientId ?? e.client_id,
+    })),
+    users: (appData.users ?? []).map((u: any) => ({
+      id: u.id,
+      name: u.name,
+      role: u.role,
+    })),
+    subcontractors: (appData.subcontractors ?? []).map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      trade: s.trade,
+    })),
+  };
+}
+
+/**
+ * Returns a proactive follow-up suggestion to append after an action completes.
+ * Suggestions are short, conversational, and contextually appropriate.
+ * Returns null for actions where there's no obvious natural next step.
+ */
+function getProactiveSuggestion(actionType: string, actionData: any): string | null {
+  switch (actionType) {
+    case 'add_client':
+      return `Want me to create an estimate for ${actionData?.name || 'them'} while we're at it?`;
+
+    case 'generate_estimate':
+    case 'generate_takeoff_estimate':
+      return `Ready to send this to the client, or do you want to review it first?`;
+
+    case 'approve_estimate':
+      return `Want me to convert this to an active project now?`;
+
+    case 'convert_estimate_to_project':
+      return `Want me to set up the initial schedule phases or add a checklist for this project?`;
+
+    case 'create_project':
+      return `Want me to set up schedule phases or add a task checklist for this project?`;
+
+    case 'add_expense':
+      return `Want a quick expense summary for this project?`;
+
+    case 'create_change_order':
+      return `Want me to notify the client about this change order?`;
+
+    case 'clock_in':
+      return `Got it. Want me to check who else is currently clocked in?`;
+
+    case 'clock_out':
+      return `Want me to create a daily log entry for today's work?`;
+
+    case 'create_task':
+      return `Should I set a reminder for this task?`;
+
+    case 'add_daily_task':
+      return `Should I set a reminder for this one?`;
+
+    case 'send_estimate':
+      return `Want to also follow up with a text message to make sure they received it?`;
+
+    case 'create_daily_log':
+      return `Want to attach any photos to this log?`;
+
+    case 'add_payment':
+      return `Want a payment summary for this project?`;
+
+    case 'send_sms':
+    case 'send_email':
+      return `Want me to log a follow-up task so you don't lose track of this?`;
+
+    case 'add_subcontractor':
+      return `Want to send them an invitation to register in the system?`;
+
+    case 'set_followup':
+      return `Want me to create a daily task reminder for this follow-up as well?`;
+
+    default:
+      return null;
+  }
+}
+
 function useOpenAIChat(appData: {
   projects: any[];
   clients: any[];
@@ -249,15 +435,10 @@ function useOpenAIChat(appData: {
     saveMessageToDb('user', messageText, files);
 
     try {
-      // Prepare messages for API - send last 50 messages for context (to avoid token limits)
-      const recentMessages = messages.slice(-50);
-      const apiMessages = recentMessages.map(msg => ({
-        role: msg.role,
-        text: msg.text,
-        files: msg.files,
-      }));
+      // Build two-tier context window: last 15 full + older user-turn summary
+      const apiMessages = buildMessageContext(messages);
 
-      // Call AI Assistant API with all business data
+      // Call AI Assistant API — compact payload reduces token cost and latency
       const response = await fetch(`${API_BASE}/api/ai-assistant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -270,25 +451,7 @@ function useOpenAIChat(appData: {
           userRole: appData.userRole,
           customPermissions: appData.customPermissions,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          appData: {
-            projects: appData.projects,
-            clients: appData.clients,
-            expenses: appData.expenses,
-            estimates: appData.estimates,
-            payments: appData.payments,
-            clockEntries: appData.clockEntries,
-            company: appData.company,
-            priceList: appData.priceList,
-            dailyLogs: appData.dailyLogs,
-            tasks: appData.tasks,
-            photos: appData.photos,
-            changeOrders: appData.changeOrders,
-            subcontractors: appData.subcontractors,
-            callLogs: appData.callLogs,
-            users: appData.users,
-            proposals: appData.proposals,
-            dailyTasks: appData.dailyTasks,
-          }
+          appData: buildCompactAppData(appData),
         }),
       });
 
@@ -362,45 +525,21 @@ function useOpenAIChat(appData: {
     saveMessageToDb('user', messageText, files);
 
     try {
-      // Prepare messages for API - send last 50 messages for context (to avoid token limits)
+      // Build two-tier context window: last 15 full + older user-turn summary
       const allMessages = [...messages, userMsg];
-      const recentMessages = allMessages.slice(-50);
-      const apiMessages = recentMessages.map(msg => ({
-        role: msg.role,
-        text: msg.text,
-        files: msg.files,
-      }));
+      const apiMessages = buildMessageContext(allMessages);
 
-      // Call AI Assistant API with all business data
+      // Call AI Assistant API — compact payload reduces token cost and latency
       const response = await fetch(`${API_BASE}/api/ai-assistant`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: apiMessages,
-          pageContext: appData.currentPageContext || null, // Current page context for "this project" etc.
+          pageContext: appData.currentPageContext || null,
           companyId: appData.company?.id,
           userId: appData.userId,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          appData: {
-            projects: appData.projects,
-            clients: appData.clients,
-            expenses: appData.expenses,
-            estimates: appData.estimates,
-            payments: appData.payments,
-            clockEntries: appData.clockEntries,
-            company: appData.company,
-            // Additional data for complete business intelligence
-            priceList: appData.priceList,
-            dailyLogs: appData.dailyLogs,
-            tasks: appData.tasks,
-            photos: appData.photos,
-            changeOrders: appData.changeOrders,
-            subcontractors: appData.subcontractors,
-            callLogs: appData.callLogs,
-            users: appData.users,
-            proposals: appData.proposals,
-            dailyTasks: appData.dailyTasks,
-          }
+          appData: buildCompactAppData(appData),
         }),
       });
 
@@ -1966,7 +2105,9 @@ Generate appropriate line items from the price list that fit this scope of work$
 
         // Action succeeded - update the "Working on it..." message with success message
         const successMsg = pendingAction.successMessage || 'Done!';
-        await updateLastMessage(successMsg);
+        const suggestion = getProactiveSuggestion(pendingAction.type, pendingAction.data);
+        const finalMsg = suggestion ? `${successMsg}\n\n${suggestion}` : successMsg;
+        await updateLastMessage(finalMsg);
         console.log('[AI Action] Updated message with success:', successMsg);
       } catch (error: any) {
         console.error('[AI Action] Error handling action:', error);
