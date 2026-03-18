@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           results.push({ token: row.token.slice(-10), platform: row.platform, source: row.token_source, status: 'sent', fcmName: name });
         } catch (err: any) {
           const code = err?.code || err?.errorInfo?.code || err?.message || 'UNKNOWN';
-          results.push({ token: row.token.slice(-10), platform: row.platform, source: row.token_source, status: 'error', error: code });
+          results.push({ token: row.token.slice(-10), platform: row.platform, source: row.token_source, status: 'error', error: code, rawFcmError: err?.rawBody ?? null });
         }
       }
     } catch (initErr: any) {

@@ -134,8 +134,9 @@ class FcmMessaging {
         errBody?.error?.status ??
         'UNKNOWN';
       const err: any = new Error(`[fcm] send failed (${response.status}): ${fcmCode}`);
-      err.errorInfo = { code: fcmCode };
-      err.code      = fcmCode;
+      err.errorInfo  = { code: fcmCode };
+      err.code       = fcmCode;
+      err.rawBody    = errBody;
       throw err;
     }
 
