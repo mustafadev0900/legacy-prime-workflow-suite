@@ -17,7 +17,6 @@ import {
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import SkeletonBox from '@/components/SkeletonBox';
-import * as Notifications from 'expo-notifications';
 import { useTranslation } from 'react-i18next';
 import {
   Users,
@@ -111,18 +110,12 @@ export default function ChatScreen() {
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [locallyDeletedIds, setLocallyDeletedIds] = useState<Set<string>>(new Set());
 
-  const conversationLastMsgAtRef = useRef<Map<string, string>>(new Map());
-  // Tracks whether we've already loaded persisted timestamps from AsyncStorage.
-  // Reset to false when user changes so a fresh load happens on re-login.
-  const seenLoadedRef = useRef(false);
   const [unreadConversations, setUnreadConversations] = useState<Set<string>>(new Set());
   // Keep AppContext (and FloatingChatButton) in sync with the authoritative count.
   useEffect(() => {
     setUnreadChatCount?.(unreadConversations.size);
   }, [unreadConversations]);
   const [conversationPreviews, setConversationPreviews] = useState<Map<string, PreviewEntry>>(new Map());
-  // Server-side last_read_at per conversation — enables cross-device unread sync.
-  const lastReadAtMapRef = useRef<Map<string, string>>(new Map());
   // Ref so Realtime callbacks can call the latest fetchConversations without stale closures.
   const fetchConversationsFnRef = useRef<(() => void) | null>(null);
 
@@ -258,39 +251,18 @@ export default function ChatScreen() {
     fetchTeamMembers();
   }, [user?.id, user?.role]);
 
-  // Reset seen-timestamps state whenever the logged-in user changes so a fresh
-  // load from AsyncStorage happens on the next fetchConversations call.
-  useEffect(() => {
-    seenLoadedRef.current = false;
-    conversationLastMsgAtRef.current = new Map();
-  }, [user?.id]);
-
   // ─── Fetch conversations (poll 30s + Realtime-triggered) ────────────────────
   useEffect(() => {
     const fetchConversations = async () => {
       if (!user?.id) return;
       setIsLoadingConversations(true);
 
-      // ── One-time: restore "last-seen" timestamps from previous session ──
-      // Used as a cross-session fallback in case last_read_at is null (new user/device).
-      if (!seenLoadedRef.current) {
-        seenLoadedRef.current = true;
-        try {
-          const raw = await AsyncStorage.getItem(`chat_seen_${user.id}`);
-          if (raw) {
-            const parsed = JSON.parse(raw) as Record<string, string>;
-            Object.entries(parsed).forEach(([id, ts]) => {
-              conversationLastMsgAtRef.current.set(id, ts);
-            });
-          }
-        } catch { /* non-fatal */ }
-      }
-
       try {
         const resp = await fetch(`${rorkApi}/api/team/get-conversations?userId=${user.id}`);
         const result = await resp.json();
         if (!result.success) return;
 
+        const freshUnread = new Set<string>();
         result.conversations.forEach((conv: any) => {
           addConversation({
             id: conv.id,
@@ -323,51 +295,18 @@ export default function ChatScreen() {
           }
 
           if (conv.lastMessageAt) {
-            // Store server-side last_read_at for cross-device unread sync.
-            if (conv.lastReadAt) lastReadAtMapRef.current.set(conv.id, conv.lastReadAt);
-
             const isSelected = conv.id === selectedChatRef.current;
             const isOwnMessage = conv.lastMessage?.sender_id === user?.id;
-
-            // Unread determination: prefer server-side last_read_at (cross-device)
-            // and fall back to AsyncStorage timestamp (first login on new device).
-            const lastReadAt = lastReadAtMapRef.current.get(conv.id);
-            const knownAt   = lastReadAt ?? conversationLastMsgAtRef.current.get(conv.id);
-
-            if (!isSelected && !isOwnMessage && (!knownAt || conv.lastMessageAt > knownAt)) {
-              setUnreadConversations((prev) => new Set(prev).add(conv.id));
-              // Local notification for when app is foregrounded (native only —
-              // push notification from the server handles background/killed state).
-              if (Platform.OS !== 'web') {
-                const lm = conv.lastMessage;
-                const msgText =
-                  lm?.type === 'image' ? '📷 Photo'
-                  : lm?.type === 'voice' ? '🎤 Voice message'
-                  : lm?.type === 'video' ? '🎬 Video'
-                  : lm?.type === 'file' ? `📎 ${lm?.file_name || 'File'}`
-                  : (lm?.content || 'New message');
-                Notifications.scheduleNotificationAsync({
-                  content: {
-                    title: conv.name,
-                    body: msgText,
-                    data: { type: 'chat', conversationId: conv.id },
-                    sound: 'default',
-                  },
-                  trigger: null,
-                }).catch(() => {});
-              }
+            if (!isSelected && !isOwnMessage && (!conv.lastReadAt || conv.lastMessageAt > conv.lastReadAt)) {
+              freshUnread.add(conv.id);
             }
-            conversationLastMsgAtRef.current.set(conv.id, conv.lastMessageAt);
           }
         });
+        setUnreadConversations(freshUnread);
       } catch (e) {
         console.error('[Chat] fetchConversations error:', e);
       } finally {
         setIsLoadingConversations(false);
-        if (user?.id && conversationLastMsgAtRef.current.size > 0) {
-          const obj = Object.fromEntries(conversationLastMsgAtRef.current);
-          AsyncStorage.setItem(`chat_seen_${user.id}`, JSON.stringify(obj)).catch(() => {});
-        }
       }
     };
 
@@ -573,32 +512,12 @@ export default function ChatScreen() {
     });
 
     if (user?.id && convId !== 'ai-assistant') {
-      const now = new Date().toISOString();
-
-      // ── Server-side last_read_at (cross-device unread sync) ──────────────────
-      // Fire-and-forget — the DB update is the authoritative unread marker so
-      // other devices (web, iPad, etc.) will correctly see this conversation as
-      // read on their next fetchConversations poll.
+      // Stamp last_read_at in DB — authoritative cross-device unread marker.
       fetch(`${rorkApi}/api/team/update-last-read`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversationId: convId, userId: user.id }),
       }).catch(() => {});
-
-      // Optimistically advance the local ref so the next poll doesn't re-badge.
-      lastReadAtMapRef.current.set(convId, now);
-
-      // ── AsyncStorage fallback (cross-session, new device) ────────────────────
-      const ts = conversationLastMsgAtRef.current.get(convId);
-      if (ts) {
-        AsyncStorage.getItem(`chat_seen_${user.id}`)
-          .then((raw) => {
-            const obj = raw ? (JSON.parse(raw) as Record<string, string>) : {};
-            obj[convId] = ts;
-            return AsyncStorage.setItem(`chat_seen_${user.id}`, JSON.stringify(obj));
-          })
-          .catch(() => {});
-      }
     }
   };
 

@@ -62,8 +62,7 @@ async function registerPushToken(
 export function useNotificationSetup(
   user: NotificationSetupUser | null,
   company: NotificationSetupCompany | null,
-  onNotificationReceived?: (notification: Notification) => void,
-  onChatNotification?: () => void
+  onNotificationReceived?: (notification: Notification) => void
 ) {
   const router = useRouter();
   const notificationListener = useRef<Notifications.EventSubscription | null>(null);
@@ -236,7 +235,6 @@ export function useNotificationSetup(
       // Increment the floating chat button badge so the user sees an unread count
       // even when the chat screen isn't mounted (e.g. on the dashboard).
       if (notifType === 'chat') {
-        onChatNotification?.();
         return;
       }
 

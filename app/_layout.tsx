@@ -41,8 +41,8 @@ const PUBLIC_ROUTES = [
 ];
 
 function RootLayoutNav() {
-  const { user, isLoading, company, addNotification, getNotifications, refreshNotifications, incrementUnreadChatCount } = useApp();
-  useNotificationSetup(user, company, addNotification, incrementUnreadChatCount);
+  const { user, isLoading, company, addNotification, getNotifications, refreshNotifications } = useApp();
+  useNotificationSetup(user, company, addNotification);
 
   // Global background poll — keeps the bell badge live on every screen.
   // Depends on both user AND company since refreshNotifications guards on both.

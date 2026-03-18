@@ -196,7 +196,6 @@ interface AppState {
   setCallLogs: (logs: CallLog[]) => void;
   unreadChatCount: number;
   setUnreadChatCount: (count: number) => void;
-  incrementUnreadChatCount: () => void;
   addConversation: (conversation: ChatConversation) => void;
   addMessageToConversation: (conversationId: string, message: ChatMessage) => void;
   addReport: (report: Report) => Promise<void>;
@@ -1855,7 +1854,6 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
   }, []);
 
   const [unreadChatCount, setUnreadChatCount] = useState(0);
-  const incrementUnreadChatCount = useCallback(() => setUnreadChatCount(n => n + 1), []);
 
   const addConversation = useCallback((conversation: ChatConversation) => {
     setConversations(prev => {
@@ -3150,7 +3148,6 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     setCallLogs,
     unreadChatCount,
     setUnreadChatCount,
-    incrementUnreadChatCount,
     addConversation,
     addMessageToConversation,
     addReport,
