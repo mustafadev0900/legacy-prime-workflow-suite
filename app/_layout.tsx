@@ -40,8 +40,10 @@ const PUBLIC_ROUTES = [
   '/auth/callback',
 ];
 
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+
 function RootLayoutNav() {
-  const { user, isLoading, company, addNotification, getNotifications, refreshNotifications } = useApp();
+  const { user, isLoading, company, addNotification, getNotifications, refreshNotifications, setUnreadChatCount } = useApp();
   useNotificationSetup(user, company, addNotification);
 
   // Global background poll — keeps the bell badge live on every screen.
@@ -53,6 +55,29 @@ function RootLayoutNav() {
     const interval = setInterval(() => refreshNotifications(), 30_000);
     return () => clearInterval(interval);
   }, [user?.id, company?.id, refreshNotifications]);
+
+  // Global unread chat count — runs even before the chat tab is first visited.
+  // Chat tab is lazily mounted, so without this the FloatingChatButton badge
+  // would stay at 0 until the user navigates to chat.
+  useEffect(() => {
+    if (!user?.id) return;
+    const refresh = async () => {
+      try {
+        const resp = await fetch(`${API_BASE}/api/team/get-conversations?userId=${user.id}`);
+        const result = await resp.json();
+        if (!result.success) return;
+        const count = result.conversations.filter((conv: any) =>
+          conv.lastMessageAt &&
+          conv.lastMessage?.sender_id !== user.id &&
+          (!conv.lastReadAt || conv.lastMessageAt > conv.lastReadAt)
+        ).length;
+        setUnreadChatCount(count);
+      } catch {}
+    };
+    refresh();
+    const interval = setInterval(refresh, 30_000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
 
   // Keep native app icon badge in sync with the in-app unread count
   useEffect(() => {
