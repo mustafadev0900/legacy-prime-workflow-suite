@@ -62,7 +62,8 @@ async function registerPushToken(
 export function useNotificationSetup(
   user: NotificationSetupUser | null,
   company: NotificationSetupCompany | null,
-  onNotificationReceived?: (notification: Notification) => void
+  onNotificationReceived?: (notification: Notification) => void,
+  onChatNotification?: () => void
 ) {
   const router = useRouter();
   const notificationListener = useRef<Notifications.EventSubscription | null>(null);
@@ -232,7 +233,12 @@ export function useNotificationSetup(
       // table (which has a strict type CHECK constraint that excludes 'chat').
       // The chat screen handles delivery via Realtime/polling; the push banner is
       // shown automatically by the system (shouldShowBanner: true above).
-      if (notifType === 'chat') return;
+      // Increment the floating chat button badge so the user sees an unread count
+      // even when the chat screen isn't mounted (e.g. on the dashboard).
+      if (notifType === 'chat') {
+        onChatNotification?.();
+        return;
+      }
 
       onNotificationReceived?.({
         id:        incoming.request.identifier,
