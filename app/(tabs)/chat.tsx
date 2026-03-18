@@ -111,10 +111,9 @@ export default function ChatScreen() {
   const [locallyDeletedIds, setLocallyDeletedIds] = useState<Set<string>>(new Set());
 
   const [unreadConversations, setUnreadConversations] = useState<Set<string>>(new Set());
-  // Keep AppContext (and FloatingChatButton) in sync with the authoritative count.
-  useEffect(() => {
-    setUnreadChatCount?.(unreadConversations.size);
-  }, [unreadConversations]);
+  // NOTE: setUnreadChatCount is intentionally NOT called here.
+  // _layout.tsx owns the global badge count (polls every 30s).
+  // Calling setUnreadChatCount(0) on mount would race against and override that value.
   const [conversationPreviews, setConversationPreviews] = useState<Map<string, PreviewEntry>>(new Map());
   // Ref so Realtime callbacks can call the latest fetchConversations without stale closures.
   const fetchConversationsFnRef = useRef<(() => void) | null>(null);
@@ -507,7 +506,12 @@ export default function ChatScreen() {
     setReplyingTo(null);
     setUnreadConversations((prev) => {
       const next = new Set(prev);
-      next.delete(convId);
+      // If this conversation was unread, immediately decrement the global badge
+      // so FloatingChatButton reflects the read state before the next 30s poll.
+      if (next.has(convId)) {
+        next.delete(convId);
+        setUnreadChatCount?.(Math.max(0, next.size));
+      }
       return next;
     });
 
