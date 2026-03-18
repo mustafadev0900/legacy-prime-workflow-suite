@@ -334,7 +334,7 @@ export default function ChatScreen() {
             const lastReadAt = lastReadAtMapRef.current.get(conv.id);
             const knownAt   = lastReadAt ?? conversationLastMsgAtRef.current.get(conv.id);
 
-            if (!isSelected && !isOwnMessage && knownAt && conv.lastMessageAt > knownAt) {
+            if (!isSelected && !isOwnMessage && (!knownAt || conv.lastMessageAt > knownAt)) {
               setUnreadConversations((prev) => new Set(prev).add(conv.id));
               // Local notification for when app is foregrounded (native only —
               // push notification from the server handles background/killed state).
@@ -378,7 +378,23 @@ export default function ChatScreen() {
     // Reduced from 5s — Realtime handles instant delivery for the active chat.
     // 30s poll keeps conversation list fresh for background chats and edge cases.
     const interval = setInterval(fetchConversations, 30000);
-    return () => clearInterval(interval);
+
+    // ── Global Realtime: detect new messages in ANY conversation ─────────────
+    // When last_message_at changes on a conversation row, re-fetch so the unread
+    // badge and preview update instantly — not on the next 30s poll.
+    const convChannel = supabase
+      .channel(`conversations-list:${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'conversations' },
+        () => { fetchConversationsFnRef.current?.(); }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(convChannel);
+    };
   }, [user?.id]);
 
   // ─── Fetch + Realtime messages for active conversation ───────────────────────
