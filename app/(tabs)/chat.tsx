@@ -35,6 +35,7 @@ import {
 } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -120,6 +121,10 @@ export default function ChatScreen() {
     setUnreadChatCount?.(unreadConversations.size);
   }, [unreadConversations]);
   const [conversationPreviews, setConversationPreviews] = useState<Map<string, PreviewEntry>>(new Map());
+  // Server-side last_read_at per conversation — enables cross-device unread sync.
+  const lastReadAtMapRef = useRef<Map<string, string>>(new Map());
+  // Ref so Realtime callbacks can call the latest fetchConversations without stale closures.
+  const fetchConversationsFnRef = useRef<(() => void) | null>(null);
 
   const scrollViewRef = useRef<ScrollView>(null);
   // Measured height of the mobile header so KAV gets an accurate offset
@@ -260,15 +265,14 @@ export default function ChatScreen() {
     conversationLastMsgAtRef.current = new Map();
   }, [user?.id]);
 
-  // ─── Fetch conversations (poll 30s) ──────────────────────────────────────────
+  // ─── Fetch conversations (poll 30s + Realtime-triggered) ────────────────────
   useEffect(() => {
     const fetchConversations = async () => {
       if (!user?.id) return;
       setIsLoadingConversations(true);
 
-      // ── One-time: restore "last-seen" timestamps persisted from previous session ──
-      // This lets the first poll correctly detect messages that arrived while the
-      // user was logged out (knownAt will be populated, so the > comparison works).
+      // ── One-time: restore "last-seen" timestamps from previous session ──
+      // Used as a cross-session fallback in case last_read_at is null (new user/device).
       if (!seenLoadedRef.current) {
         seenLoadedRef.current = true;
         try {
@@ -319,14 +323,21 @@ export default function ChatScreen() {
           }
 
           if (conv.lastMessageAt) {
-            const knownAt = conversationLastMsgAtRef.current.get(conv.id);
-            // Use ref — selectedChat inside this closure is stale (effect only
-            // re-runs on user?.id change, not on every conversation switch).
+            // Store server-side last_read_at for cross-device unread sync.
+            if (conv.lastReadAt) lastReadAtMapRef.current.set(conv.id, conv.lastReadAt);
+
             const isSelected = conv.id === selectedChatRef.current;
-            // Only count as unread / notify if the message was sent by someone else
             const isOwnMessage = conv.lastMessage?.sender_id === user?.id;
+
+            // Unread determination: prefer server-side last_read_at (cross-device)
+            // and fall back to AsyncStorage timestamp (first login on new device).
+            const lastReadAt = lastReadAtMapRef.current.get(conv.id);
+            const knownAt   = lastReadAt ?? conversationLastMsgAtRef.current.get(conv.id);
+
             if (!isSelected && !isOwnMessage && knownAt && conv.lastMessageAt > knownAt) {
               setUnreadConversations((prev) => new Set(prev).add(conv.id));
+              // Local notification for when app is foregrounded (native only —
+              // push notification from the server handles background/killed state).
               if (Platform.OS !== 'web') {
                 const lm = conv.lastMessage;
                 const msgText =
@@ -353,8 +364,6 @@ export default function ChatScreen() {
         console.error('[Chat] fetchConversations error:', e);
       } finally {
         setIsLoadingConversations(false);
-        // Persist the current "last-seen" timestamps so the next app launch can
-        // compare against them and correctly mark messages as unread.
         if (user?.id && conversationLastMsgAtRef.current.size > 0) {
           const obj = Object.fromEntries(conversationLastMsgAtRef.current);
           AsyncStorage.setItem(`chat_seen_${user.id}`, JSON.stringify(obj)).catch(() => {});
@@ -362,20 +371,23 @@ export default function ChatScreen() {
       }
     };
 
+    // Expose fn so Realtime callbacks can trigger it without stale closures.
+    fetchConversationsFnRef.current = fetchConversations;
+
     fetchConversations();
-    // Poll every 5s (same as fetchMessages) so unread badges and previews
-    // appear quickly — previously 30s which felt very laggy.
-    const interval = setInterval(fetchConversations, 5000);
+    // Reduced from 5s — Realtime handles instant delivery for the active chat.
+    // 30s poll keeps conversation list fresh for background chats and edge cases.
+    const interval = setInterval(fetchConversations, 30000);
     return () => clearInterval(interval);
   }, [user?.id]);
 
-  // ─── Fetch messages (poll 5s) ─────────────────────────────────────────────────
+  // ─── Fetch + Realtime messages for active conversation ───────────────────────
   useEffect(() => {
+    if (!selectedChat || !user?.id || selectedChat === 'ai-assistant') return;
+
     const fetchMessages = async () => {
-      if (!selectedChat || !user?.id || selectedChat === 'ai-assistant') return;
       const conversation = conversationsRef.current.find((c) => c.id === selectedChat);
       if (!conversation) return;
-
       try {
         const resp = await fetch(
           `${rorkApi}/api/team/get-messages?conversationId=${selectedChat}&userId=${user.id}`
@@ -401,15 +413,75 @@ export default function ChatScreen() {
               isDeleted: msg.isDeleted,
             });
           }
+          // Sync soft-deletes that may have occurred on another device.
+          if (msg.isDeleted) {
+            setLocallyDeletedIds((prev) => new Set(prev).add(msg.id));
+          }
         });
       } catch (e) {
         console.error('[Chat] fetchMessages error:', e);
       }
     };
 
+    // Initial fetch for full message history + reply_to JOIN data.
     fetchMessages();
-    const interval = setInterval(fetchMessages, 5000);
-    return () => clearInterval(interval);
+
+    // ── Supabase Realtime: instant delivery for new messages ─────────────────
+    // INSERT → new message, rendered immediately (no reply preview on first render
+    //          — next poll fills it in via the JOIN).
+    // UPDATE → handles soft-deletes from any platform.
+    const activeConvId = selectedChat;
+    const channel = supabase
+      .channel(`messages:${activeConvId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeConvId}` },
+        (payload) => {
+          const msg = payload.new as any;
+          if (msg.is_deleted) return;
+          const latestConv = conversationsRef.current.find((c) => c.id === activeConvId);
+          if (latestConv?.messages.some((m) => m.id === msg.id)) return; // already present
+          addMessageToConversation(activeConvId, {
+            id: msg.id,
+            senderId: msg.sender_id,
+            type: msg.type,
+            content: msg.content,
+            text: msg.content,
+            fileName: msg.file_name,
+            duration: msg.duration,
+            timestamp: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            isDeleted: false,
+          });
+          // Keep conversations list fresh (updates last_message_at preview, unread badge).
+          fetchConversationsFnRef.current?.();
+          setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeConvId}` },
+        (payload) => {
+          const msg = payload.new as any;
+          if (msg.is_deleted) {
+            setLocallyDeletedIds((prev) => new Set(prev).add(msg.id));
+          }
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Chat] Realtime subscribed:', activeConvId);
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[Chat] Realtime unavailable, relying on poll fallback');
+        }
+      });
+
+    // Fallback poll — fires every 30s to catch any events Realtime may have missed.
+    const interval = setInterval(fetchMessages, 30000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+    };
   }, [selectedChat, user?.id]);
 
   // ─── Daily tip ────────────────────────────────────────────────────────────────
@@ -483,10 +555,24 @@ export default function ChatScreen() {
       next.delete(convId);
       return next;
     });
-    // Immediately advance the persisted timestamp for this conversation so
-    // the next fetchConversations poll won't re-add the unread badge and so
-    // next login correctly knows this conversation was read.
-    if (user?.id) {
+
+    if (user?.id && convId !== 'ai-assistant') {
+      const now = new Date().toISOString();
+
+      // ── Server-side last_read_at (cross-device unread sync) ──────────────────
+      // Fire-and-forget — the DB update is the authoritative unread marker so
+      // other devices (web, iPad, etc.) will correctly see this conversation as
+      // read on their next fetchConversations poll.
+      fetch(`${rorkApi}/api/team/update-last-read`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: convId, userId: user.id }),
+      }).catch(() => {});
+
+      // Optimistically advance the local ref so the next poll doesn't re-badge.
+      lastReadAtMapRef.current.set(convId, now);
+
+      // ── AsyncStorage fallback (cross-session, new device) ────────────────────
       const ts = conversationLastMsgAtRef.current.get(convId);
       if (ts) {
         AsyncStorage.getItem(`chat_seen_${user.id}`)

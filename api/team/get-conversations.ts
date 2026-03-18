@@ -40,6 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('conversation_participants')
       .select(`
         conversation_id,
+        last_read_at,
         conversations (
           id,
           name,
@@ -109,6 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           participants: participants?.map((p: any) => p.users).filter(Boolean) || [],
           lastMessage: lastMessage || null,
           lastMessageAt: conv.last_message_at,
+          lastReadAt: p.last_read_at,
           createdAt: conv.created_at,
           updatedAt: conv.updated_at,
         };

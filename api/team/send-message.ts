@@ -89,7 +89,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .eq('id', senderId)
       .single();
 
-    // Push notification to all other participants (fire-and-forget)
+    // Push notification to all other participants (fire-and-forget, both FCM and Expo tokens)
     try {
       const { data: otherParticipants } = await supabase
         .from('conversation_participants')
@@ -101,27 +101,94 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const otherUserIds = otherParticipants.map((p: any) => p.user_id);
         const { data: tokenRows } = await supabase
           .from('push_tokens')
-          .select('token')
+          .select('token, token_source')
           .in('user_id', otherUserIds)
-          .eq('is_active', true)
-          .like('token', 'ExponentPushToken%');
+          .eq('is_active', true);
 
         if (tokenRows?.length) {
           const senderName = sender?.name || 'Someone';
-          const msgPreview = type === 'text' ? (content || '') : type === 'image' ? '📷 Photo' : type === 'voice' ? '🎤 Voice message' : type === 'video' ? '🎬 Video' : '📎 File';
-          const pushMessages = tokenRows.map((row: any) => ({
-            to: row.token,
-            title: senderName,
-            body: msgPreview,
-            data: { type: 'chat', conversationId },
-            sound: 'default',
-            badge: 1,
-          }));
-          fetch('https://exp.host/--/api/v2/push/send', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify(pushMessages),
-          }).catch((err: any) => console.warn('[Send Message] Push notification error:', err));
+          const msgPreview =
+            type === 'text'  ? (content || '')
+            : type === 'image' ? '📷 Photo'
+            : type === 'voice' ? '🎤 Voice message'
+            : type === 'video' ? '🎬 Video'
+            : '📎 File';
+
+          const expoTokens = tokenRows.filter((r: any) => r.token.startsWith('ExponentPushToken['));
+          const fcmTokens  = tokenRows.filter((r: any) => !r.token.startsWith('ExponentPushToken['));
+          const pushData   = { type: 'chat', conversationId };
+
+          // ── FCM tokens (modern iOS, Android, Web) ────────────────────────────
+          if (fcmTokens.length > 0) {
+            try {
+              const { getFirebaseMessaging } = await import('../../backend/lib/firebase-admin.js');
+              const messaging = await getFirebaseMessaging();
+              const deadFcmTokens: string[] = [];
+
+              await Promise.allSettled(
+                fcmTokens.map(async (row: any) => {
+                  try {
+                    await messaging.send({
+                      token: row.token,
+                      notification: { title: senderName, body: msgPreview },
+                      data: { type: 'chat', conversationId },
+                      apns: { payload: { aps: { badge: 1, sound: 'default' } } },
+                      android: { priority: 'high', notification: { sound: 'default', channelId: 'default' } },
+                    });
+                  } catch (err: any) {
+                    const code = err?.errorInfo?.code || err?.code || '';
+                    if (
+                      code === 'UNREGISTERED' ||
+                      code === 'INVALID_ARGUMENT' ||
+                      code.includes('registration-token-not-registered') ||
+                      code.includes('invalid-registration-token')
+                    ) {
+                      deadFcmTokens.push(row.token);
+                    } else {
+                      console.warn('[Send Message] FCM send error:', code);
+                    }
+                  }
+                })
+              );
+
+              if (deadFcmTokens.length > 0) {
+                await supabase
+                  .from('push_tokens')
+                  .update({ is_active: false })
+                  .in('token', deadFcmTokens);
+              }
+              console.log('[Send Message] FCM dispatched to', fcmTokens.length, 'device(s)');
+            } catch (fcmErr: any) {
+              console.warn('[Send Message] FCM dispatch failed (non-fatal):', fcmErr?.message);
+            }
+          }
+
+          // ── Legacy Expo tokens (backward compat) ────────────────────────────
+          if (expoTokens.length > 0) {
+            const pushMessages = expoTokens.map((row: any) => ({
+              to: row.token,
+              title: senderName,
+              body: msgPreview,
+              data: pushData,
+              sound: 'default',
+              badge: 1,
+            }));
+            fetch('https://exp.host/--/api/v2/push/send', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+              body: JSON.stringify(pushMessages),
+            }).then(async (expRes) => {
+              if (expRes.ok) {
+                const expResult = await expRes.json() as { data?: Array<{ details?: { error?: string } }> };
+                const deadExpoTokens = expoTokens
+                  .filter((_: any, i: number) => expResult.data?.[i]?.details?.error === 'DeviceNotRegistered')
+                  .map((r: any) => r.token);
+                if (deadExpoTokens.length > 0) {
+                  await supabase.from('push_tokens').update({ is_active: false }).in('token', deadExpoTokens);
+                }
+              }
+            }).catch((err: any) => console.warn('[Send Message] Expo push error:', err));
+          }
         }
       }
     } catch (pushErr: any) {
