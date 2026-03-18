@@ -1,5 +1,6 @@
-import { getApps, initializeApp, cert } from 'firebase-admin/app';
-import { getMessaging } from 'firebase-admin/messaging';
+// Use the default firebase-admin entry point to avoid subpath import issues
+// across CommonJS/ESM boundaries in Vercel serverless functions.
+import admin from 'firebase-admin';
 
 /**
  * Lazily initializes Firebase Admin SDK using service account credentials
@@ -11,7 +12,7 @@ import { getMessaging } from 'firebase-admin/messaging';
  *   FIREBASE_PRIVATE_KEY  (newlines stored as \n — we unescape here)
  */
 function initFirebaseAdmin() {
-  if (getApps().length > 0) return;
+  if (admin.apps.length > 0) return;
 
   const projectId   = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
@@ -23,12 +24,12 @@ function initFirebaseAdmin() {
     );
   }
 
-  initializeApp({
-    credential: cert({ projectId, clientEmail, privateKey }),
+  admin.initializeApp({
+    credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
   });
 }
 
 export function getFirebaseMessaging() {
   initFirebaseAdmin();
-  return getMessaging();
+  return admin.messaging();
 }

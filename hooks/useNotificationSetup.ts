@@ -179,10 +179,12 @@ export function useNotificationSetup(
           return;
         }
 
-        // Get FCM token via react-native-firebase
+        // Get FCM token via react-native-firebase (modular API)
         // Dynamic import keeps the native module out of the web bundle
-        const { default: messaging } = await import('@react-native-firebase/messaging');
-        const fcmToken = await messaging().getToken();
+        const { getApp }      = await import('@react-native-firebase/app');
+        const { getMessaging, getToken, onTokenRefresh } = await import('@react-native-firebase/messaging');
+        const messagingInstance = getMessaging(getApp());
+        const fcmToken = await getToken(messagingInstance);
 
         if (!fcmToken) {
           console.warn('[Notifications] No FCM token returned');
@@ -194,7 +196,7 @@ export function useNotificationSetup(
         console.log('[Notifications] FCM token registered');
 
         // Listen for FCM token refresh (device rotates token)
-        const unsubscribeTokenRefresh = messaging().onTokenRefresh(async (newToken) => {
+        const unsubscribeTokenRefresh = onTokenRefresh(messagingInstance, async (newToken) => {
           console.log('[Notifications] FCM token rotated, re-registering');
           try {
             await registerPushToken(newToken, Platform.OS as 'ios' | 'android', user.id, company.id, 'fcm');
