@@ -3074,6 +3074,8 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     updateDailyTask,
     deleteDailyTask,
     logout,
+    unreadChatCount,
+    setUnreadChatCount,
   }), [
     user,
     company,
