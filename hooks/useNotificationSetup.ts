@@ -181,8 +181,25 @@ export function useNotificationSetup(
         // Get FCM token via react-native-firebase (modular API)
         // Dynamic import keeps the native module out of the web bundle
         const { getApp }      = await import('@react-native-firebase/app');
-        const { getMessaging, getToken, onTokenRefresh } = await import('@react-native-firebase/messaging');
+        const { getMessaging, getToken, deleteToken, onTokenRefresh } = await import('@react-native-firebase/messaging');
         const messagingInstance = getMessaging(getApp());
+
+        // One-time forced token refresh to fix BadEnvironmentKeyInToken errors
+        // caused by stale FCM tokens that have incorrect APNs environment metadata.
+        // Once a fresh token is obtained, this is skipped on subsequent launches.
+        const REFRESH_FLAG = '@fcm_apns_env_fix_v1';
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const alreadyRefreshed = await AsyncStorage.getItem(REFRESH_FLAG);
+        if (!alreadyRefreshed) {
+          try {
+            await deleteToken(messagingInstance);
+            console.log('[Notifications] Force-refreshed FCM token (APNs environment fix)');
+          } catch (e) {
+            console.warn('[Notifications] deleteToken failed (non-fatal):', e);
+          }
+          await AsyncStorage.setItem(REFRESH_FLAG, '1');
+        }
+
         const fcmToken = await getToken(messagingInstance);
 
         if (!fcmToken) {
