@@ -121,7 +121,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // ── FCM tokens (modern iOS, Android, Web) ────────────────────────────
           if (fcmTokens.length > 0) {
             try {
-              const { getFirebaseMessaging } = await import('../../backend/lib/firebase-admin.js');
+              const { getFirebaseMessaging } = await import('../lib/firebase-admin.js');
               const messaging = await getFirebaseMessaging();
               const deadFcmTokens: string[] = [];
 

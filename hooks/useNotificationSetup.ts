@@ -8,7 +8,6 @@ import type { Notification } from '@/types';
 // Set once at module level so it applies globally before any listener is added.
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert:  true,
     shouldShowBanner: true,
     shouldShowList:   true,
     shouldPlaySound:  true,
@@ -218,11 +217,19 @@ export function useNotificationSetup(
     // Foreground notification display (expo-notifications handles the UI layer)
     notificationListener.current = Notifications.addNotificationReceivedListener((incoming) => {
       console.log('[Notifications] Foreground notification:', incoming.request.identifier);
+      const notifType = incoming.request.content.data?.type as string | undefined;
+
+      // Chat notifications are transient — they are NOT persisted to the notifications
+      // table (which has a strict type CHECK constraint that excludes 'chat').
+      // The chat screen handles delivery via Realtime/polling; the push banner is
+      // shown automatically by the system (shouldShowBanner: true above).
+      if (notifType === 'chat') return;
+
       onNotificationReceived?.({
         id:        incoming.request.identifier,
         userId:    user.id,
         companyId: company.id,
-        type:      (incoming.request.content.data?.type as Notification['type']) ?? 'general',
+        type:      (notifType as Notification['type']) ?? 'general',
         title:     incoming.request.content.title ?? 'Notification',
         message:   incoming.request.content.body  ?? '',
         data:      incoming.request.content.data as any,
