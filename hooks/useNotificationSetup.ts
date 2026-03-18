@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { Platform, NativeModules } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import type { Notification } from '@/types';
@@ -34,8 +34,11 @@ async function registerPushToken(
     body: JSON.stringify({ token, platform, userId, companyId, tokenSource }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Failed to register push token');
+    const raw = await res.text().catch(() => '');
+    let errMsg = 'Failed to register push token';
+    try { errMsg = JSON.parse(raw)?.error || errMsg; } catch {}
+    console.error('[Notifications] register-push-token failed — status:', res.status, 'body:', raw.slice(0, 300));
+    throw new Error(errMsg);
   }
 }
 

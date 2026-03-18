@@ -36,7 +36,8 @@
         "NSContactsUsageDescription": "A message that tells the user why the app is requesting access to the user's contacts."
       },
       "usesIcloudStorage": true,
-      "accessesContactNotes": true
+      "accessesContactNotes": true,
+      "buildNumber": "2"
     },
     "android": {
       "adaptiveIcon": {
