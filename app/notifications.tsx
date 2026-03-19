@@ -143,7 +143,9 @@ export default function NotificationsScreen() {
 
         case 'general': {
           // Route by title since 'general' covers many distinct subtypes
-          if (
+          if (title === 'Rate Change Request' || title === 'Rate Change Approved' || title === 'Rate Change Rejected') {
+            router.push('/admin/employee-management' as any);
+          } else if (
             title === 'New Employee Pending Approval' ||
             title === 'New Employee Approved' ||
             title === 'Account Approved'

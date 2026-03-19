@@ -5,7 +5,7 @@ import { useApp } from '@/contexts/AppContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { User, UserRole } from '@/types';
 import { getRoleDisplayName, getAvailableRolesForManagement } from '@/lib/permissions';
-import { Users, Shield, ChevronRight, X, Building2, Copy, LogOut, Upload, Edit3, DollarSign } from 'lucide-react-native';
+import { Users, Shield, ChevronRight, X, Building2, Copy, LogOut, Upload, Edit3, DollarSign, Clock } from 'lucide-react-native';
 import EditAccessModal from '@/components/EditAccessModal';
 import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
@@ -698,6 +698,17 @@ export default function SettingsScreen() {
               <Text style={styles.roleText}>{getRoleDisplayName(currentUser?.role || 'field-employee')}</Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            style={styles.adminNavButton}
+            onPress={() => router.push('/admin/employee-management' as any)}
+          >
+            <View style={styles.adminNavButtonLeft}>
+              <Clock size={20} color="#2563EB" />
+              <Text style={styles.adminNavButtonText}>Employee Management</Text>
+            </View>
+            <ChevronRight size={18} color="#9CA3AF" />
+          </TouchableOpacity>
 
           <Text style={styles.subsectionTitle}>{t('settings.teamMembers')}</Text>
 
@@ -1733,6 +1744,28 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600' as const,
     color: '#111827',
+  },
+  adminNavButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  adminNavButtonLeft: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+  },
+  adminNavButtonText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#2563EB',
   },
   requestButton: {
     backgroundColor: '#2563EB',
