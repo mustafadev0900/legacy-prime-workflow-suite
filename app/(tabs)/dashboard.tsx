@@ -1118,7 +1118,7 @@ export default function DashboardScreen() {
                 >
                   <PauseCircle size={14} color={projectFilter === 'delayed' ? '#FFFFFF' : '#F59E0B'} />
                   <Text style={[styles.filterChipText, projectFilter === 'delayed' && styles.filterChipTextActive]}>
-                    Delayed ({delayedProjects.length})
+                    On Hold ({delayedProjects.length})
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
