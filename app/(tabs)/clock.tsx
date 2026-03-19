@@ -1,17 +1,39 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform } from 'react-native';
 import SkeletonBox from '@/components/SkeletonBox';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import ClockInOutComponent from '@/components/ClockInOutComponent';
 import { ChevronDown, Clock } from 'lucide-react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { supabase } from '@/lib/supabase';
 
 const isWeb = Platform.OS === 'web';
 
 export default function ClockScreen() {
-  const { projects, user, isLoading, isCompanyReloading } = useApp();
+  const { projects, user, setUser, isLoading, isCompanyReloading } = useApp();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const params = useLocalSearchParams();
+
+  // Re-sync hourlyRate from DB every time this tab is opened so rate changes
+  // approved by the admin are reflected before the employee clocks in.
+  useFocusEffect(
+    useCallback(() => {
+      if (!user?.id) return;
+      supabase
+        .from('users')
+        .select('hourly_rate, rate_change_request')
+        .eq('id', user.id)
+        .single()
+        .then(({ data }) => {
+          if (!data) return;
+          setUser({
+            ...user,
+            hourlyRate: data.hourly_rate != null ? Number(data.hourly_rate) : undefined,
+            rateChangeRequest: data.rate_change_request ?? undefined,
+          });
+        });
+    }, [user?.id])
+  );
 
   useEffect(() => {
     if (params.projectId && typeof params.projectId === 'string') {
