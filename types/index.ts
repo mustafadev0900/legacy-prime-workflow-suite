@@ -194,6 +194,8 @@ export interface ClockEntry {
     startTime: string;
     endTime?: string;
   }[];
+  /** Rate snapshotted at clock-in time. Null for legacy entries (pre-migration). */
+  hourlyRate?: number;
 }
 
 export interface Client {

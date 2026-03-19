@@ -102,6 +102,7 @@ const mapClockEntry = (row: any) => ({
   workPerformed: row.work_performed ?? row.workPerformed,
   category: row.category,
   lunchBreaks: row.lunch_breaks ?? row.lunchBreaks,
+  hourlyRate: row.hourly_rate != null ? Number(row.hourly_rate) : undefined,
 });
 
 const mapPriceListItem = (row: any) => ({

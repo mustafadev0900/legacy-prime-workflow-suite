@@ -435,11 +435,12 @@ export default function ProjectDetailScreen() {
 
   const totalLaborCost = useMemo(() => {
     return projectClockEntries.reduce((sum, entry) => {
-      if (!entry.clockOut || !entry.clockIn) return sum;
-      const rate = userRatesMap.get(entry.employeeId) ?? 0;
+      if (!entry.clockIn) return sum;
+      // Prefer snapshotted rate on the entry; fall back to current rate for legacy entries
+      const rate = entry.hourlyRate ?? userRatesMap.get(entry.employeeId) ?? 0;
       if (!rate) return sum;
       const clockInMs = new Date(entry.clockIn).getTime();
-      const clockOutMs = new Date(entry.clockOut).getTime();
+      const clockOutMs = entry.clockOut ? new Date(entry.clockOut).getTime() : Date.now();
       let totalMs = clockOutMs - clockInMs;
       if (entry.lunchBreaks) {
         entry.lunchBreaks.forEach(lunch => {
@@ -487,14 +488,16 @@ export default function ProjectDetailScreen() {
   }, [totalLaborCost, totalLaborHours]);
 
   // Per-employee labor breakdown — hours worked, rate, cost, and active status.
-  // Aggregates all clock entries (including open/live ones) per employee.
+  // Uses the rate snapshotted at clock-in time (entry.hourlyRate) so historical
+  // entries remain accurate after rate changes. Falls back to current rate for
+  // legacy entries that predate the snapshot column.
   const laborBreakdown = useMemo(() => {
     const map = new Map<string, {
       name: string;
       hours: number;
-      rate: number | null;
       cost: number;
       isActive: boolean;
+      rateSet: Set<number>;   // distinct rates seen — detects mid-project rate changes
     }>();
     const now = Date.now();
     projectClockEntries.forEach(entry => {
@@ -510,7 +513,8 @@ export default function ProjectDetailScreen() {
         });
       }
       const hours = Math.max(0, ms / 3_600_000);
-      const rate = userRatesMap.get(entry.employeeId) ?? null;
+      // Prefer snapshotted rate; fall back to current rate for legacy entries
+      const rate = entry.hourlyRate ?? userRatesMap.get(entry.employeeId) ?? null;
       const cost = rate ? hours * rate : 0;
       const name = userNamesMap.get(entry.employeeId)
         || entry.employeeName
@@ -521,12 +525,21 @@ export default function ProjectDetailScreen() {
         existing.hours += hours;
         existing.cost += cost;
         existing.isActive = existing.isActive || isActive;
+        if (rate) existing.rateSet.add(rate);
       } else {
-        map.set(entry.employeeId, { name, hours, rate, cost, isActive });
+        const rateSet = new Set<number>();
+        if (rate) rateSet.add(rate);
+        map.set(entry.employeeId, { name, hours, cost, isActive, rateSet });
       }
     });
     return Array.from(map.entries())
-      .map(([employeeId, d]) => ({ employeeId, ...d }))
+      .map(([employeeId, { rateSet, ...d }]) => ({
+        employeeId,
+        ...d,
+        // Single rate if uniform; null signals "varies" (rate changed mid-project)
+        rate: rateSet.size === 1 ? [...rateSet][0] : rateSet.size > 1 ? -1 : null,
+        rateCount: rateSet.size,
+      }))
       .sort((a, b) => b.cost - a.cost || b.hours - a.hours);
   }, [projectClockEntries, userRatesMap, userNamesMap]);
 
@@ -1182,13 +1195,13 @@ export default function ProjectDetailScreen() {
                       </Text>
 
                       {/* Rate */}
-                      <Text style={[styles.laborColRate, styles.laborCellValue, !row.rate && styles.laborCellMuted]}>
-                        {row.rate ? `$${row.rate.toFixed(0)}/h` : '—'}
+                      <Text style={[styles.laborColRate, styles.laborCellValue, (!row.rate || row.rate < 0) && styles.laborCellMuted]}>
+                        {row.rate === -1 ? 'Varies' : row.rate ? `$${row.rate.toFixed(0)}/h` : '—'}
                       </Text>
 
                       {/* Cost */}
-                      <Text style={[styles.laborColCost, styles.laborCellValue, row.rate ? styles.laborCostValue : styles.laborCellMuted]}>
-                        {row.rate ? `$${row.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'No rate'}
+                      <Text style={[styles.laborColCost, styles.laborCellValue, row.cost > 0 ? styles.laborCostValue : styles.laborCellMuted]}>
+                        {row.cost > 0 ? `$${row.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'No rate'}
                       </Text>
                     </View>
                   ))}

@@ -37,6 +37,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Snapshot the employee's current hourly rate so historical entries remain
+    // accurate even after future rate changes.
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('hourly_rate')
+      .eq('id', employeeId)
+      .single();
+    const snapshotRate = userRow?.hourly_rate != null ? Number(userRow.hourly_rate) : null;
+
     console.log('[ClockIn] Inserting into database...');
     const insertStart = Date.now();
 
@@ -50,6 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         location: location || { latitude: 0, longitude: 0 },
         work_performed: workPerformed || null,
         category: category || null,
+        hourly_rate: snapshotRate,
       })
       .select()
       .single();
@@ -96,6 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         location: data.location,
         workPerformed: data.work_performed || undefined,
         category: data.category || undefined,
+        hourlyRate: data.hourly_rate != null ? Number(data.hourly_rate) : undefined,
       },
       insertDuration,
     });
