@@ -133,6 +133,7 @@ export const auth = {
     companyCode: string;
     phone?: string;
     address?: string;
+    hourlyRate?: number;
   }) => {
     try {
       // 1. Validate company code (case-insensitive)
@@ -194,6 +195,7 @@ export const auth = {
           company_id: company.id,
           phone: params.phone,
           address: params.address,
+          hourly_rate: params.hourlyRate ?? null,
           is_active: false, // Admin must approve
         })
         .select()

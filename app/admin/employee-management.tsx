@@ -366,12 +366,12 @@ export default function EmployeeManagementScreen() {
                     <Clock size={16} color="#6B7280" />
                     <Text style={styles.statText}>Today: {stats.todayHours.toFixed(1)}h</Text>
                   </View>
-                  {employee.hourlyRate && (
-                    <View style={styles.statItem}>
-                      <DollarSign size={16} color="#6B7280" />
-                      <Text style={styles.statText}>${employee.hourlyRate.toFixed(2)}/hr</Text>
-                    </View>
-                  )}
+                  <View style={styles.statItem}>
+                    <DollarSign size={16} color="#6B7280" />
+                    <Text style={styles.statText}>
+                      {employee.hourlyRate ? `$${employee.hourlyRate.toFixed(2)}/hr` : 'Rate not set'}
+                    </Text>
+                  </View>
                 </View>
 
                 <View style={styles.employeeActions}>

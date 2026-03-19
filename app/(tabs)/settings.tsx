@@ -50,7 +50,7 @@ const filterPhoneInput = (text: string): string => {
 };
 
 export default function SettingsScreen() {
-  const { user: currentUser, company, setCompany, logout } = useApp();
+  const { user: currentUser, company, setCompany, setUser, logout } = useApp();
   const { isAdmin, isSuperAdmin } = usePermissions();
   const { t } = useTranslation();
   const [isLoggingOut, setIsLoggingOut] = useState<boolean>(false);
@@ -185,21 +185,11 @@ export default function SettingsScreen() {
     if (!currentUser) return;
 
     try {
-      // Update user with rate change request via Vercel API
       const baseUrl = getApiBaseUrl();
-      const response = await fetch(`${baseUrl}/api/update-user`, {
+      const response = await fetch(`${baseUrl}/api/request-rate-change`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: currentUser.id,
-          updates: {
-            rateChangeRequest: {
-              newRate: rate,
-              requestDate: new Date().toISOString(),
-              status: 'pending',
-            }
-          },
-        }),
+        body: JSON.stringify({ employeeId: currentUser.id, newRate: rate }),
       });
 
       if (!response.ok) {
@@ -213,13 +203,16 @@ export default function SettingsScreen() {
         throw new Error('Failed to submit rate change request');
       }
 
+      // Update AppContext so the pending badge shows immediately without re-login
+      setUser({ ...currentUser, rateChangeRequest: data.rateChangeRequest });
+
       setShowRateChangeModal(false);
       setRequestedRate('');
 
       if (Platform.OS === 'web') {
-        alert('Rate change request submitted successfully');
+        alert('Rate change request submitted. Your admin has been notified.');
       } else {
-        Alert.alert('Success', 'Rate change request submitted successfully');
+        Alert.alert('Request Sent', 'Your rate change request has been submitted. Your admin has been notified.');
       }
     } catch (error: any) {
       console.error('[RateChange] Error:', error);

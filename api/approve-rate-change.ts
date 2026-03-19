@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { sendNotification } from './lib/sendNotification.js';
 
 export default async function handler(req: any, res: any) {
   if (req.method === 'OPTIONS') {
@@ -31,26 +32,26 @@ export default async function handler(req: any, res: any) {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // If approving, read current rate_change_request to get newRate
+  // Read current user row to get rate_change_request and company_id
+  const { data: userRow, error: fetchError } = await supabase
+    .from('users')
+    .select('rate_change_request, company_id')
+    .eq('id', employeeId)
+    .single();
+
+  if (fetchError) {
+    console.error('[approve-rate-change] Fetch error:', fetchError);
+    return res.status(500).json({ error: fetchError.message });
+  }
+
   const updates: Record<string, any> = { rate_change_request: null };
+  let newRate: number | null = null;
 
   if (approve) {
-    const { data: userRow, error: fetchError } = await supabase
-      .from('users')
-      .select('rate_change_request')
-      .eq('id', employeeId)
-      .single();
-
-    if (fetchError) {
-      console.error('[approve-rate-change] Fetch error:', fetchError);
-      return res.status(500).json({ error: fetchError.message });
-    }
-
-    const newRate = userRow?.rate_change_request?.newRate;
+    newRate = userRow?.rate_change_request?.newRate;
     if (newRate == null) {
       return res.status(400).json({ error: 'No pending rate change request found' });
     }
-
     updates.hourly_rate = Number(newRate);
   }
 
@@ -63,6 +64,18 @@ export default async function handler(req: any, res: any) {
     console.error('[approve-rate-change] Update error:', error);
     return res.status(500).json({ error: error.message });
   }
+
+  // Notify the employee of the decision — fire-and-forget
+  void sendNotification(supabase, {
+    userId: employeeId,
+    companyId: userRow.company_id,
+    type: 'general',
+    title: approve ? 'Rate Change Approved' : 'Rate Change Rejected',
+    message: approve
+      ? `Your hourly rate has been updated to $${Number(newRate).toFixed(2)}/hr`
+      : 'Your rate change request was not approved at this time',
+    data: {},
+  });
 
   return res.status(200).json({ success: true });
 }

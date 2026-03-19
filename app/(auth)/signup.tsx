@@ -270,6 +270,7 @@ export default function SignupScreen() {
         // Employee signup (validation already done above)
         console.log('[Signup] Creating employee account...');
 
+        const parsedRate = parseFloat(hourlyRate);
         const result = await auth.signUpEmployee({
           email: email.toLowerCase().trim(),
           password,
@@ -277,6 +278,7 @@ export default function SignupScreen() {
           companyCode: companyCode.toUpperCase().trim(),
           phone: phone.trim(),
           address: address.trim(),
+          hourlyRate: !isNaN(parsedRate) && parsedRate > 0 ? parsedRate : undefined,
         });
 
         if (!result.success) {
@@ -561,11 +563,11 @@ export default function SignupScreen() {
                 placeholderTextColor="#9CA3AF"
                 value={hourlyRate}
                 onChangeText={(text) => {
-                  // Only allow digits
-                  const filtered = text.replace(/[^0-9]/g, '');
+                  // Allow digits and a single decimal point
+                  const filtered = text.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
                   setHourlyRate(filtered);
                 }}
-                keyboardType="number-pad"
+                keyboardType="decimal-pad"
               />
               <Text style={styles.hint}>{t('signup.hourlyRateHint')}</Text>
 
