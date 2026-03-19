@@ -1405,23 +1405,54 @@ export default function DashboardScreen() {
           <View style={styles.statCard}>
             <Text style={styles.statTitle}>{t('dashboard.totalSold')}</Text>
             <Text style={styles.statValue}>${totalSold.toLocaleString()}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <Text style={{ fontSize: 11, color: '#6B7280' }}>Monthly Revenue</Text>
-              <Text style={{ fontSize: 11, color: '#10B981', fontWeight: '600' }}>
-                {totalProjectsWithContract} contract{totalProjectsWithContract !== 1 ? 's' : ''}
-              </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <Text style={{ fontSize: 12, color: '#6B7280', fontWeight: '500' }}>Monthly Revenue</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0FDF4', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' }} />
+                <Text style={{ fontSize: 11, color: '#059669', fontWeight: '600' }}>
+                  {totalProjectsWithContract} contract{totalProjectsWithContract !== 1 ? 's' : ''}
+                </Text>
+              </View>
             </View>
             <View style={styles.chartContainer}>
+              {/* Subtle grid lines */}
+              {[0.25, 0.5, 0.75].map((level) => (
+                <View
+                  key={level}
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    bottom: `${level * 100}%` as any,
+                    height: 1,
+                    backgroundColor: '#F3F4F6',
+                    marginBottom: 20, // account for label area
+                  }}
+                />
+              ))}
               {monthlyRevenue.map((item, index) => {
-                const height = (item.revenue / maxRevenue) * 100;
+                const barAreaHeight = 140; // matches chartContainer minus label area
+                const heightPct = item.revenue > 0 ? Math.max((item.revenue / maxRevenue) * 100, 6) : 0;
                 return (
                   <View key={index} style={styles.barWrapper}>
-                    {item.count > 0 && (
-                      <Text style={{ fontSize: 8, color: '#10B981', fontWeight: '700', marginBottom: 2, textAlign: 'center' }}>
-                        ${item.revenue >= 1000 ? `${(item.revenue / 1000).toFixed(0)}k` : item.revenue}
-                      </Text>
-                    )}
-                    <View style={[styles.bar, { height: `${Math.max(height, item.count > 0 ? 4 : 0)}%`, backgroundColor: item.count > 0 ? '#10B981' : '#E5E7EB' }]} />
+                    <View style={styles.barValueArea}>
+                      {item.count > 0 && (
+                        <Text style={styles.barValueLabel}>
+                          ${item.revenue >= 1000 ? `${(item.revenue / 1000).toFixed(0)}k` : item.revenue}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={styles.barTrack}>
+                      <View style={[
+                        styles.bar,
+                        {
+                          height: item.revenue > 0 ? `${heightPct}%` : 3,
+                          backgroundColor: item.count > 0 ? '#10B981' : '#E5E7EB',
+                          opacity: item.count > 0 ? 1 : 0.5,
+                        }
+                      ]} />
+                    </View>
                     <Text style={styles.barLabel}>{item.month}</Text>
                   </View>
                 );
@@ -2611,25 +2642,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   statTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '600' as const,
-    color: '#1F2937',
-    marginBottom: 12,
+    color: '#6B7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700' as const,
-    color: '#1F2937',
+    color: '#111827',
     marginBottom: 16,
   },
   chartContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'space-between',
-    height: 140,
-    paddingHorizontal: 8,
+    height: 180,
+    paddingHorizontal: 4,
     marginBottom: 16,
   },
   barWrapper: {
@@ -2638,16 +2676,38 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     height: '100%',
   },
+  barValueArea: {
+    height: 18,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  barValueLabel: {
+    fontSize: 10,
+    color: '#059669',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  barTrack: {
+    flex: 1,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 3,
+  },
   bar: {
-    width: '80%',
-    backgroundColor: '#2563EB',
-    borderRadius: 4,
-    minHeight: 4,
+    width: '75%',
+    backgroundColor: '#10B981',
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 5,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+    minHeight: 3,
   },
   barLabel: {
-    fontSize: 9,
-    color: '#6B7280',
+    fontSize: 10,
+    color: '#9CA3AF',
     marginTop: 6,
+    fontWeight: '500',
   },
   totalBudgetRow: {
     flexDirection: 'row',
