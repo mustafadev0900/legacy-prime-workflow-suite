@@ -1374,26 +1374,29 @@ export default function DashboardScreen() {
                     />
                   </View>
                 )}
-                <Text style={styles.projectName}>{project.name}</Text>
-                {(!project.contractAmount || project.contractAmount === 0) && (
-                  <View style={{
-                    flexDirection: 'row', alignItems: 'center', gap: 4,
-                    backgroundColor: '#FFF7ED', borderRadius: 6,
-                    paddingHorizontal: 7, paddingVertical: 3,
-                    marginBottom: 5, alignSelf: 'flex-start',
-                    borderWidth: 1, borderColor: '#FED7AA',
-                  }}>
-                    <AlertTriangle size={9} color="#F97316" />
-                    <Text style={{ fontSize: 9, fontWeight: '700', color: '#F97316' }}>No Contract Amount</Text>
+                <View style={styles.projectCardContent}>
+                  <Text style={styles.projectName} numberOfLines={2}>{project.name}</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginBottom: 6 }}>
+                    {(!project.contractAmount || project.contractAmount === 0) && (
+                      <View style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 4,
+                        backgroundColor: '#FFF7ED', borderRadius: 6,
+                        paddingHorizontal: 7, paddingVertical: 3,
+                        borderWidth: 1, borderColor: '#FED7AA',
+                      }}>
+                        <AlertTriangle size={9} color="#F97316" />
+                        <Text style={{ fontSize: 9, fontWeight: '700', color: '#F97316' }}>No Contract</Text>
+                      </View>
+                    )}
+                    {project.status === 'on-hold' && (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FEF3C7', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: '#FCD34D' }}>
+                        <PauseCircle size={9} color="#D97706" />
+                        <Text style={{ fontSize: 9, fontWeight: '700', color: '#D97706' }}>On Hold</Text>
+                      </View>
+                    )}
                   </View>
-                )}
-                <Text style={styles.projectBudget}>Budget: ${project.budget.toLocaleString()}</Text>
-                {project.status === 'on-hold' && (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FEF3C7', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, marginBottom: 5, alignSelf: 'flex-start', borderWidth: 1, borderColor: '#FCD34D' }}>
-                    <PauseCircle size={9} color="#D97706" />
-                    <Text style={{ fontSize: 9, fontWeight: '700', color: '#D97706' }}>On Hold</Text>
-                  </View>
-                )}
+                  <Text style={styles.projectBudget}>Budget: ${project.budget.toLocaleString()}</Text>
+                </View>
                 <Image
                   source={{ uri: project.image }}
                   style={styles.projectImage}
@@ -2617,9 +2620,13 @@ const styles = StyleSheet.create({
     width: 280,
     backgroundColor: '#2563EB',
     borderRadius: 16,
-    padding: 16,
     height: 240,
     position: 'relative' as const,
+    overflow: 'hidden',
+  },
+  projectCardContent: {
+    padding: 14,
+    paddingBottom: 8,
   },
   projectCardSelected: {
     borderWidth: 3,
@@ -2632,20 +2639,20 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   projectName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700' as const,
     color: '#FFFFFF',
-    marginBottom: 8,
+    marginBottom: 6,
+    lineHeight: 22,
   },
   projectBudget: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    marginBottom: 16,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    marginBottom: 0,
   },
   projectImage: {
     width: '100%',
-    height: 120,
-    borderRadius: 12,
+    flex: 1,
   },
   statsContainer: {
     flexDirection: 'column',
