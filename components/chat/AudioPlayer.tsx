@@ -110,6 +110,7 @@ export default function AudioPlayer({
   const [loadState, setLoadState] = useState<LoadState>('idle');
 
   const soundRef = useRef<ExpoAudioPlayer | null>(null);
+  const listenerSubRef = useRef<{ remove: () => void } | null>(null);
   const webAudioRef = useRef<HTMLAudioElement | null>(null);
   const isSeeking = useRef(false);
   const waveWidthRef = useRef(0);
@@ -164,7 +165,8 @@ export default function AudioPlayer({
       const cached = soundCache.get(uri);
       if (cached) {
         if (mountedRef.current) {
-          cached.addListener('playbackStatusUpdate', (status: any) => {
+          listenerSubRef.current?.remove();
+          listenerSubRef.current = cached.addListener('playbackStatusUpdate', (status: any) => {
             if (!mountedRef.current) return;
             // Cached player may emit error if it was broken (e.g. expired URL)
             if (status.error) {
@@ -188,6 +190,8 @@ export default function AudioPlayer({
 
     return () => {
       mountedRef.current = false;
+      listenerSubRef.current?.remove();
+      listenerSubRef.current = null;
       soundRef.current = null;
     };
   }, [uri]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -229,7 +233,8 @@ export default function AudioPlayer({
       //               `isLoaded=true` fires the transition.
       //   expo-av error: `status.error=true` shows error state immediately.
       let hasTransitioned = false;
-      player.addListener('playbackStatusUpdate', (status: any) => {
+      listenerSubRef.current?.remove();
+      listenerSubRef.current = player.addListener('playbackStatusUpdate', (status: any) => {
         if (!mountedRef.current) return;
 
         if (status.error) {

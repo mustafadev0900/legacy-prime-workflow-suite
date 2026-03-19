@@ -5,9 +5,9 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
 import { Bell, BellOff, CheckCheck } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
