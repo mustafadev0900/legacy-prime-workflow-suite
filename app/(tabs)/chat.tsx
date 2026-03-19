@@ -1170,25 +1170,6 @@ export default function ChatScreen() {
             : { backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#E5E7EB' },
         }}
       />
-      {/* Desktop header */}
-      {!isSmallScreen && (
-        <View style={styles.header}>
-          <View style={styles.userInfo}>
-            {user?.avatar ? (
-              <Image source={{ uri: user.avatar }} style={styles.userAvatar} contentFit="cover" />
-            ) : (
-              <View style={styles.userAvatarPlaceholder}>
-                <Text style={styles.userAvatarInitials}>{user ? getInitials(user.name) : 'JD'}</Text>
-              </View>
-            )}
-            <Text style={styles.userName}>{user?.name || 'User'}</Text>
-          </View>
-          <View style={styles.teamInfo}>
-            <Users size={20} color="#1F2937" />
-            <Text style={styles.teamName}>Team Chat</Text>
-          </View>
-        </View>
-      )}
 
       <View style={styles.content}>
         {/* ─── Sidebar ──────────────────────────────────────────────────── */}
@@ -1357,14 +1338,30 @@ export default function ChatScreen() {
                 >
                   {!isSmallScreen && (
                     <View style={styles.chatHeader}>
+                      {/* Avatar */}
+                      {selectedConversation?.avatar ? (
+                        <Image source={{ uri: selectedConversation.avatar }} style={styles.webHeaderAvatar} contentFit="cover" />
+                      ) : (
+                        <View style={styles.webHeaderAvatarPlaceholder}>
+                          <Text style={styles.webHeaderAvatarInitials}>
+                            {getInitials(selectedConversation?.name || 'CH')}
+                          </Text>
+                        </View>
+                      )}
                       <View style={styles.chatHeaderContent}>
                         <Text style={styles.chatTitle}>{selectedConversation?.name}</Text>
-                        {typingUsers.size > 0 && (
+                        {typingUsers.size > 0 ? (
                           <Text style={styles.typingHeaderLabel}>
                             {typingUsers.size === 1
                               ? `${Array.from(typingUsers.values())[0].name.split(' ')[0]} is typing...`
                               : 'Several people are typing...'}
                           </Text>
+                        ) : selectedConversation?.type === 'group' ? (
+                          <Text style={styles.webHeaderSubtitle}>
+                            {(selectedConversation.participants?.length || 0) + 1} members
+                          </Text>
+                        ) : (
+                          <Text style={styles.webHeaderSubtitle}>online</Text>
                         )}
                       </View>
                     </View>
@@ -1648,7 +1645,11 @@ const styles = StyleSheet.create({
   aiChatDescription: { fontSize: 12, color: '#6B7280' },
   chatArea: { flex: 1, backgroundColor: '#FFFFFF' },
   chatAreaMobile: { flex: 1 },
-  chatHeader: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', flexDirection: 'row', alignItems: 'center' },
+  chatHeader: { paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#FFFFFF' },
+  webHeaderAvatar: { width: 40, height: 40, borderRadius: 20 },
+  webHeaderAvatarPlaceholder: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#2563EB', alignItems: 'center' as const, justifyContent: 'center' as const },
+  webHeaderAvatarInitials: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' as const },
+  webHeaderSubtitle: { fontSize: 12, color: '#6B7280', marginTop: 1 },
   chatHeaderContent: { flex: 1 },
   typingHeaderLabel: { fontSize: 12, color: '#6B7280', fontStyle: 'italic', marginTop: 2 },
   aiHeaderInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
