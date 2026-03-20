@@ -160,6 +160,7 @@ function RootLayoutNav() {
       <Stack.Screen name="project/[id]/files-navigation" options={{ headerShown: false }} />
       <Stack.Screen name="project/[id]/change-orders" options={{ headerShown: false }} />
       <Stack.Screen name="project/[id]/costs" options={{ headerShown: false }} />
+      <Stack.Screen name="project/[id]/labor" options={{ headerShown: false }} />
       {/* Public pages - no header */}
       <Stack.Screen name="inspection/[token]" options={{ headerShown: false }} />
       <Stack.Screen name="subcontractor-register/[token]" options={{ headerShown: false }} />

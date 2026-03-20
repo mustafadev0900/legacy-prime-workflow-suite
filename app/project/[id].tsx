@@ -1292,6 +1292,14 @@ export default function ProjectDetailScreen() {
                   )}
                 </>
               )}
+
+              <TouchableOpacity
+                style={styles.laborReportButton}
+                onPress={() => router.push(`/project/${id}/labor` as any)}
+              >
+                <UserCheck size={16} color="#2563EB" />
+                <Text style={styles.laborReportButtonText}>View Full Labor Report</Text>
+              </TouchableOpacity>
             </View>
 
             <View style={[styles.contentRow, dimensions.width < 600 && styles.contentRowVertical]}>
@@ -4046,6 +4054,23 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingHorizontal: 4,
     lineHeight: 16,
+  },
+  laborReportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    backgroundColor: '#EFF6FF',
+  },
+  laborReportButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#2563EB',
   },
   // ── End Labor Cost Card ────────────────────────────────────────────────────
   clockedInCard: {
