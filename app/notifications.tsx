@@ -200,6 +200,11 @@ export default function NotificationsScreen() {
       <Stack.Screen
         options={{
           title: 'Notifications',
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
+              <Text style={{ fontSize: 16, color: '#2563EB' }}>‹ Back</Text>
+            </TouchableOpacity>
+          ),
           headerRight: unread.length > 0
             ? () => (
                 <TouchableOpacity onPress={handleMarkAllRead} style={styles.headerBtn}>

@@ -624,6 +624,11 @@ export default function ProfileScreen() {
           headerTitleStyle: {
             fontWeight: '700' as const,
           },
+          headerLeft: () => (
+            <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
+              <Text style={{ fontSize: 16, color: '#FFFFFF' }}>‹ Back</Text>
+            </TouchableOpacity>
+          ),
         }}
       />
       
