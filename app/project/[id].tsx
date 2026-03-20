@@ -675,68 +675,73 @@ export default function ProjectDetailScreen() {
               const isAdmin = user?.role === 'admin' || user?.role === 'super-admin';
               const hasContract = (project.contractAmount ?? 0) > 0;
               const bannerStyle = {
-                flexDirection: 'row' as const,
-                alignItems: 'center' as const,
+                flexDirection: 'column' as const,
                 backgroundColor: hasContract ? '#F0FDF4' : '#FFFBEB',
-                borderRadius: 12,
+                borderRadius: 14,
                 paddingHorizontal: rs.bannerPaddingH,
-                paddingVertical: 12,
+                paddingVertical: 14,
                 marginBottom: 12,
                 borderWidth: 1,
                 borderColor: hasContract ? '#BBFCDA' : '#FCD34D',
               };
               const innerContent = (
                 <>
-                  {/* Icon */}
-                  <View style={{
-                    width: rs.bannerIconSize, height: rs.bannerIconSize, borderRadius: rs.bannerIconSize / 2,
-                    backgroundColor: hasContract ? '#D1FAE5' : '#FEF3C7', alignItems: 'center', justifyContent: 'center', marginRight: 10,
-                    alignSelf: 'flex-start', marginTop: 2,
-                  }}>
-                    <DollarSign size={16} color={hasContract ? '#10B981' : '#F59E0B'} />
-                  </View>
-
-                  {/* Values row */}
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', gap: rs.bannerGap }}>
-                      {/* Contract Amount */}
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 10, color: '#6B7280', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 }}>
-                          Contract Amount
-                        </Text>
-                        <Text style={{ fontSize: 16, fontWeight: '700', color: hasContract ? '#1E40AF' : '#D97706' }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-                          {hasContract ? `$${(project.contractAmount!).toLocaleString()}` : 'Not set ⚠'}
-                        </Text>
-                      </View>
-
-                      {/* Project Budget */}
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 10, color: '#6B7280', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 }}>
-                          Project Budget
-                        </Text>
-                        <Text style={{ fontSize: 16, fontWeight: '700', color: '#064E3B' }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-                          ${project.budget.toLocaleString()}
-                        </Text>
-                      </View>
-
-                      {/* Planned Profit — only if contractAmount is set */}
-                      {hasContract && (
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontSize: 10, color: '#6B7280', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 }}>
-                            Planned Profit
-                          </Text>
-                          <Text style={{ fontSize: 16, fontWeight: '700', color: plannedProfit >= 0 ? '#10B981' : '#EF4444' }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-                            {plannedProfit >= 0 ? '+' : '-'}${Math.abs(plannedProfit).toLocaleString()}
-                          </Text>
-                        </View>
-                      )}
+                  {/* ── Header row: icon + title + Edit ── */}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+                    <View style={{
+                      width: 26, height: 26, borderRadius: 13,
+                      backgroundColor: hasContract ? '#D1FAE5' : '#FEF3C7',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <DollarSign size={13} color={hasContract ? '#10B981' : '#F59E0B'} />
                     </View>
+                    <Text style={{ flex: 1, fontSize: 11, fontWeight: '700', color: '#374151', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Budget Summary
+                    </Text>
+                    {isAdmin && (
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#10B981', letterSpacing: 0.3 }}>
+                        Edit
+                      </Text>
+                    )}
                   </View>
 
-                  {/* Edit label for admins */}
-                  {isAdmin && (
-                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#10B981', alignSelf: 'flex-start', marginTop: 2, marginLeft: 8 }}>Edit</Text>
-                  )}
+                  {/* ── Values: full-width 3-col grid ── */}
+                  <View style={{ flexDirection: 'row', gap: 1 }}>
+                    {/* Contract Amount */}
+                    <View style={{ flex: 1, paddingRight: 12, borderRightWidth: hasContract ? 1 : 0, borderRightColor: hasContract ? '#BBFCDA' : 'transparent' }}>
+                      <Text style={{ fontSize: 9, color: '#6B7280', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                        Contract
+                      </Text>
+                      <Text style={{ fontSize: 18, fontWeight: '800', color: hasContract ? '#1E40AF' : '#D97706', letterSpacing: -0.3 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                        {hasContract ? `$${(project.contractAmount!).toLocaleString()}` : 'Not set'}
+                      </Text>
+                    </View>
+
+                    {/* Project Budget */}
+                    <View style={{ flex: 1, paddingHorizontal: 12, borderRightWidth: hasContract ? 1 : 0, borderRightColor: hasContract ? '#BBFCDA' : 'transparent' }}>
+                      <Text style={{ fontSize: 9, color: '#6B7280', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                        Budget
+                      </Text>
+                      <Text style={{ fontSize: 18, fontWeight: '800', color: '#064E3B', letterSpacing: -0.3 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                        ${project.budget.toLocaleString()}
+                      </Text>
+                    </View>
+
+                    {/* Planned Profit — only if contractAmount is set */}
+                    {hasContract && (
+                      <View style={{ flex: 1, paddingLeft: 12 }}>
+                        <Text style={{ fontSize: 9, color: '#6B7280', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>
+                          Profit
+                        </Text>
+                        <Text style={{ fontSize: 18, fontWeight: '800', color: plannedProfit >= 0 ? '#10B981' : '#EF4444', letterSpacing: -0.3 }} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+                          {plannedProfit >= 0 ? '+' : '-'}${Math.abs(plannedProfit).toLocaleString()}
+                        </Text>
+                        <Text style={{ fontSize: 9, color: plannedProfit >= 0 ? '#059669' : '#EF4444', fontWeight: '600', marginTop: 2 }}>
+                          {((plannedProfit / (project.contractAmount ?? 1)) * 100).toFixed(1)}% margin
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </>
               );
               if (isAdmin) {
