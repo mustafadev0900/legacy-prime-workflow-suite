@@ -342,26 +342,28 @@ export default function EmployeeManagementScreen() {
       if (format === 'pdf') {
         const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, Arial, sans-serif; font-size: 12px; color: #1f2937; padding: 32px; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  body { font-family: -apple-system, Arial, sans-serif; font-size: 12px; color: #111827; padding: 32px; }
   .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; border-bottom: 2px solid #2563eb; margin-bottom: 24px; }
   .company h1 { font-size: 20px; font-weight: 700; color: #2563eb; }
-  .doc-title { font-size: 14px; color: #6b7280; margin-top: 4px; }
-  .meta p { font-size: 11px; color: #6b7280; text-align: right; line-height: 1.6; }
-  .section-title { font-size: 13px; font-weight: 700; color: #374151; margin: 20px 0 10px 0; border-left: 3px solid #2563eb; padding-left: 8px; }
+  .doc-title { font-size: 14px; color: #374151; margin-top: 4px; font-weight: 500; }
+  .meta p { font-size: 12px; color: #111827; text-align: right; line-height: 1.8; }
+  .meta strong { color: #111827; }
+  .section-title { font-size: 13px; font-weight: 700; color: #111827; margin: 20px 0 10px 0; border-left: 3px solid #2563eb; padding-left: 8px; }
   .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
-  .stat-box { background: #f3f4f6; border-radius: 8px; padding: 12px; text-align: center; }
-  .stat-value { font-size: 20px; font-weight: 700; color: #1f2937; }
-  .stat-value.green { color: #10b981; }
-  .stat-value.blue { color: #2563eb; }
-  .stat-label { font-size: 10px; color: #9ca3af; margin-top: 2px; text-transform: uppercase; }
+  .stat-box { background: #e5e7eb !important; border-radius: 8px; padding: 12px; text-align: center; }
+  .stat-value { font-size: 20px; font-weight: 700; color: #111827; }
+  .stat-value.green { color: #059669; }
+  .stat-value.blue { color: #1d4ed8; }
+  .stat-label { font-size: 10px; color: #374151; margin-top: 4px; text-transform: uppercase; font-weight: 600; letter-spacing: 0.4px; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-  th { background: #1e40af; color: #fff; font-size: 10px; font-weight: 600; padding: 8px 6px; text-align: left; text-transform: uppercase; letter-spacing: 0.5px; }
-  td { padding: 7px 6px; font-size: 11px; border-bottom: 1px solid #f3f4f6; color: #374151; }
-  tr:nth-child(even) td { background: #f9fafb; }
-  .badge-ot { background: #fef3c7; color: #92400e; font-size: 9px; padding: 1px 5px; border-radius: 9px; font-weight: 600; }
-  .badge-active { background: #d1fae5; color: #065f46; font-size: 9px; padding: 1px 5px; border-radius: 9px; font-weight: 600; }
-  .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #9ca3af; display: flex; justify-content: space-between; }
+  th { background: #1e3a8a !important; color: #ffffff !important; font-size: 10px; font-weight: 700; padding: 9px 6px; text-align: left; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 8px 6px; font-size: 11px; border-bottom: 1px solid #d1d5db; color: #111827; }
+  tr:nth-child(even) td { background: #f3f4f6 !important; }
+  .badge-ot { background: #fef3c7 !important; color: #92400e; font-size: 9px; padding: 1px 5px; border-radius: 9px; font-weight: 600; }
+  .badge-active { background: #d1fae5 !important; color: #065f46; font-size: 9px; padding: 1px 5px; border-radius: 9px; font-weight: 600; }
+  .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #9ca3af; font-size: 10px; color: #374151; display: flex; justify-content: space-between; font-weight: 500; }
+  @media print { * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; } }
 </style></head><body>
 <div class="header">
   <div class="company">
