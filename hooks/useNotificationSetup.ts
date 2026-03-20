@@ -182,19 +182,26 @@ export function useNotificationSetup(
           });
         }
 
-        // Request permissions via expo-notifications (handles both iOS + Android 13+)
+        // Request permissions via expo-notifications (handles both iOS + Android 13+).
+        // Mac Catalyst reports Platform.OS === 'ios' but doesn't support provisional
+        // notifications — passing ios.allowProvisional causes the permission check to
+        // return an unexpected status even when the user has notifications enabled in
+        // System Settings. Use plain options on Mac Catalyst.
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
 
         if (existingStatus !== 'granted') {
-          const { status } = await Notifications.requestPermissionsAsync({
-            ios: {
-              allowAlert:       true,
-              allowBadge:       true,
-              allowSound:       true,
-              allowProvisional: true, // silent delivery to Notification Center if user hasn't decided
-            },
-          });
+          const permissionOptions = Platform.isMacCatalyst
+            ? {}
+            : {
+                ios: {
+                  allowAlert:       true,
+                  allowBadge:       true,
+                  allowSound:       true,
+                  allowProvisional: true,
+                },
+              };
+          const { status } = await Notifications.requestPermissionsAsync(permissionOptions);
           finalStatus = status;
         }
 
