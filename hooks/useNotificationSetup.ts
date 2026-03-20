@@ -182,49 +182,52 @@ export function useNotificationSetup(
           });
         }
 
-        // Request permissions via expo-notifications (handles both iOS + Android 13+).
-        // Mac Catalyst reports Platform.OS === 'ios' but doesn't support provisional
-        // notifications — passing ios.allowProvisional causes the permission check to
-        // return an unexpected status even when the user has notifications enabled in
-        // System Settings. Use plain options on Mac Catalyst.
-        const { status: existingStatus } = await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
+        // Mac Catalyst (desktop): expo-notifications permission APIs are unreliable —
+        // getPermissionsAsync() can return 'denied' even when System Settings shows
+        // notifications as enabled, because the provisional/iOS-specific auth flow
+        // doesn't map cleanly to macOS. Skip the expo check on Mac Catalyst and go
+        // straight to FCM token retrieval; Firebase uses the native macOS grant state.
+        // Platform.isMacCatalyst may be undefined in some build configs, so also check
+        // the NativeModules sentinel that Mac Catalyst sets.
+        const isMac =
+          Platform.isMacCatalyst === true ||
+          !!(NativeModules as any).PlatformConstants?.isMacCatalyst;
 
-        if (existingStatus !== 'granted') {
-          const permissionOptions = Platform.isMacCatalyst
-            ? {}
-            : {
-                ios: {
-                  allowAlert:       true,
-                  allowBadge:       true,
-                  allowSound:       true,
-                  allowProvisional: true,
-                },
-              };
-          const { status } = await Notifications.requestPermissionsAsync(permissionOptions);
-          finalStatus = status;
-        }
+        if (!isMac) {
+          // iOS / Android: request via expo-notifications
+          const { status: existingStatus } = await Notifications.getPermissionsAsync();
+          let finalStatus = existingStatus;
 
-        if (finalStatus !== 'granted') {
-          console.log('[Notifications] Permission not granted — skipping token registration');
-          // existingStatus === 'denied' means the user previously tapped "Don't Allow".
-          // requestPermissionsAsync cannot re-prompt in that state; only the device
-          // Settings page can re-enable it. Show the alert once per session.
-          if (existingStatus === 'denied' && !permissionDeniedAlertShown) {
-            permissionDeniedAlertShown = true;
-            Alert.alert(
-              'Enable Notifications',
-              'Push notifications are disabled. To receive alerts for rate change requests and other updates, enable notifications in your device settings.',
-              [
-                { text: 'Not Now', style: 'cancel' },
-                {
-                  text: 'Open Settings',
-                  onPress: () => Linking.openSettings(),
-                },
-              ]
-            );
+          if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync({
+              ios: {
+                allowAlert:       true,
+                allowBadge:       true,
+                allowSound:       true,
+                allowProvisional: true,
+              },
+            });
+            finalStatus = status;
           }
-          return;
+
+          if (finalStatus !== 'granted') {
+            console.log('[Notifications] Permission not granted — skipping token registration');
+            // Show Settings prompt once per session when explicitly denied
+            if (existingStatus === 'denied' && !permissionDeniedAlertShown) {
+              permissionDeniedAlertShown = true;
+              Alert.alert(
+                'Enable Notifications',
+                'Push notifications are disabled. To receive alerts for rate change requests and other updates, enable notifications in your device settings.',
+                [
+                  { text: 'Not Now', style: 'cancel' },
+                  { text: 'Open Settings', onPress: () => Linking.openSettings() },
+                ]
+              );
+            }
+            return;
+          }
+        } else {
+          console.log('[Notifications] Mac Catalyst — skipping expo permission check, using FCM native grant');
         }
 
         // Get FCM token via react-native-firebase (modular API)
