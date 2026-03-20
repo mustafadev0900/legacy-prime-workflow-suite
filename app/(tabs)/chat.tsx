@@ -1627,7 +1627,7 @@ const styles = StyleSheet.create({
   backButtonText: { fontSize: 16, color: '#2563EB', fontWeight: '600' as const },
   chatTitle: { fontSize: 17, fontWeight: '600' as const, color: '#1F2937' },
   content: { flex: 1, flexDirection: 'row' },
-  sidebar: { width: 300, backgroundColor: '#FFFFFF', borderRightWidth: 1, borderRightColor: '#E5E7EB', padding: 16 },
+  sidebar: { width: 360, backgroundColor: '#FFFFFF', borderRightWidth: 1, borderRightColor: '#E5E7EB', padding: 16 },
   sidebarMobile: { width: '100%', borderRightWidth: 0, flex: 1 },
   newChatButton: { backgroundColor: '#2563EB', paddingVertical: 12, borderRadius: 8, alignItems: 'center', marginBottom: 12 },
   newChatButtonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '600' as const },
