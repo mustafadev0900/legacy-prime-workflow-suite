@@ -315,9 +315,14 @@ export default function EmployeeManagementScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ 
+      <Stack.Screen options={{
         title: 'Employee Management',
         headerShown: true,
+        headerLeft: () => (
+          <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
+            <Text style={{ fontSize: 16, color: '#2563EB' }}>‹ Back</Text>
+          </TouchableOpacity>
+        ),
       }} />
       
       <ScrollView
