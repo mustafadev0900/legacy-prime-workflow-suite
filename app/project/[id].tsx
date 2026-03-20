@@ -15,6 +15,7 @@ import { Image } from 'expo-image';
 import UploaderBadge from '@/components/UploaderBadge';
 import * as ImagePicker from 'expo-image-picker';
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import { ProjectFile, FileCategory } from '@/types';
 import { photoCategories } from '@/mocks/data';
@@ -47,7 +48,9 @@ export default function ProjectDetailScreen() {
       }))));
   }, [id]);
 
-  useEffect(() => {
+  // Re-fetch user rates every time this screen comes into focus so rate changes
+  // approved by the admin are reflected in the Labor Costs card immediately.
+  const fetchUserRates = useCallback(() => {
     supabase.from('users').select('id, name, hourly_rate').then(({ data }) => {
       const rates = new Map<string, number>();
       const names = new Map<string, string>();
@@ -58,6 +61,17 @@ export default function ProjectDetailScreen() {
       setUserRatesMap(rates);
       setUserNamesMap(names);
     });
+  }, []);
+
+  useFocusEffect(useCallback(() => {
+    fetchUserRates();
+  }, [fetchUserRates]));
+
+  // Tick every 30s so active-entry elapsed hours/costs update in real-time.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -440,7 +454,7 @@ export default function ProjectDetailScreen() {
       const rate = entry.hourlyRate ?? userRatesMap.get(entry.employeeId) ?? 0;
       if (!rate) return sum;
       const clockInMs = new Date(entry.clockIn).getTime();
-      const clockOutMs = entry.clockOut ? new Date(entry.clockOut).getTime() : Date.now();
+      const clockOutMs = entry.clockOut ? new Date(entry.clockOut).getTime() : nowMs;
       let totalMs = clockOutMs - clockInMs;
       if (entry.lunchBreaks) {
         entry.lunchBreaks.forEach(lunch => {
@@ -451,7 +465,7 @@ export default function ProjectDetailScreen() {
       }
       return sum + Math.max(0, (totalMs / 3_600_000) * rate);
     }, 0);
-  }, [projectClockEntries, userRatesMap]);
+  }, [projectClockEntries, userRatesMap, nowMs]);
 
   const totalSubcontractorCost = useMemo(() => {
     return expensesByType['Subcontractor'] || 0;
@@ -492,14 +506,20 @@ export default function ProjectDetailScreen() {
   // entries remain accurate after rate changes. Falls back to current rate for
   // legacy entries that predate the snapshot column.
   const laborBreakdown = useMemo(() => {
+    // Per-employee: group entries, track distinct rates (for rate-change detection),
+    // and detect legacy entries (hourlyRate = null) that fall back to current rate.
     const map = new Map<string, {
       name: string;
       hours: number;
       cost: number;
       isActive: boolean;
-      rateSet: Set<number>;   // distinct rates seen — detects mid-project rate changes
+      sessionCount: number;
+      rateSet: Set<number>;       // distinct snapshotted rates seen
+      hasLegacyEntries: boolean;  // true if any entry lacks a rate snapshot
+      // For "Varies" rows: per-rate-segment breakdown for tooltip/sub-rows
+      rateSegments: Map<number, { hours: number; cost: number }>;
     }>();
-    const now = Date.now();
+    const now = nowMs;
     projectClockEntries.forEach(entry => {
       if (!entry.clockIn) return;
       const clockInMs = new Date(entry.clockIn).getTime();
@@ -513,6 +533,7 @@ export default function ProjectDetailScreen() {
         });
       }
       const hours = Math.max(0, ms / 3_600_000);
+      const isLegacy = entry.hourlyRate == null;
       // Prefer snapshotted rate; fall back to current rate for legacy entries
       const rate = entry.hourlyRate ?? userRatesMap.get(entry.employeeId) ?? null;
       const cost = rate ? hours * rate : 0;
@@ -525,23 +546,43 @@ export default function ProjectDetailScreen() {
         existing.hours += hours;
         existing.cost += cost;
         existing.isActive = existing.isActive || isActive;
-        if (rate) existing.rateSet.add(rate);
+        existing.sessionCount += 1;
+        if (isLegacy) existing.hasLegacyEntries = true;
+        if (rate) {
+          existing.rateSet.add(rate);
+          const seg = existing.rateSegments.get(rate);
+          if (seg) { seg.hours += hours; seg.cost += cost; }
+          else existing.rateSegments.set(rate, { hours, cost });
+        }
       } else {
         const rateSet = new Set<number>();
-        if (rate) rateSet.add(rate);
-        map.set(entry.employeeId, { name, hours, cost, isActive, rateSet });
+        const rateSegments = new Map<number, { hours: number; cost: number }>();
+        if (rate) {
+          rateSet.add(rate);
+          rateSegments.set(rate, { hours, cost });
+        }
+        map.set(entry.employeeId, {
+          name, hours, cost, isActive, sessionCount: 1,
+          rateSet, hasLegacyEntries: isLegacy, rateSegments,
+        });
       }
     });
     return Array.from(map.entries())
-      .map(([employeeId, { rateSet, ...d }]) => ({
+      .map(([employeeId, { rateSet, rateSegments, ...d }]) => ({
         employeeId,
         ...d,
-        // Single rate if uniform; null signals "varies" (rate changed mid-project)
+        // rate: single value if uniform; -1 signals "varies" (rate changed mid-project); null = no rate
         rate: rateSet.size === 1 ? [...rateSet][0] : rateSet.size > 1 ? -1 : null,
         rateCount: rateSet.size,
+        // Sub-rows sorted by rate desc — shown when rate === -1 (Varies)
+        segments: rateSet.size > 1
+          ? [...rateSegments.entries()]
+              .map(([r, s]) => ({ rate: r, hours: s.hours, cost: s.cost }))
+              .sort((a, b) => b.rate - a.rate)
+          : [],
       }))
       .sort((a, b) => b.cost - a.cost || b.hours - a.hours);
-  }, [projectClockEntries, userRatesMap, userNamesMap]);
+  }, [projectClockEntries, userRatesMap, userNamesMap, nowMs]);
 
   // Payment baseline: what the client agreed to pay (contract amount).
   // Falls back to budget if no contract has been set yet.
@@ -1147,7 +1188,10 @@ export default function ProjectDetailScreen() {
             <View style={styles.laborCard}>
               <View style={styles.laborCardHeader}>
                 <UserCheck size={20} color="#2563EB" />
-                <Text style={styles.laborCardTitle}>Labor Costs</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.laborCardTitle}>Labor Costs</Text>
+                  <Text style={styles.laborCardSubtitle}>All-time project hours · wages locked at clock-in rate</Text>
+                </View>
                 <View style={styles.laborTotalBadge}>
                   <Text style={styles.laborTotalBadgeText}>
                     ${totalLaborCost.toLocaleString(undefined, { maximumFractionDigits: 0 })} total
@@ -1172,37 +1216,55 @@ export default function ProjectDetailScreen() {
                   </View>
 
                   {laborBreakdown.map((row) => (
-                    <View key={row.employeeId} style={[styles.laborRow, row.isActive && styles.laborRowActive]}>
-                      {/* Avatar */}
-                      <View style={[styles.laborAvatar, row.isActive && styles.laborAvatarActive]}>
-                        <Text style={styles.laborAvatarText}>
-                          {row.name.charAt(0).toUpperCase()}
+                    <View key={row.employeeId}>
+                      <View style={[styles.laborRow, row.isActive && styles.laborRowActive]}>
+                        {/* Avatar */}
+                        <View style={[styles.laborAvatar, row.isActive && styles.laborAvatarActive]}>
+                          <Text style={styles.laborAvatarText}>
+                            {row.name.charAt(0).toUpperCase()}
+                          </Text>
+                          {row.isActive && <View style={styles.laborActiveDot} />}
+                        </View>
+
+                        {/* Name + sessions */}
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.laborEmployeeName} numberOfLines={1}>{row.name}</Text>
+                          <Text style={styles.laborSessionCount}>
+                            {row.sessionCount} session{row.sessionCount !== 1 ? 's' : ''}
+                            {row.isActive ? ' · ' : ''}
+                            {row.isActive && <Text style={styles.laborLiveLabel}>● Live</Text>}
+                          </Text>
+                        </View>
+
+                        {/* Hours */}
+                        <Text style={[styles.laborColHours, styles.laborCellValue]}>
+                          {row.hours.toFixed(1)}h
                         </Text>
-                        {row.isActive && <View style={styles.laborActiveDot} />}
+
+                        {/* Rate — "Varies" when rate changed mid-project */}
+                        <Text style={[styles.laborColRate, styles.laborCellValue, (!row.rate || row.rate < 0) && styles.laborCellMuted]}>
+                          {row.rate === -1 ? 'Varies' : row.rate ? `$${row.rate.toFixed(0)}/h` : '—'}
+                          {row.hasLegacyEntries && row.rate !== -1 ? '*' : ''}
+                        </Text>
+
+                        {/* Cost */}
+                        <Text style={[styles.laborColCost, styles.laborCellValue, row.cost > 0 ? styles.laborCostValue : styles.laborCellMuted]}>
+                          {row.cost > 0 ? `$${row.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'No rate'}
+                          {row.hasLegacyEntries ? '*' : ''}
+                        </Text>
                       </View>
 
-                      {/* Name */}
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.laborEmployeeName} numberOfLines={1}>{row.name}</Text>
-                        {row.isActive && (
-                          <Text style={styles.laborLiveLabel}>● Live</Text>
-                        )}
-                      </View>
-
-                      {/* Hours */}
-                      <Text style={[styles.laborColHours, styles.laborCellValue]}>
-                        {row.hours.toFixed(1)}h
-                      </Text>
-
-                      {/* Rate */}
-                      <Text style={[styles.laborColRate, styles.laborCellValue, (!row.rate || row.rate < 0) && styles.laborCellMuted]}>
-                        {row.rate === -1 ? 'Varies' : row.rate ? `$${row.rate.toFixed(0)}/h` : '—'}
-                      </Text>
-
-                      {/* Cost */}
-                      <Text style={[styles.laborColCost, styles.laborCellValue, row.cost > 0 ? styles.laborCostValue : styles.laborCellMuted]}>
-                        {row.cost > 0 ? `$${row.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'No rate'}
-                      </Text>
+                      {/* Rate-segment sub-rows — only shown when rate changed mid-project */}
+                      {row.rate === -1 && row.segments.map((seg) => (
+                        <View key={seg.rate} style={styles.laborSegmentRow}>
+                          <Text style={styles.laborSegmentLabel}>
+                            ↳ ${seg.rate.toFixed(0)}/h · {seg.hours.toFixed(1)}h
+                          </Text>
+                          <Text style={styles.laborSegmentCost}>
+                            ${seg.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                          </Text>
+                        </View>
+                      ))}
                     </View>
                   ))}
 
@@ -1218,9 +1280,14 @@ export default function ProjectDetailScreen() {
                     </Text>
                   </View>
 
+                  {laborBreakdown.some(r => r.hasLegacyEntries) && (
+                    <Text style={styles.laborRateWarning}>
+                      * Sessions logged before rate tracking was enabled use the employee's current rate as an estimate.
+                    </Text>
+                  )}
                   {laborBreakdown.some(r => !r.rate) && (
                     <Text style={styles.laborRateWarning}>
-                      * Employees without a rate set are not included in the cost total. Set their rate in Employee Management.
+                      Employees without a rate set are excluded from the cost total. Set their rate in Employee Management.
                     </Text>
                   )}
                 </>
@@ -3801,7 +3868,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700' as const,
     color: '#1F2937',
-    flex: 1,
+  },
+  laborCardSubtitle: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
   },
   laborTotalBadge: {
     backgroundColor: '#DBEAFE',
@@ -3907,11 +3978,33 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: '#1F2937',
   },
+  laborSessionCount: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 1,
+  },
   laborLiveLabel: {
     fontSize: 11,
     color: '#10B981',
     fontWeight: '600' as const,
-    marginTop: 1,
+  },
+  laborSegmentRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    paddingHorizontal: 52,
+    paddingVertical: 3,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 6,
+    marginBottom: 2,
+  },
+  laborSegmentLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  laborSegmentCost: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '600' as const,
   },
   laborCellValue: {
     fontSize: 14,

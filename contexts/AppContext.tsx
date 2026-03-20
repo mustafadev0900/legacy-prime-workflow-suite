@@ -1596,11 +1596,16 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
           throw new Error(result.error || 'Failed to clock in');
         }
 
-        // Update local entry with database ID so clock-out works correctly
+        // Update local entry with database ID and snapshotted hourlyRate so
+        // clock-out and labor cost calculations work correctly immediately.
         if (result.success && result.clockEntry) {
           const dbId = result.clockEntry.id;
           console.log('[App] Clocked in successfully, updating ID:', entry.id, '->', dbId);
-          const updatedEntry = { ...entry, id: dbId };
+          const updatedEntry = {
+            ...entry,
+            id: dbId,
+            hourlyRate: result.clockEntry.hourlyRate,
+          };
           setClockEntries(prev => prev.map(e =>
             e.id === entry.id ? updatedEntry : e
           ));

@@ -211,9 +211,12 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
     console.log(`[Clock Out] Category: ${currentEntry.category || 'General Labor'}`);
     console.log(`[Clock Out] Work performed: ${workPerformed || 'N/A'}`);
 
-    // Auto-create labor expense if hourly rate is set
+    // Auto-create labor expense if hourly rate is set.
+    // Use the rate snapshotted at clock-in time (currentEntry.hourlyRate) so the
+    // expense reflects the correct wage even if the rate changed since then.
+    const effectiveRate = currentEntry.hourlyRate ?? user?.hourlyRate ?? 0;
     let laborCostMessage = '';
-    if (user?.hourlyRate && user.hourlyRate > 0 && hoursWorked > 0 && projectId) {
+    if (effectiveRate > 0 && hoursWorked > 0 && projectId) {
       // Check if labor expense already exists for this clock entry
       const existingExpense = expenses.find(exp =>
         exp.clockEntryId === currentEntry.id && exp.type === 'Labor'
@@ -222,28 +225,28 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
       if (existingExpense) {
         console.log('[Clock Out] Labor expense already exists for this clock entry');
       } else {
-        const laborCost = Math.round(hoursWorked * user.hourlyRate * 100) / 100;
+        const laborCost = Math.round(hoursWorked * effectiveRate * 100) / 100;
 
         const laborExpense = {
           id: `labor-${currentEntry.id}-${Date.now()}`,
           projectId: projectId,
-          companyId: user.companyId,
+          companyId: user?.companyId,
           type: 'Labor',
           subcategory: 'Employee Labor',
           amount: laborCost,
-          store: user.name || 'Unknown Employee',
+          store: user?.name || 'Unknown Employee',
           date: clockOutTime,
-          notes: `${hoursWorked.toFixed(2)} hrs @ $${user.hourlyRate}/hr`,
+          notes: `${hoursWorked.toFixed(2)} hrs @ $${effectiveRate}/hr`,
           createdAt: new Date().toISOString(),
           clockEntryId: currentEntry.id,
         };
 
         await addExpense(laborExpense);
-        laborCostMessage = `\nLabor cost: $${laborCost.toFixed(2)} (${hoursWorked.toFixed(2)} hrs @ $${user.hourlyRate}/hr)`;
+        laborCostMessage = `\nLabor cost: $${laborCost.toFixed(2)} (${hoursWorked.toFixed(2)} hrs @ $${effectiveRate}/hr)`;
         console.log('[Clock Out] Created labor expense:', laborExpense.id, `$${laborCost.toFixed(2)}`);
       }
     } else {
-      if (!user?.hourlyRate) {
+      if (!effectiveRate) {
         console.log('[Clock Out] No hourly rate set for employee, skipping labor expense');
       } else if (hoursWorked <= 0) {
         console.log('[Clock Out] Hours worked is 0 or negative, skipping labor expense');
@@ -333,9 +336,12 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
     return totalMs / (1000 * 60 * 60);
   };
 
-  const calculateEarnings = (hours: number) => {
-    if (!user?.hourlyRate) return 0;
-    return hours * user.hourlyRate;
+  // Current-session earnings: use the rate snapshotted at clock-in (entry.hourlyRate),
+  // falling back to the user's current rate only if the snapshot is missing (legacy entries).
+  const calculateCurrentSessionEarnings = () => {
+    const hours = calculateCurrentHours();
+    const rate = currentEntry?.hourlyRate ?? user?.hourlyRate ?? 0;
+    return hours * rate;
   };
 
   const [showReportModal, setShowReportModal] = useState<boolean>(false);
@@ -478,6 +484,23 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
     return entryDate === today && entry.projectId === projectId && entry.employeeId === user?.id;
   });
 
+  // Today's total earnings: sum per-entry so mixed rates (rate change mid-day) are correct.
+  const todayEarnings = todayEntries.reduce((sum, entry) => {
+    const start = new Date(entry.clockIn);
+    const end = entry.clockOut ? new Date(entry.clockOut) : new Date();
+    let totalMs = end.getTime() - start.getTime();
+    if (entry.lunchBreaks) {
+      entry.lunchBreaks.forEach(lunch => {
+        const lunchStart = new Date(lunch.startTime).getTime();
+        const lunchEnd = lunch.endTime ? new Date(lunch.endTime).getTime() : new Date().getTime();
+        totalMs -= (lunchEnd - lunchStart);
+      });
+    }
+    const hours = Math.max(0, totalMs / (1000 * 60 * 60));
+    const rate = entry.hourlyRate ?? user?.hourlyRate ?? 0;
+    return sum + rate * hours;
+  }, 0);
+
   const totalHoursToday = todayEntries.reduce((sum, entry) => {
     const start = new Date(entry.clockIn);
     const end = entry.clockOut ? new Date(entry.clockOut) : new Date();
@@ -520,11 +543,11 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
               <Text style={styles.workDescription}>{currentEntry.workPerformed}</Text>
             )}
             <Text style={styles.currentHours}>{calculateCurrentHours().toFixed(2)}h elapsed</Text>
-            {user?.hourlyRate && (
+            {(currentEntry?.hourlyRate ?? user?.hourlyRate) ? (
               <Text style={styles.earningsText}>
-                Earnings: ${calculateEarnings(calculateCurrentHours()).toFixed(2)}
+                Earnings: ${calculateCurrentSessionEarnings().toFixed(2)}
               </Text>
-            )}
+            ) : null}
             
             <View style={styles.lunchButtonsRow}>
               {isOnLunch() ? (
@@ -698,7 +721,7 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
           {user?.hourlyRate && (
             <View style={styles.statItem}>
               <Text style={styles.statLabel}>Earnings Today</Text>
-              <Text style={styles.statValue}>${calculateEarnings(totalHoursToday).toFixed(2)}</Text>
+              <Text style={styles.statValue}>${todayEarnings.toFixed(2)}</Text>
             </View>
           )}
         </View>
@@ -861,7 +884,7 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
               {user?.hourlyRate && (
                 <View>
                   <Text style={styles.summaryLabel}>Estimated Earnings</Text>
-                  <Text style={styles.summaryValue}>${calculateEarnings(calculateCurrentHours()).toFixed(2)}</Text>
+                  <Text style={styles.summaryValue}>${calculateCurrentSessionEarnings().toFixed(2)}</Text>
                 </View>
               )}
             </View>
