@@ -114,14 +114,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const otherUserIds = otherParticipants.map((p: any) => p.user_id);
         const { data: tokenRows } = await supabase
           .from('push_tokens')
-          .select('token, token_source')
+          .select('token, token_source, platform')
           .in('user_id', otherUserIds)
           .eq('is_active', true);
 
         if (!tokenRows?.length) {
-          console.log('[Send Message] No active push tokens for recipients');
+          console.log('[Send Message] No active push tokens for recipients — userIds:', otherUserIds);
           return;
         }
+        console.log('[Send Message] Push targets:', tokenRows.length, 'token(s) for', otherUserIds.length, 'recipient(s)');
 
         const senderName = sender?.name || 'Someone';
         const msgPreview =
@@ -145,7 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             await Promise.allSettled(
               fcmTokens.map(async (row: any) => {
                 try {
-                  await messaging.send({
+                  const fcmName = await messaging.send({
                     token: row.token,
                     notification: { title: senderName, body: msgPreview },
                     data: { type: 'chat', conversationId },
@@ -155,13 +156,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     },
                     android: { priority: 'high', notification: { sound: 'default', channelId: 'default' } },
                   });
-                  console.log('[Send Message] FCM sent to token ending:', row.token.slice(-8));
+                  console.log('[Send Message] ✅ FCM sent — platform:', row.platform, 'source:', row.token_source, 'name:', fcmName);
                 } catch (err: any) {
                   const code = err?.errorInfo?.code || err?.code || '';
-                  console.warn('[Send Message] FCM error:', code, 'token ending:', row.token.slice(-8));
+                  const rawBody = err?.rawBody ? JSON.stringify(err.rawBody).slice(0, 300) : 'n/a';
+                  console.error('[Send Message] ❌ FCM error — code:', code, 'platform:', row.platform, 'token ending:', row.token.slice(-8), 'raw:', rawBody);
+                  // Only deactivate on definitive "token no longer valid" codes.
+                  // INVALID_ARGUMENT is too broad — it fires for APNs config issues on
+                  // Mac Catalyst without invalidating the token itself.
                   if (
                     code === 'UNREGISTERED' ||
-                    code === 'INVALID_ARGUMENT' ||
                     code.includes('registration-token-not-registered') ||
                     code.includes('invalid-registration-token')
                   ) {
@@ -176,7 +180,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               console.log('[Send Message] Deactivated', deadFcmTokens.length, 'dead FCM token(s)');
             }
           } catch (fcmErr: any) {
-            console.warn('[Send Message] FCM init failed:', fcmErr?.message);
+            console.error('[Send Message] ❌ FCM init failed:', fcmErr?.message);
           }
         }
 
@@ -214,11 +218,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     };
 
-    // Race push work against a 4 s timeout so a slow FCM cold start never
-    // blocks the HTTP response beyond an acceptable threshold.
+    // Race push work against a 8 s timeout (covers FCM OAuth2 cold-start ~2-3s
+    // + actual send). This route has maxDuration: 30 so 8s is safe.
     await Promise.race([
       pushWork(),
-      new Promise<void>(resolve => setTimeout(resolve, 4000)),
+      new Promise<void>(resolve => setTimeout(resolve, 8000)),
     ]);
 
     return res.status(200).json({
