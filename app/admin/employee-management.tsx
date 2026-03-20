@@ -302,7 +302,13 @@ export default function EmployeeManagementScreen() {
 
       for (const e of sortedEntries as any[]) {
         const netHours = calcNetHours(e);
-        const rate: number | null = e.hourly_rate ?? null;
+        // Use the rate snapshot stored at clock-in time. For legacy entries that
+        // predate the snapshot column (hourly_rate = null), fall back to the
+        // employee's current rate so the report shows estimated earnings rather
+        // than $0. The rate column in the table will show "(est.)" to signal this.
+        const snapshotRate: number | null = e.hourly_rate ?? null;
+        const rate: number | null = snapshotRate ?? selectedEmployee.hourlyRate ?? null;
+        const isEstimatedRate = snapshotRate == null && rate != null;
         const regInEntry = rate ? Math.max(0, Math.min(netHours, 40 - cumulativeHours)) : 0;
         const otInEntry = rate ? Math.max(0, netHours - regInEntry) : 0;
         const cost = rate ? (regInEntry * rate) + (otInEntry * rate * 1.5) : 0;
@@ -325,6 +331,7 @@ export default function EmployeeManagementScreen() {
           lunchMin: Math.round(lunchMs / 60_000),
           netHours,
           rate,
+          isEstimatedRate,
           cost,
           project: e.project_id ? (projectMap.get(e.project_id) || 'Unknown Project') : '—',
           isActive: !e.clock_out,
@@ -411,8 +418,8 @@ export default function EmployeeManagementScreen() {
     <td>${r.lunchMin > 0 ? `${r.lunchMin}min` : '—'}</td>
     <td>${r.netHours.toFixed(2)}h</td>
     <td>${r.project}</td>
-    <td>${r.rate != null ? `$${r.rate.toFixed(2)}/hr` : '—'}</td>
-    <td>${r.cost > 0 ? `$${r.cost.toFixed(2)}` : '—'}</td>
+    <td>${r.rate != null ? `$${r.rate.toFixed(2)}/hr${r.isEstimatedRate ? '<span style="color:#f59e0b;font-size:9px"> *</span>' : ''}` : '—'}</td>
+    <td>${r.cost > 0 ? `$${r.cost.toFixed(2)}${r.isEstimatedRate ? '<span style="color:#f59e0b;font-size:9px"> *</span>' : ''}` : '—'}</td>
   </tr>`).join('')}
   <tr style="font-weight:700; background:#eff6ff;">
     <td colspan="5"><strong>Totals</strong></td>
@@ -421,6 +428,8 @@ export default function EmployeeManagementScreen() {
     <td><strong>$${totalEarnings.toFixed(2)}</strong></td>
   </tr>
 </table>
+
+${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#92400e;background:#fef3c7;padding:8px 12px;border-radius:6px;margin-bottom:16px;">* Rate not recorded at clock-in (legacy entry). Cost estimated using current rate of ${rateLabel}.</p>` : ''}
 
 <div class="footer">
   <span>Confidential — ${companyName}</span>
@@ -461,7 +470,7 @@ export default function EmployeeManagementScreen() {
         csv += `DETAILED LOG\n`;
         csv += `Date,Day,Clock In,Clock Out,Lunch (min),Net Hours,Project,Rate,Cost\n`;
         processedRows.forEach(r => {
-          csv += `${r.date},${r.dayName},${r.clockIn},${r.clockOut},${r.lunchMin},${r.netHours.toFixed(2)},${r.project},${r.rate != null ? r.rate.toFixed(2) : ''},${r.cost > 0 ? r.cost.toFixed(2) : ''}\n`;
+          csv += `${r.date},${r.dayName},${r.clockIn},${r.clockOut},${r.lunchMin},${r.netHours.toFixed(2)},${r.project},${r.rate != null ? `${r.rate.toFixed(2)}${r.isEstimatedRate ? ' (est.)' : ''}` : ''},${r.cost > 0 ? `${r.cost.toFixed(2)}${r.isEstimatedRate ? ' (est.)' : ''}` : ''}\n`;
         });
 
         if (Platform.OS === 'web') {
