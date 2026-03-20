@@ -1,10 +1,13 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal, RefreshControl, Platform, ActivityIndicator } from 'react-native';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import { User, ClockEntry } from '@/types';
-import { Clock, DollarSign, CheckCircle, XCircle, FileText, Edit2, TrendingUp } from 'lucide-react-native';
+import { Clock, DollarSign, CheckCircle, XCircle, FileText, Edit2, Download } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 
@@ -12,8 +15,9 @@ export default function EmployeeManagementScreen() {
   const { user: currentUser, clockEntries, refreshClockEntries } = useApp();
   const [selectedEmployee, setSelectedEmployee] = useState<User | null>(null);
 
-  const [showTimecardModal, setShowTimecardModal] = useState<boolean>(false);
-  const [timecardPeriod, setTimecardPeriod] = useState<'weekly' | 'bi-weekly' | 'custom'>('weekly');
+  const [showReportModal, setShowReportModal] = useState<boolean>(false);
+  const [reportPeriod, setReportPeriod] = useState<'current-week' | 'last-week' | 'this-month' | 'last-month' | 'all-time'>('current-week');
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showEditRateModal, setShowEditRateModal] = useState<boolean>(false);
   const [editingRate, setEditingRate] = useState<string>('');
@@ -194,108 +198,301 @@ export default function EmployeeManagementScreen() {
     return { todayHours, weekHours, totalHours, isClockedIn, clockInTime };
   };
 
-  const generateTimecard = async (employee: User) => {
+  const openReportModal = (employee: User) => {
     setSelectedEmployee(employee);
-    setShowTimecardModal(true);
+    setShowReportModal(true);
   };
 
-  const getWeekDates = (weeksAgo: number = 0) => {
+  const getReportDateRange = (period: typeof reportPeriod): { start: Date; end: Date; label: string } => {
     const now = new Date();
     const dayOfWeek = now.getDay();
-    const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - diff - (weeksAgo * 7));
-    monday.setHours(0, 0, 0, 0);
+    const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
 
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
-
-    return { start: monday.toISOString(), end: sunday.toISOString() };
+    if (period === 'current-week') {
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diffToMonday);
+      monday.setHours(0, 0, 0, 0);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      sunday.setHours(23, 59, 59, 999);
+      return { start: monday, end: sunday, label: `Week of ${monday.toLocaleDateString()}` };
+    }
+    if (period === 'last-week') {
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - diffToMonday - 7);
+      monday.setHours(0, 0, 0, 0);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      sunday.setHours(23, 59, 59, 999);
+      return { start: monday, end: sunday, label: `Week of ${monday.toLocaleDateString()}` };
+    }
+    if (period === 'this-month') {
+      const start = new Date(now.getFullYear(), now.getMonth(), 1);
+      const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+      return { start, end, label: now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) };
+    }
+    if (period === 'last-month') {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      return { start, end, label: start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) };
+    }
+    // all-time
+    return { start: new Date(0), end: new Date(8640000000000000), label: 'All Time' };
   };
 
-  const confirmGenerateTimecard = async () => {
+  const generateWorkHistoryReport = async (format: 'pdf' | 'csv') => {
     if (!selectedEmployee) return;
+    setIsGeneratingReport(true);
 
-    const { start, end } = getWeekDates(0);
-    
-    const employeeEntries = clockEntries.filter(entry => {
-      const entryDate = new Date(entry.clockIn);
-      return entry.employeeId === selectedEmployee.id && 
-             entryDate >= new Date(start) && 
-             entryDate <= new Date(end) &&
-             entry.clockOut;
-    });
+    try {
+      const { start, end, label: periodLabel } = getReportDateRange(reportPeriod);
 
-    const calculateHours = (entry: ClockEntry) => {
-      if (!entry.clockOut) return 0;
-      const clockStart = new Date(entry.clockIn).getTime();
-      const clockEnd = new Date(entry.clockOut).getTime();
-      let totalMs = clockEnd - clockStart;
+      // Fetch clock entries + project names in parallel
+      const [{ data: entriesData, error: entriesErr }, { data: projectsData, error: projErr }] = await Promise.all([
+        supabase
+          .from('clock_entries')
+          .select('*')
+          .eq('employee_id', selectedEmployee.id)
+          .gte('clock_in', start.toISOString())
+          .lte('clock_in', end.toISOString())
+          .order('clock_in', { ascending: true }),
+        supabase.from('projects').select('id, name'),
+      ]);
 
-      if (entry.lunchBreaks) {
-        entry.lunchBreaks.forEach(lunch => {
-          if (lunch.endTime) {
-            const lunchStart = new Date(lunch.startTime).getTime();
-            const lunchEnd = new Date(lunch.endTime).getTime();
-            totalMs -= (lunchEnd - lunchStart);
-          }
+      if (entriesErr || projErr) throw new Error((entriesErr || projErr)!.message);
+
+      const entries = entriesData || [];
+      const projectMap = new Map<string, string>(
+        (projectsData || []).map((p: any) => [p.id, p.name])
+      );
+
+      // Compute per-entry stats
+      const calcNetHours = (e: any): number => {
+        if (!e.clock_in) return 0;
+        const inMs = new Date(e.clock_in).getTime();
+        const outMs = e.clock_out ? new Date(e.clock_out).getTime() : Date.now();
+        let ms = outMs - inMs;
+        if (e.lunch_breaks) {
+          e.lunch_breaks.forEach((l: any) => {
+            const ls = new Date(l.startTime).getTime();
+            const le = l.endTime ? new Date(l.endTime).getTime() : outMs;
+            if (!isNaN(ls) && !isNaN(le)) ms -= (le - ls);
+          });
+        }
+        return Math.max(0, ms / 3_600_000);
+      };
+
+      const formatTime = (iso: string) => {
+        const d = new Date(iso);
+        const h = d.getHours(), m = d.getMinutes();
+        return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+      };
+
+      const sortedEntries = [...entries].sort(
+        (a: any, b: any) => new Date(a.clock_in).getTime() - new Date(b.clock_in).getTime()
+      );
+
+      let cumulativeHours = 0;
+      let totalEarnings = 0;
+      const processedRows: Array<{
+        date: string; dayName: string; clockIn: string; clockOut: string;
+        lunchMin: number; netHours: number; rate: number | null;
+        cost: number; project: string; isActive: boolean;
+      }> = [];
+
+      for (const e of sortedEntries as any[]) {
+        const netHours = calcNetHours(e);
+        const rate: number | null = e.hourly_rate ?? null;
+        const regInEntry = rate ? Math.max(0, Math.min(netHours, 40 - cumulativeHours)) : 0;
+        const otInEntry = rate ? Math.max(0, netHours - regInEntry) : 0;
+        const cost = rate ? (regInEntry * rate) + (otInEntry * rate * 1.5) : 0;
+        cumulativeHours += netHours;
+        totalEarnings += cost;
+
+        const lunchMs = e.lunch_breaks
+          ? (e.lunch_breaks as any[]).reduce((s: number, l: any) => {
+              if (!l.endTime) return s;
+              return s + (new Date(l.endTime).getTime() - new Date(l.startTime).getTime());
+            }, 0)
+          : 0;
+
+        const d = new Date(e.clock_in);
+        processedRows.push({
+          date: d.toLocaleDateString(),
+          dayName: d.toLocaleDateString('en-US', { weekday: 'long' }),
+          clockIn: formatTime(e.clock_in),
+          clockOut: e.clock_out ? formatTime(e.clock_out) : 'Active',
+          lunchMin: Math.round(lunchMs / 60_000),
+          netHours,
+          rate,
+          cost,
+          project: e.project_id ? (projectMap.get(e.project_id) || 'Unknown Project') : '—',
+          isActive: !e.clock_out,
         });
       }
 
-      return totalMs / (1000 * 60 * 60);
-    };
+      const totalHours = processedRows.reduce((s, r) => s + r.netHours, 0);
+      const regularHours = Math.min(totalHours, 40);
+      const overtimeHours = Math.max(0, totalHours - 40);
+      const daysWorked = new Set(processedRows.map(r => r.date)).size;
+      const rateLabel = selectedEmployee.hourlyRate ? `$${selectedEmployee.hourlyRate.toFixed(2)}/hr` : 'Not set';
+      const companyName = currentUser?.companyId ? 'Legacy Prime' : 'Company';
+      const generatedOn = new Date().toLocaleString();
 
-    const totalHours = employeeEntries.reduce((sum, entry) => sum + calculateHours(entry), 0);
-    const regularHours = Math.min(totalHours, 40);
-    const overtimeHours = Math.max(0, totalHours - 40);
+      if (format === 'pdf') {
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, Arial, sans-serif; font-size: 12px; color: #1f2937; padding: 32px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 20px; border-bottom: 2px solid #2563eb; margin-bottom: 24px; }
+  .company h1 { font-size: 20px; font-weight: 700; color: #2563eb; }
+  .doc-title { font-size: 14px; color: #6b7280; margin-top: 4px; }
+  .meta p { font-size: 11px; color: #6b7280; text-align: right; line-height: 1.6; }
+  .section-title { font-size: 13px; font-weight: 700; color: #374151; margin: 20px 0 10px 0; border-left: 3px solid #2563eb; padding-left: 8px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat-box { background: #f3f4f6; border-radius: 8px; padding: 12px; text-align: center; }
+  .stat-value { font-size: 20px; font-weight: 700; color: #1f2937; }
+  .stat-value.green { color: #10b981; }
+  .stat-value.blue { color: #2563eb; }
+  .stat-label { font-size: 10px; color: #9ca3af; margin-top: 2px; text-transform: uppercase; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  th { background: #1e40af; color: #fff; font-size: 10px; font-weight: 600; padding: 8px 6px; text-align: left; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 7px 6px; font-size: 11px; border-bottom: 1px solid #f3f4f6; color: #374151; }
+  tr:nth-child(even) td { background: #f9fafb; }
+  .badge-ot { background: #fef3c7; color: #92400e; font-size: 9px; padding: 1px 5px; border-radius: 9px; font-weight: 600; }
+  .badge-active { background: #d1fae5; color: #065f46; font-size: 9px; padding: 1px 5px; border-radius: 9px; font-weight: 600; }
+  .footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 10px; color: #9ca3af; display: flex; justify-content: space-between; }
+</style></head><body>
+<div class="header">
+  <div class="company">
+    <h1>${companyName}</h1>
+    <div class="doc-title">Work History Report</div>
+  </div>
+  <div class="meta">
+    <p><strong>Employee:</strong> ${selectedEmployee.name}</p>
+    <p><strong>Period:</strong> ${periodLabel}</p>
+    <p><strong>Rate:</strong> ${rateLabel}</p>
+    <p><strong>Generated:</strong> ${generatedOn}</p>
+  </div>
+</div>
 
-    // Compute earnings per-entry using each entry's snapshotted rate so that a
-    // rate change mid-week is reflected accurately. Falls back to the employee's
-    // current rate for legacy entries that predate the snapshot column.
-    // Overtime (>40h/week) is applied at 1.5× the rate of the specific entries
-    // that push past the 40h threshold, tracked via cumulative hours.
-    const sortedEntries = [...employeeEntries].sort(
-      (a, b) => new Date(a.clockIn).getTime() - new Date(b.clockIn).getTime()
-    );
-    let cumulativeHours = 0;
-    let totalEarnings = 0;
-    const ratesUsed = new Set<number>();
-    for (const entry of sortedEntries) {
-      const hours = calculateHours(entry);
-      const rate = entry.hourlyRate ?? selectedEmployee.hourlyRate ?? 0;
-      if (!rate) { cumulativeHours += hours; continue; }
-      ratesUsed.add(rate);
-      const regularInEntry = Math.max(0, Math.min(hours, 40 - cumulativeHours));
-      const overtimeInEntry = Math.max(0, hours - regularInEntry);
-      totalEarnings += (regularInEntry * rate) + (overtimeInEntry * rate * 1.5);
-      cumulativeHours += hours;
+<div class="section-title">Summary</div>
+<div class="summary-grid">
+  <div class="stat-box"><div class="stat-value blue">${totalHours.toFixed(2)}h</div><div class="stat-label">Total Hours</div></div>
+  <div class="stat-box"><div class="stat-value">${regularHours.toFixed(2)}h</div><div class="stat-label">Regular Hours</div></div>
+  <div class="stat-box"><div class="stat-value">${overtimeHours.toFixed(2)}h</div><div class="stat-label">Overtime Hours</div></div>
+  <div class="stat-box"><div class="stat-value green">$${totalEarnings.toFixed(2)}</div><div class="stat-label">Total Earnings</div></div>
+</div>
+<table>
+  <tr>
+    <th>Days Worked</th><th>Sessions</th><th>Avg Hours/Day</th><th>OT Rate</th>
+  </tr>
+  <tr>
+    <td>${daysWorked}</td>
+    <td>${processedRows.length}</td>
+    <td>${daysWorked > 0 ? (totalHours / daysWorked).toFixed(2) : '0.00'}h</td>
+    <td>1.5×</td>
+  </tr>
+</table>
+
+<div class="section-title">Detailed Work Log</div>
+<table>
+  <tr>
+    <th>Date</th><th>Day</th><th>Clock In</th><th>Clock Out</th><th>Lunch</th><th>Net Hours</th><th>Project</th><th>Rate</th><th>Cost</th>
+  </tr>
+  ${processedRows.map(r => `
+  <tr>
+    <td>${r.date}</td>
+    <td>${r.dayName}</td>
+    <td>${r.clockIn}</td>
+    <td>${r.isActive ? '<span class="badge-active">Active</span>' : r.clockOut}</td>
+    <td>${r.lunchMin > 0 ? `${r.lunchMin}min` : '—'}</td>
+    <td>${r.netHours.toFixed(2)}h</td>
+    <td>${r.project}</td>
+    <td>${r.rate != null ? `$${r.rate.toFixed(2)}/hr` : '—'}</td>
+    <td>${r.cost > 0 ? `$${r.cost.toFixed(2)}` : '—'}</td>
+  </tr>`).join('')}
+  <tr style="font-weight:700; background:#eff6ff;">
+    <td colspan="5"><strong>Totals</strong></td>
+    <td><strong>${totalHours.toFixed(2)}h</strong></td>
+    <td></td><td></td>
+    <td><strong>$${totalEarnings.toFixed(2)}</strong></td>
+  </tr>
+</table>
+
+<div class="footer">
+  <span>Confidential — ${companyName}</span>
+  <span>Generated ${generatedOn}</span>
+</div>
+</body></html>`;
+
+        if (Platform.OS === 'web') {
+          const win = window.open('', '_blank');
+          if (win) {
+            win.document.write(html);
+            win.document.close();
+            setTimeout(() => win.print(), 400);
+          }
+        } else {
+          const { uri } = await Print.printToFileAsync({ html });
+          const canShare = await Sharing.isAvailableAsync();
+          if (canShare) {
+            await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+          } else {
+            Alert.alert('PDF saved', uri);
+          }
+        }
+
+      } else {
+        // CSV / Spreadsheet
+        const safeName = selectedEmployee.name.replace(/[^a-z0-9]/gi, '_');
+        let csv = `WORK HISTORY REPORT\n`;
+        csv += `Employee,${selectedEmployee.name}\n`;
+        csv += `Period,${periodLabel}\n`;
+        csv += `Rate,${rateLabel}\n`;
+        csv += `Generated,${generatedOn}\n\n`;
+        csv += `SUMMARY\n`;
+        csv += `Total Hours,${totalHours.toFixed(2)}\n`;
+        csv += `Regular Hours,${regularHours.toFixed(2)}\n`;
+        csv += `Overtime Hours,${overtimeHours.toFixed(2)}\n`;
+        csv += `Total Earnings,$${totalEarnings.toFixed(2)}\n`;
+        csv += `Days Worked,${daysWorked}\n`;
+        csv += `Sessions,${processedRows.length}\n\n`;
+        csv += `DETAILED LOG\n`;
+        csv += `Date,Day,Clock In,Clock Out,Lunch (min),Net Hours,Project,Rate,Cost\n`;
+        processedRows.forEach(r => {
+          csv += `${r.date},${r.dayName},${r.clockIn},${r.clockOut},${r.lunchMin},${r.netHours.toFixed(2)},${r.project},${r.rate != null ? r.rate.toFixed(2) : ''},${r.cost > 0 ? r.cost.toFixed(2) : ''}\n`;
+        });
+
+        if (Platform.OS === 'web') {
+          const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = `${safeName}_work_history.csv`;
+          link.style.visibility = 'hidden';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          Alert.alert('Success', 'Spreadsheet downloaded.');
+        } else {
+          const fileUri = `${FileSystem.cacheDirectory}${safeName}_work_history.csv`;
+          await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+          const canShare = await Sharing.isAvailableAsync();
+          if (canShare) {
+            await Sharing.shareAsync(fileUri, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text' });
+          } else {
+            Alert.alert('Saved', fileUri);
+          }
+        }
+      }
+
+      setShowReportModal(false);
+    } catch (err: any) {
+      console.error('[Admin] Report generation error:', err);
+      Alert.alert('Error', err.message || 'Failed to generate report');
+    } finally {
+      setIsGeneratingReport(false);
     }
-
-    const uniqueDays = new Set(
-      employeeEntries.map(entry => new Date(entry.clockIn).toDateString())
-    ).size;
-
-    console.log('[Admin] Timecard Generated');
-    console.log(`  Employee: ${selectedEmployee.name}`);
-    console.log(`  Period: ${new Date(start).toLocaleDateString()} - ${new Date(end).toLocaleDateString()}`);
-    console.log(`  Total Hours: ${totalHours.toFixed(2)}h`);
-    console.log(`  Regular Hours: ${regularHours.toFixed(2)}h`);
-    console.log(`  Overtime Hours: ${overtimeHours.toFixed(2)}h`);
-    console.log(`  Total Earnings: $${totalEarnings.toFixed(2)}`);
-    console.log(`  Days Worked: ${uniqueDays}`);
-
-    const rateLabel = ratesUsed.size === 0
-      ? 'No rate set'
-      : ratesUsed.size === 1
-        ? `$${[...ratesUsed][0].toFixed(2)}/hr`
-        : `Multiple rates (${[...ratesUsed].map(r => `$${r.toFixed(2)}`).join(', ')})`;
-
-    Alert.alert(
-      'Timecard Generated',
-      `Employee: ${selectedEmployee.name}\nRate: ${rateLabel}\n\nTotal Hours: ${totalHours.toFixed(2)}h\nRegular: ${regularHours.toFixed(2)}h\nOvertime: ${overtimeHours.toFixed(2)}h\n\nTotal Earnings: $${totalEarnings.toFixed(2)}`,
-      [{ text: 'OK', onPress: () => setShowTimecardModal(false) }]
-    );
   };
 
   if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'super-admin')) {
@@ -469,10 +666,10 @@ export default function EmployeeManagementScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.actionButton}
-                    onPress={() => generateTimecard(employee)}
+                    onPress={() => openReportModal(employee)}
                   >
-                    <FileText size={16} color="#2563EB" />
-                    <Text style={styles.actionButtonText}>Timecard</Text>
+                    <Download size={16} color="#2563EB" />
+                    <Text style={styles.actionButtonText}>Report</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -482,77 +679,99 @@ export default function EmployeeManagementScreen() {
       </ScrollView>
 
       <Modal
-        visible={showTimecardModal}
+        visible={showReportModal}
         animationType="slide"
         transparent
-        onRequestClose={() => setShowTimecardModal(false)}
+        onRequestClose={() => setShowReportModal(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Generate Timecard</Text>
-            
+            <Text style={styles.modalTitle}>Generate Work History Report</Text>
+
             {selectedEmployee && (
-              <>
-                <View style={styles.modalInfo}>
-                  <Text style={styles.modalInfoLabel}>Employee:</Text>
-                  <Text style={styles.modalInfoValue}>{selectedEmployee.name}</Text>
-                </View>
-
-                <View style={styles.modalInfo}>
-                  <Text style={styles.modalInfoLabel}>Hourly Rate:</Text>
-                  <Text style={styles.modalInfoValue}>
-                    ${selectedEmployee.hourlyRate?.toFixed(2) || '0.00'}/hr
-                  </Text>
-                </View>
-
-                <View style={styles.periodSelector}>
-                  <Text style={styles.periodLabel}>Period:</Text>
-                  <View style={styles.periodButtons}>
-                    <TouchableOpacity
-                      style={[
-                        styles.periodButton,
-                        timecardPeriod === 'weekly' && styles.periodButtonActive,
-                      ]}
-                      onPress={() => setTimecardPeriod('weekly')}
-                    >
-                      <Text style={[
-                        styles.periodButtonText,
-                        timecardPeriod === 'weekly' && styles.periodButtonTextActive,
-                      ]}>
-                        Weekly
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.periodButton,
-                        timecardPeriod === 'bi-weekly' && styles.periodButtonActive,
-                      ]}
-                      onPress={() => setTimecardPeriod('bi-weekly')}
-                    >
-                      <Text style={[
-                        styles.periodButtonText,
-                        timecardPeriod === 'bi-weekly' && styles.periodButtonTextActive,
-                      ]}>
-                        Bi-Weekly
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </>
+              <View style={styles.modalInfo}>
+                <Text style={styles.modalInfoLabel}>Employee</Text>
+                <Text style={styles.modalInfoValue}>{selectedEmployee.name}</Text>
+                {selectedEmployee.hourlyRate && (
+                  <Text style={styles.modalInfoSub}>${selectedEmployee.hourlyRate.toFixed(2)}/hr</Text>
+                )}
+              </View>
             )}
 
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
+            <Text style={styles.periodLabel}>Select Time Period</Text>
+            <View style={styles.periodButtons}>
+              {([
+                { key: 'current-week', label: 'Current Week' },
+                { key: 'last-week',    label: 'Last Week' },
+              ] as const).map(({ key, label }) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.periodButton, reportPeriod === key && styles.periodButtonActive]}
+                  onPress={() => setReportPeriod(key)}
+                >
+                  <FileText size={14} color={reportPeriod === key ? '#2563EB' : '#6B7280'} />
+                  <Text style={[styles.periodButtonText, reportPeriod === key && styles.periodButtonTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={[styles.periodButtons, { marginTop: 8 }]}>
+              {([
+                { key: 'this-month',  label: 'This Month' },
+                { key: 'last-month',  label: 'Last Month' },
+              ] as const).map(({ key, label }) => (
+                <TouchableOpacity
+                  key={key}
+                  style={[styles.periodButton, reportPeriod === key && styles.periodButtonActive]}
+                  onPress={() => setReportPeriod(key)}
+                >
+                  <FileText size={14} color={reportPeriod === key ? '#2563EB' : '#6B7280'} />
+                  <Text style={[styles.periodButtonText, reportPeriod === key && styles.periodButtonTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={[styles.periodButton, styles.periodButtonFull, reportPeriod === 'all-time' && styles.periodButtonActive, { marginTop: 8 }]}
+              onPress={() => setReportPeriod('all-time')}
+            >
+              <FileText size={14} color={reportPeriod === 'all-time' ? '#2563EB' : '#6B7280'} />
+              <Text style={[styles.periodButtonText, reportPeriod === 'all-time' && styles.periodButtonTextActive]}>
+                All Time
+              </Text>
+            </TouchableOpacity>
+
+            <View style={[styles.modalButtons, { marginTop: 24 }]}>
+              <TouchableOpacity
                 style={styles.modalCancelButton}
-                onPress={() => setShowTimecardModal(false)}
+                onPress={() => setShowReportModal(false)}
+                disabled={isGeneratingReport}
               >
                 <Text style={styles.modalCancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.modalConfirmButton}
-                onPress={confirmGenerateTimecard}
+              <TouchableOpacity
+                style={[styles.reportExportButton, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}
+                onPress={() => generateWorkHistoryReport('csv')}
+                disabled={isGeneratingReport}
               >
-                <Text style={styles.modalConfirmButtonText}>Generate</Text>
+                {isGeneratingReport ? (
+                  <ActivityIndicator size="small" color="#2563EB" />
+                ) : (
+                  <Text style={[styles.reportExportButtonText, { color: '#2563EB' }]}>Spreadsheet</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.reportExportButton, { backgroundColor: '#2563EB' }]}
+                onPress={() => generateWorkHistoryReport('pdf')}
+                disabled={isGeneratingReport}
+              >
+                {isGeneratingReport ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={[styles.reportExportButtonText, { color: '#FFFFFF' }]}>Export PDF</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
@@ -1035,6 +1254,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#FFFFFF',
+  },
+  modalInfoSub: {
+    fontSize: 13,
+    color: '#10B981',
+    fontWeight: '600' as const,
+    marginTop: 2,
+  },
+  periodButtonFull: {
+    flex: 0,
+    width: '100%',
+  },
+  reportExportButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  reportExportButtonText: {
+    fontSize: 15,
+    fontWeight: '700' as const,
   },
   rateInputSection: {
     marginBottom: 24,
