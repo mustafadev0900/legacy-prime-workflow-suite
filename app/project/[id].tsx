@@ -173,8 +173,10 @@ export default function ProjectDetailScreen() {
       metricValueSize:    small ? 11  : medium ? 12 : 14,
       imageHeight:        small ? 160 : medium ? 180 : 200,
       balanceValueSize:   small ? 13  : medium ? 14 : 16,
-      paymentValueSize:   small ? 16  : medium ? 18 : 22,
-      profitBoxValueSize: small ? 14  : medium ? 17 : 20,
+      paymentValueSize:    small ? 16  : medium ? 18 : 22,
+      profitBoxValueSize:  small ? 14  : medium ? 17 : 20,
+      insightValueSize:    small ? 13  : medium ? 14 : 16,
+      insightCardPadding:  small ? 8   : medium ? 10 : 12,
     };
   }, [dimensions.width]);
 
@@ -1132,25 +1134,25 @@ export default function ProjectDetailScreen() {
 
                 <Text style={styles.sectionSubtitle}>Labor & Timing Insights</Text>
                 <View style={styles.insightsGrid}>
-                  <View style={styles.insightCard}>
+                  <View style={[styles.insightCard, { padding: rs.insightCardPadding }]}>
                     <Clock size={16} color="#6366F1" />
-                    <Text style={styles.insightValue}>{totalLaborHours.toFixed(1)}h</Text>
-                    <Text style={styles.insightLabel}>Total Labor Hours</Text>
+                    <Text style={[styles.insightValue, { fontSize: rs.insightValueSize }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{totalLaborHours.toFixed(1)}h</Text>
+                    <Text style={styles.insightLabel} numberOfLines={2}>Total Labor Hours</Text>
                   </View>
-                  <View style={styles.insightCard}>
+                  <View style={[styles.insightCard, { padding: rs.insightCardPadding }]}>
                     <DollarSign size={16} color="#6366F1" />
-                    <Text style={styles.insightValue}>${laborHoursCost.toFixed(2)}/h</Text>
-                    <Text style={styles.insightLabel}>Labor Cost Rate</Text>
+                    <Text style={[styles.insightValue, { fontSize: rs.insightValueSize }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>${laborHoursCost.toFixed(2)}/h</Text>
+                    <Text style={styles.insightLabel} numberOfLines={2}>Labor Cost Rate</Text>
                   </View>
-                  <View style={styles.insightCard}>
+                  <View style={[styles.insightCard, { padding: rs.insightCardPadding }]}>
                     <Users size={16} color="#6366F1" />
-                    <Text style={styles.insightValue}>{activeClockEntries.length}</Text>
-                    <Text style={styles.insightLabel}>Active Workers</Text>
+                    <Text style={[styles.insightValue, { fontSize: rs.insightValueSize }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{activeClockEntries.length}</Text>
+                    <Text style={styles.insightLabel} numberOfLines={2}>Active Workers</Text>
                   </View>
-                  <View style={styles.insightCard}>
+                  <View style={[styles.insightCard, { padding: rs.insightCardPadding }]}>
                     <Calendar size={16} color="#6366F1" />
-                    <Text style={styles.insightValue}>{daysElapsed}</Text>
-                    <Text style={styles.insightLabel}>Days Elapsed</Text>
+                    <Text style={[styles.insightValue, { fontSize: rs.insightValueSize }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{daysElapsed}</Text>
+                    <Text style={styles.insightLabel} numberOfLines={2}>Days Elapsed</Text>
                   </View>
                 </View>
               </View>
@@ -1804,25 +1806,25 @@ export default function ProjectDetailScreen() {
                 <View style={styles.divider} />
                 <Text style={styles.sectionSubtitle}>Labor & Timing Insights</Text>
                 <View style={styles.insightsGrid}>
-                  <View style={styles.insightCard}>
+                  <View style={[styles.insightCard, { padding: rs.insightCardPadding }]}>
                     <Clock size={16} color="#6366F1" />
-                    <Text style={styles.insightValue}>{totalLaborHours.toFixed(1)}h</Text>
-                    <Text style={styles.insightLabel}>Total Labor Hours</Text>
+                    <Text style={[styles.insightValue, { fontSize: rs.insightValueSize }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{totalLaborHours.toFixed(1)}h</Text>
+                    <Text style={styles.insightLabel} numberOfLines={2}>Total Labor Hours</Text>
                   </View>
-                  <View style={styles.insightCard}>
+                  <View style={[styles.insightCard, { padding: rs.insightCardPadding }]}>
                     <DollarSign size={16} color="#6366F1" />
-                    <Text style={styles.insightValue}>${laborHoursCost.toFixed(2)}/h</Text>
-                    <Text style={styles.insightLabel}>Labor Cost Rate</Text>
+                    <Text style={[styles.insightValue, { fontSize: rs.insightValueSize }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>${laborHoursCost.toFixed(2)}/h</Text>
+                    <Text style={styles.insightLabel} numberOfLines={2}>Labor Cost Rate</Text>
                   </View>
-                  <View style={styles.insightCard}>
+                  <View style={[styles.insightCard, { padding: rs.insightCardPadding }]}>
                     <Users size={16} color="#6366F1" />
-                    <Text style={styles.insightValue}>{activeClockEntries.length}</Text>
-                    <Text style={styles.insightLabel}>Active Workers</Text>
+                    <Text style={[styles.insightValue, { fontSize: rs.insightValueSize }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{activeClockEntries.length}</Text>
+                    <Text style={styles.insightLabel} numberOfLines={2}>Active Workers</Text>
                   </View>
-                  <View style={styles.insightCard}>
+                  <View style={[styles.insightCard, { padding: rs.insightCardPadding }]}>
                     <Calendar size={16} color="#6366F1" />
-                    <Text style={styles.insightValue}>{daysElapsed}</Text>
-                    <Text style={styles.insightLabel}>Days Elapsed</Text>
+                    <Text style={[styles.insightValue, { fontSize: rs.insightValueSize }]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>{daysElapsed}</Text>
+                    <Text style={styles.insightLabel} numberOfLines={2}>Days Elapsed</Text>
                   </View>
                 </View>
               </View>
@@ -4904,7 +4906,7 @@ const styles = StyleSheet.create({
   insightsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 8,
   },
   insightCard: {
     flex: 1,
