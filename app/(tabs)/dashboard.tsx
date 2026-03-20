@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, TextInput, Alert, Platform, ActivityIndicator, RefreshControl } from 'react-native';
 import { useApp } from '@/contexts/AppContext';
-import { Search, Plus, X, Archive, FileText, CheckSquare, FolderOpen, Sparkles, AlertTriangle, Camera, MoreHorizontal, Pencil, PauseCircle, PlayCircle } from 'lucide-react-native';
+import { Search, Plus, X, Archive, FileText, CheckSquare, FolderOpen, Sparkles, AlertTriangle, Camera, MoreHorizontal, Pencil, PauseCircle, PlayCircle, Coffee } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -1368,7 +1368,6 @@ export default function DashboardScreen() {
               const activeEntries = clockEntries.filter(c => c.projectId === project.id && !c.clockOut);
               const visibleAvatars = activeEntries.slice(0, 3);
               const extraCount = Math.max(0, activeEntries.length - 3);
-              const progressPct = Math.min(100, Math.max(0, project.progress || 0));
               const isSelected = isSelectMode && selectedProjects.includes(project.id);
 
               return (
@@ -1441,25 +1440,12 @@ export default function DashboardScreen() {
                     )}
                   </View>
 
-                  {/* BOTTOM CONTENT: name, progress, budget, avatars */}
+                  {/* BOTTOM CONTENT: name, budget, avatars */}
                   <View style={styles.cardBottom}>
                     <Text style={styles.projectName} numberOfLines={2}>{project.name}</Text>
 
-                    {/* Thin progress bar */}
-                    <View style={styles.cardProgressBg}>
-                      <View style={[styles.cardProgressFill, {
-                        width: `${progressPct}%` as any,
-                        backgroundColor: project.status === 'completed' ? '#10B981' : project.status === 'on-hold' ? '#F59E0B' : '#60A5FA',
-                      }]} />
-                    </View>
-
-                    {/* Budget row */}
-                    <View style={styles.cardMetaRow}>
-                      <Text style={styles.cardBudgetText}>
-                        ${project.budget.toLocaleString()}
-                      </Text>
-                      <Text style={styles.cardProgressPct}>{progressPct}%</Text>
-                    </View>
+                    {/* Budget */}
+                    <Text style={styles.cardBudgetText}>${project.budget.toLocaleString()}</Text>
 
                     {/* Clocked-in avatars */}
                     {activeEntries.length > 0 && (
@@ -1468,12 +1454,29 @@ export default function DashboardScreen() {
                           const userData = usersMap.get(entry.employeeId);
                           const displayName = userData?.name || entry.employeeName || '?';
                           const initials = displayName.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase();
+                          const onLunch = entry.lunchBreaks?.some((lb: any) => lb.startTime && !lb.endTime) ?? false;
                           return (
-                            <View key={entry.id} style={[styles.cardAvatar, { marginLeft: idx === 0 ? 0 : -8, zIndex: 3 - idx }]}>
-                              {userData?.avatar ? (
-                                <Image source={{ uri: userData.avatar }} style={styles.cardAvatarImg} contentFit="cover" />
-                              ) : (
-                                <Text style={styles.cardAvatarInitials}>{initials}</Text>
+                            <View
+                              key={entry.id}
+                              style={[
+                                styles.cardAvatarWrapper,
+                                { marginLeft: idx === 0 ? 0 : -8, zIndex: 3 - idx },
+                              ]}
+                            >
+                              <View style={[
+                                styles.cardAvatar,
+                                onLunch && styles.cardAvatarOnLunch,
+                              ]}>
+                                {userData?.avatar ? (
+                                  <Image source={{ uri: userData.avatar }} style={styles.cardAvatarImg} contentFit="cover" />
+                                ) : (
+                                  <Text style={styles.cardAvatarInitials}>{initials}</Text>
+                                )}
+                              </View>
+                              {onLunch && (
+                                <View style={styles.cardLunchBadge}>
+                                  <Coffee size={8} color="#FFFFFF" />
+                                </View>
                               )}
                             </View>
                           );
@@ -2791,47 +2794,47 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 3,
   },
-  cardProgressBg: {
-    height: 3,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 2,
-    marginBottom: 6,
-    overflow: 'hidden' as const,
-  },
-  cardProgressFill: {
-    height: 3,
-    borderRadius: 2,
-  },
-  cardMetaRow: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    alignItems: 'center' as const,
-    marginBottom: 8,
-  },
   cardBudgetText: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: 'rgba(255,255,255,0.9)',
-  },
-  cardProgressPct: {
-    fontSize: 11,
-    fontWeight: '600' as const,
-    color: 'rgba(255,255,255,0.65)',
+    marginBottom: 10,
   },
   cardAvatarRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
   },
+  cardAvatarWrapper: {
+    position: 'relative' as const,
+  },
   cardAvatar: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#3B82F6',
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.85)',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     overflow: 'hidden' as const,
+  },
+  cardAvatarOnLunch: {
+    borderWidth: 2.5,
+    borderColor: '#F59E0B',
+  },
+  cardLunchBadge: {
+    position: 'absolute' as const,
+    bottom: -2,
+    right: -2,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#F59E0B',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    borderWidth: 1.5,
+    borderColor: 'rgba(0,0,0,0.3)',
+    zIndex: 5,
   },
   cardAvatarImg: {
     width: 26,
