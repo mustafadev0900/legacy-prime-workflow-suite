@@ -3288,9 +3288,9 @@ export default function ProjectDetailScreen() {
             router.push('/(tabs)/dashboard' as any);
           }}
         >
-          <ArrowLeft size={24} color="#1F2937" />
+          <ArrowLeft size={22} color="#1F2937" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{project.name}</Text>
+        <Text style={styles.headerTitle} numberOfLines={1} ellipsizeMode="tail">{project.name}</Text>
         <DailyTasksButton />
         {project.status === 'active' && (
           <TouchableOpacity
@@ -3806,27 +3806,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+    gap: 8,
   },
   backButton: {
-    marginRight: 16,
-    padding: 8,
-    minWidth: 44,
-    minHeight: 44,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#F9FAFB',
     justifyContent: 'center' as const,
     alignItems: 'center' as const,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '700' as const,
     color: '#1F2937',
     flex: 1,
   },
   completeButton: {
-    padding: 4,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: '#F0FDF4',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   tabsContainer: {
     backgroundColor: '#FFFFFF',
