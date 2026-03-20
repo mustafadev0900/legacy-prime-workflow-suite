@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useFocusEffect } from 'expo-router';
-import { Bell, BellOff, CheckCheck } from 'lucide-react-native';
+import { ArrowLeft, Bell, BellOff, CheckCheck } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import type { Notification } from '@/types';
 
@@ -201,15 +201,14 @@ export default function NotificationsScreen() {
         options={{
           title: 'Notifications',
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
-              <Text style={{ fontSize: 16, color: '#2563EB' }}>‹ Back</Text>
+            <TouchableOpacity onPress={() => router.back()} style={styles.headerIconBtn}>
+              <ArrowLeft size={22} color="#1F2937" />
             </TouchableOpacity>
           ),
           headerRight: unread.length > 0
             ? () => (
-                <TouchableOpacity onPress={handleMarkAllRead} style={styles.headerBtn}>
-                  <CheckCheck size={20} color="#2563EB" />
-                  <Text style={styles.headerBtnText}>Mark all read</Text>
+                <TouchableOpacity onPress={handleMarkAllRead} style={styles.headerIconBtn}>
+                  <CheckCheck size={22} color="#2563EB" />
                 </TouchableOpacity>
               )
             : undefined,
@@ -246,16 +245,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F9FAFB',
   },
-  headerBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingRight: 16,
-  },
-  headerBtnText: {
-    color: '#2563EB',
-    fontSize: 14,
-    fontWeight: '600',
+  headerIconBtn: {
+    padding: 8,
+    borderRadius: 20,
   },
   list: {
     paddingVertical: 8,
