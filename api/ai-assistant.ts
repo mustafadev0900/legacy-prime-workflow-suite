@@ -7739,16 +7739,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
           const queryEmbedding = embeddingRes.data[0].embedding;
 
-          const { data: chunks } = await supabase.rpc('search_knowledge_chunks', {
+          const { data: chunks, error: ragError } = await supabase.rpc('search_knowledge_chunks', {
             p_company_id: effectiveCompanyId,
             p_embedding: queryEmbedding,
             p_limit: 5,
             p_threshold: 0.60,
           });
 
-          if (chunks && chunks.length > 0) {
+          if (ragError) {
+            console.warn('[AI Assistant] RAG RPC error:', ragError.message, ragError.code);
+          } else if (chunks && chunks.length > 0) {
             ragChunks = chunks;
-            console.log(`[AI Assistant] RAG: retrieved ${ragChunks.length} relevant chunks`);
+            console.log(`[AI Assistant] RAG: retrieved ${ragChunks.length} relevant chunks for query: "${queryText.slice(0, 60)}"`);
+          } else {
+            console.log(`[AI Assistant] RAG: no chunks above threshold for query: "${queryText.slice(0, 60)}"`);
           }
         }
       } catch (ragErr: any) {
