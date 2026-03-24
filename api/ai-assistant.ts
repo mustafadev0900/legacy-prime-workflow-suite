@@ -7953,6 +7953,15 @@ When the user says "this project", "this client", "this estimate", etc., they ar
       }
     }
 
+    // Inject RAG as a late system message so it lands closest to the user's question.
+    // This overrides conversation-history pattern-matching on generic answers.
+    if (ragChunks.length > 0) {
+      openaiMessages.push({
+        role: 'system',
+        content: `KNOWLEDGE BASE RETRIEVAL — answer using ONLY the rates/policies below, not general estimates:\n\n${ragChunks.map(c => `[${c.source_name}]\n${c.chunk_text}`).join('\n\n---\n\n')}`,
+      });
+    }
+
     console.log('[AI Assistant] Built', openaiMessages.length, 'messages for OpenAI');
 
     // First API call - let AI decide if it needs tools
