@@ -6,6 +6,8 @@ interface State {
   phone: string;
   project: string;
   budget: string;
+  transcript: string; // Accumulated caller speech turns
+  callStarted: string; // ISO timestamp of first webhook hit
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -30,6 +32,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     phone: From || '',
     project: '',
     budget: '',
+    transcript: '',
+    callStarted: new Date().toISOString(),
   };
 
   if (conversationState && typeof conversationState === 'string') {
@@ -64,6 +68,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (SpeechResult) {
     console.log('[Twilio Webhook] Processing speech:', SpeechResult);
     state.step++;
+
+    // Accumulate transcript (Bug 4 fix)
+    state.transcript = state.transcript
+      ? `${state.transcript}\nCaller: ${SpeechResult}`
+      : `Caller: ${SpeechResult}`;
 
     const lower = SpeechResult.toLowerCase();
 
@@ -331,6 +340,44 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const newClient = newClients[0];
 
         console.log('[Twilio Webhook] ✅ Client saved successfully! ID:', newClient.id);
+
+        // Bug 1 + 4 fix: Insert call log with transcript
+        const callLogData = {
+          company_id: companyId,
+          client_id: newClient.id,
+          caller_name: state.name,
+          caller_phone: state.phone,
+          call_date: state.callStarted,
+          call_type: 'incoming',
+          status: 'answered',
+          is_qualified: isQualified,
+          qualification_score: isQualified ? Math.min(100, Math.round((budgetValue / 100000) * 100)) : 0,
+          notes: `Project: ${state.project} | Budget: ${state.budget}`,
+          transcript: state.transcript || null,
+          project_type: state.project,
+          budget: state.budget,
+          added_to_crm: true,
+          scheduled_follow_up: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        };
+
+        const logResponse = await fetch(`${supabaseUrl}/rest/v1/call_logs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Prefer': 'return=minimal',
+          },
+          body: JSON.stringify(callLogData),
+        });
+
+        if (!logResponse.ok) {
+          const logError = await logResponse.text();
+          console.error('[Twilio Webhook] ⚠️ Failed to save call log (non-fatal):', logError);
+        } else {
+          console.log('[Twilio Webhook] ✅ Call log saved — transcript length:', (state.transcript || '').length);
+        }
+
         console.log('[Twilio Webhook] 📊 Lead details:', {
           name: state.name,
           project: state.project,
