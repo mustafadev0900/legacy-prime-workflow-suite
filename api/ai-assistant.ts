@@ -7769,10 +7769,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       contextAwarePrompt += `\n\n## WHAT I KNOW ABOUT YOU\nBased on our previous conversations, here's what I've noted about you:\n${userMemory.map(m => `- ${m.value}`).join('\n')}\n\nUse this context to personalize your responses. Reference it naturally when relevant — don't recite it back robotically.`;
     }
 
-    // Inject RAG knowledge chunks when relevant content was found
-    if (ragChunks.length > 0) {
-      contextAwarePrompt += `\n\n## RELEVANT COMPANY KNOWLEDGE\nThe following content from your company's knowledge base is relevant to this conversation:\n\n${ragChunks.map(c => `[${c.source_name}]\n${c.chunk_text}`).join('\n\n---\n\n')}\n\nUse this knowledge to give accurate, company-specific answers. Cite the source name naturally when referencing it.`;
-    }
+    // RAG injection happens after all other context (appended last for model recency)
 
     // Inject identity and company context so AI knows who it's talking to
     // Use server-verified role/level — never trust client-provided values
@@ -7885,6 +7882,12 @@ ${imageFiles.length > 0 ? `- Image file(s) are attached as visual inputs — you
 The user is currently viewing: ${pageContext}
 
 When the user says "this project", "this client", "this estimate", etc., they are referring to the item described above. Use this context to resolve ambiguous references like "add expense to this project" or "what's the budget for this project".`;
+    }
+
+    // Inject RAG knowledge chunks last — recency ensures the model prioritizes this
+    // over generic training data when answering company-specific questions.
+    if (ragChunks.length > 0) {
+      contextAwarePrompt += `\n\n## ⚠️ COMPANY KNOWLEDGE BASE — USE THIS, NOT GENERAL ESTIMATES\nThe following content was retrieved from this company's private knowledge base and is directly relevant to the user's question. You MUST use these specific figures, policies, or procedures in your answer instead of generic industry averages or estimates. Cite the source name naturally.\n\n${ragChunks.map(c => `[Source: ${c.source_name}]\n${c.chunk_text}`).join('\n\n---\n\n')}`;
     }
 
     // Build OpenAI messages
