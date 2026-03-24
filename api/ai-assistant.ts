@@ -7743,17 +7743,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             p_company_id: effectiveCompanyId,
             p_embedding: queryEmbedding,
             p_limit: 5,
-            p_threshold: 0.0,  // DEBUG: temporarily bypass threshold to see actual scores
+            p_threshold: 0.35,
           });
 
           if (ragError) {
             console.warn('[AI Assistant] RAG RPC error:', ragError.message, ragError.code);
           } else if (chunks && chunks.length > 0) {
             ragChunks = chunks;
-            const scores = chunks.map((c: any) => `${c.source_name}:${c.similarity?.toFixed(3)}`).join(', ');
-            console.log(`[AI Assistant] RAG DEBUG: retrieved ${ragChunks.length} chunks — scores: ${scores}`);
+            console.log(`[AI Assistant] RAG: retrieved ${ragChunks.length} chunks (top: ${chunks[0]?.similarity?.toFixed(3)}) for: "${queryText.slice(0, 60)}"`);
           } else {
-            console.log(`[AI Assistant] RAG DEBUG: zero chunks returned (no rows in DB for company?)`);
+            console.log(`[AI Assistant] RAG: no chunks above threshold for: "${queryText.slice(0, 60)}"`);
           }
         }
       } catch (ragErr: any) {
