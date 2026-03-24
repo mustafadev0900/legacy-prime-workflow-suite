@@ -1337,6 +1337,21 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
           });
         }
       )
+      .on(
+        'broadcast',
+        { event: 'role-update' },
+        (payload) => {
+          const newRole = payload.payload?.role;
+          if (!newRole) return;
+          console.log('[Realtime] Role broadcast received:', newRole);
+          setUserState(prev => {
+            if (!prev) return prev;
+            const next = { ...prev, role: newRole };
+            AsyncStorage.setItem('user', JSON.stringify(next)).catch(() => {});
+            return next;
+          });
+        }
+      )
       .subscribe((status) => {
         console.log('[Realtime] User-permissions channel status:', status);
       });

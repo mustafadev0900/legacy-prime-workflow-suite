@@ -82,6 +82,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updatedAt: data.updated_at,
     };
 
+    // Broadcast role change to the employee's active session so AppContext
+    // updates immediately without requiring a logout/login cycle.
+    if (updates.role !== undefined) {
+      try {
+        await supabase.channel(`user-permissions:${userId}`).send({
+          type: 'broadcast',
+          event: 'role-update',
+          payload: { role: data.role },
+        });
+        console.log('[Update User] Role broadcast sent to user:', userId);
+      } catch {
+        // Non-fatal — employee will see updated role on next login
+      }
+    }
+
     return res.status(200).json({
       success: true,
       user,
