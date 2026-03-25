@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, Platform } from 'react-native';
 import { useEffect, useRef } from 'react';
 
 interface TypingUser {
@@ -28,8 +28,8 @@ export default function TypingIndicator({ typingUsers }: Props) {
       Animated.loop(
         Animated.sequence([
           Animated.delay(delay),
-          Animated.timing(dot, { toValue: -5, duration: 280, useNativeDriver: true }),
-          Animated.timing(dot, { toValue: 0, duration: 280, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: -5, duration: 280, useNativeDriver: Platform.OS !== 'web' }),
+          Animated.timing(dot, { toValue: 0, duration: 280, useNativeDriver: Platform.OS !== 'web' }),
           Animated.delay(560),
         ])
       );

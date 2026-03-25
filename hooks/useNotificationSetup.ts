@@ -13,16 +13,21 @@ export function setActiveConversationId(id: string | null) {
 
 // Configure how notifications appear when the app is foregrounded.
 // Set once at module level so it applies globally before any listener is added.
-Notifications.setNotificationHandler({
-  handleNotification: async (notification) => {
-    const data = notification.request.content.data as any;
-    // Suppress banner if the user has this conversation open right now
-    if (data?.type === 'chat' && data?.conversationId && data.conversationId === activeConversationId) {
-      return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
-    }
-    return { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: true };
-  },
-});
+// Guard on native only — expo-notifications' setNotificationHandler triggers
+// an internal addPushTokenListener call on web that logs a harmless but noisy
+// "not supported on web" warning.
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async (notification) => {
+      const data = notification.request.content.data as any;
+      // Suppress banner if the user has this conversation open right now
+      if (data?.type === 'chat' && data?.conversationId && data.conversationId === activeConversationId) {
+        return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
+      }
+      return { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: true };
+    },
+  });
+}
 
 // Register FCM background message handler (native only).
 // Required for React Native Firebase to process FCM messages when the app

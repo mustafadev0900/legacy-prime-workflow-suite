@@ -18,6 +18,7 @@
  */
 
 import { useRef, useMemo } from 'react';
+import { Platform } from 'react-native';
 
 // ── Lazy-load expo-audio (requires native binary) ─────────────────────────────
 let _ea: typeof import('expo-audio') | null = null;
@@ -35,13 +36,15 @@ try {
   }
 }
 
-// ── Lazy-load expo-av (fallback — already in the binary) ─────────────────────
+// ── Lazy-load expo-av (fallback — already in the binary, native only) ────────
 let _av: typeof import('expo-av') | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  _av = require('expo-av') as typeof import('expo-av');
-} catch {
-  /* expo-av not available either */
+if (Platform.OS !== 'web') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    _av = require('expo-av') as typeof import('expo-av');
+  } catch {
+    /* expo-av not available either */
+  }
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
