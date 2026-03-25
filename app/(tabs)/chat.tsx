@@ -296,10 +296,16 @@ export default function ChatScreen() {
     }
   }, [messages.length]);
 
-  // Reset count when conversation changes
+  // Track which conversation we last scrolled-to-bottom for.
+  // onContentSizeChange scrolls whenever the conversation changes and content is ready.
+  // Avoids the useEffect timing race (effects run after layout, so a flag set in an
+  // effect would always be false when onContentSizeChange first fires for a new conv).
+  const lastScrolledConvRef = useRef<string | null>(null);
+
   useEffect(() => {
     prevMessageCountRef.current = 0;
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: false }), 150);
+    // Force a new scroll-to-bottom for this conversation when content renders.
+    lastScrolledConvRef.current = null;
   }, [selectedChat]);
 
   // ── Preload voice messages ────────────────────────────────────────────────
@@ -1502,10 +1508,16 @@ export default function ChatScreen() {
                     contentContainerStyle={styles.messagesContent}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
-                    initialNumToRender={20}
+                    initialNumToRender={50}
                     maxToRenderPerBatch={10}
                     windowSize={10}
                     removeClippedSubviews={Platform.OS !== 'web'}
+                    onContentSizeChange={() => {
+                      if (lastScrolledConvRef.current !== selectedChat && messageItems.length > 0) {
+                        flatListRef.current?.scrollToEnd({ animated: false });
+                        lastScrolledConvRef.current = selectedChat;
+                      }
+                    }}
                     ListHeaderComponent={
                       selectedChat && selectedChat !== 'ai-assistant' && convHasMore.get(selectedChat) ? (
                         <TouchableOpacity
