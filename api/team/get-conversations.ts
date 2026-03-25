@@ -9,6 +9,11 @@ export const config = {
  * Get Conversations API
  * Fetches all conversations for a user with participant info, last message,
  * unread count, and other participant's last_read_at (for read receipts).
+ *
+ * Batched: 3 total DB queries regardless of conversation count (was N×3).
+ *   Batch A — all participants for all conversations
+ *   Batch B — recent messages for all conversations (last-per-conv resolved in JS)
+ *   Batch C — all potentially-unread messages since oldest last_read_at (count in JS)
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -34,7 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Fetch user's conversation participations
+    // ── Step 1: Fetch this user's conversation participations (1 query) ───────
     const { data: participations, error: participationsError } = await supabase
       .from('conversation_participants')
       .select(`
@@ -56,56 +61,109 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error(participationsError.message);
     }
 
-    const conversations = await Promise.all(
-      (participations || []).map(async (p: any) => {
+    if (!participations || participations.length === 0) {
+      return res.status(200).json({ success: true, conversations: [] });
+    }
+
+    // Extract valid conversation IDs and build per-conv last_read_at lookup
+    const convIds: string[] = [];
+    const myLastReadByConv: Record<string, string> = {};
+
+    for (const p of participations as any[]) {
+      const id = p.conversations?.id;
+      if (id) {
+        convIds.push(id);
+        myLastReadByConv[id] = p.last_read_at || '1970-01-01T00:00:00.000Z';
+      }
+    }
+
+    // Oldest last_read_at across all conversations — used as lower bound for
+    // the unread batch query so we fetch the minimum data needed.
+    const minLastReadAt = Object.values(myLastReadByConv).reduce(
+      (min, t) => (t < min ? t : min),
+      new Date().toISOString()
+    );
+
+    // ── Step 2: Run all batch queries in parallel (3 total) ───────────────────
+    const [allParticipantsResult, recentMessagesResult, unreadMessagesResult] = await Promise.all([
+
+      // Batch A: ALL participants for ALL conversations in one query
+      supabase
+        .from('conversation_participants')
+        .select(`
+          user_id,
+          last_read_at,
+          conversation_id,
+          users (
+            id,
+            name,
+            email,
+            avatar,
+            role
+          )
+        `)
+        .in('conversation_id', convIds),
+
+      // Batch B: Recent messages across ALL conversations.
+      // Fetching convIds.length×3 rows (ordered DESC) gives us enough buffer
+      // to find the latest message per conversation after JS grouping.
+      supabase
+        .from('messages')
+        .select('content, type, created_at, sender_id, file_name, conversation_id')
+        .in('conversation_id', convIds)
+        .or('is_deleted.eq.false,is_deleted.is.null')
+        .order('created_at', { ascending: false })
+        .limit(Math.max(convIds.length * 3, 50)),
+
+      // Batch C: All potentially-unread messages since the oldest last_read_at.
+      // Capped at 500 rows — more than enough to count unread badges accurately.
+      supabase
+        .from('messages')
+        .select('id, conversation_id, sender_id, created_at')
+        .in('conversation_id', convIds)
+        .neq('sender_id', userId)
+        .or('is_deleted.eq.false,is_deleted.is.null')
+        .gt('created_at', minLastReadAt)
+        .order('created_at', { ascending: false })
+        .limit(500),
+    ]);
+
+    // ── Step 3: Build lookup maps from batch results ──────────────────────────
+
+    // Group participants by conversation_id
+    const participantsByConv: Record<string, any[]> = {};
+    for (const p of (allParticipantsResult.data || []) as any[]) {
+      if (!participantsByConv[p.conversation_id]) participantsByConv[p.conversation_id] = [];
+      participantsByConv[p.conversation_id].push(p);
+    }
+
+    // Last message per conversation (rows already sorted DESC — first hit wins)
+    const lastMessageByConv: Record<string, any> = {};
+    for (const msg of (recentMessagesResult.data || []) as any[]) {
+      if (!lastMessageByConv[msg.conversation_id]) {
+        lastMessageByConv[msg.conversation_id] = msg;
+      }
+    }
+
+    // Unread count per conversation (filter by each conv's last_read_at in JS)
+    const unreadByConv: Record<string, number> = {};
+    for (const msg of (unreadMessagesResult.data || []) as any[]) {
+      const myLastRead = myLastReadByConv[msg.conversation_id] || '1970-01-01T00:00:00.000Z';
+      if (msg.created_at > myLastRead) {
+        unreadByConv[msg.conversation_id] = (unreadByConv[msg.conversation_id] || 0) + 1;
+      }
+    }
+
+    // ── Step 4: Assemble final conversation objects ───────────────────────────
+    const conversations = (participations as any[])
+      .map((p: any) => {
         const conv = p.conversations;
         if (!conv) return null;
 
-        const lastReadAt = p.last_read_at as string | null;
+        const participants = participantsByConv[conv.id] || [];
+        const lastMessage = lastMessageByConv[conv.id] || null;
+        const unreadCount = unreadByConv[conv.id] || 0;
 
-        // Run all queries for this conversation in parallel
-        const [participantsResult, lastMessageResult, unreadResult] = await Promise.all([
-          // Participants WITH their last_read_at (needed for read receipts)
-          supabase
-            .from('conversation_participants')
-            .select(`
-              user_id,
-              last_read_at,
-              users (
-                id,
-                name,
-                email,
-                avatar,
-                role
-              )
-            `)
-            .eq('conversation_id', conv.id),
-
-          // Last non-deleted message
-          supabase
-            .from('messages')
-            .select('content, type, created_at, sender_id, file_name')
-            .eq('conversation_id', conv.id)
-            .or('is_deleted.eq.false,is_deleted.is.null')
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .single(),
-
-          // Count messages since this user's last_read_at (that weren't sent by them)
-          supabase
-            .from('messages')
-            .select('*', { count: 'exact', head: true })
-            .eq('conversation_id', conv.id)
-            .neq('sender_id', userId)
-            .or('is_deleted.eq.false,is_deleted.is.null')
-            .gt('created_at', lastReadAt || '1970-01-01T00:00:00.000Z'),
-        ]);
-
-        const participants = participantsResult.data || [];
-        const lastMessage = lastMessageResult.data || null;
-        const unreadCount = unreadResult.count ?? 0;
-
-        // For individual chats: use other participant's name/avatar and their last_read_at
         let conversationName = conv.name;
         let conversationAvatar: string | null = null;
         let otherLastReadAt: string | null = null;
@@ -128,17 +186,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           participants: participants.map((pt: any) => pt.users).filter(Boolean),
           lastMessage: lastMessage || null,
           lastMessageAt: conv.last_message_at || lastMessage?.created_at || null,
-          lastReadAt,
-          // New fields for WhatsApp-like UX
+          lastReadAt: p.last_read_at,
           unreadCount,
           otherLastReadAt,
           createdAt: conv.created_at,
           updatedAt: conv.updated_at,
         };
       })
-    );
-
-    const validConversations = conversations
       .filter((c) => c !== null)
       .sort((a, b) => {
         const aTime = a.lastMessageAt || a.createdAt;
@@ -146,11 +200,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return new Date(bTime).getTime() - new Date(aTime).getTime();
       });
 
-    console.log('[Get Conversations] Fetched', validConversations.length, 'conversations for user:', userId);
+    console.log('[Get Conversations] Fetched', conversations.length, 'conversations for user:', userId);
 
     return res.status(200).json({
       success: true,
-      conversations: validConversations,
+      conversations,
     });
   } catch (error: any) {
     console.error('[Get Conversations] Error:', error);

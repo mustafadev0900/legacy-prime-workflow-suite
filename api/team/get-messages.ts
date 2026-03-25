@@ -29,6 +29,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'userId is required' });
     }
 
+    const limit = Math.min(parseInt((req.query.limit as string) || '50', 10), 100);
+    const before = req.query.before as string | undefined; // ISO timestamp cursor
+
     // Initialize Supabase
     const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -53,8 +56,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Fetch messages
-    const { data: messages, error: messagesError } = await supabase
+    // Fetch messages — newest-first with cursor support, then reverse for display.
+    // Fetching limit+1 lets us detect whether older messages exist (hasMore).
+    let query = supabase
       .from('messages')
       .select(`
         *,
@@ -77,7 +81,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `)
       .eq('conversation_id', conversationId)
       .or('is_deleted.eq.false,is_deleted.is.null')
-      .order('created_at', { ascending: true });
+      .order('created_at', { ascending: false })
+      .limit(limit + 1);
+
+    if (before) {
+      query = query.lt('created_at', before);
+    }
+
+    const { data: messagesRaw, error: messagesError } = await query;
+
+    // Determine if there are more pages, then trim and put back in ascending order
+    const hasMore = (messagesRaw?.length ?? 0) > limit;
+    const messages = hasMore ? messagesRaw!.slice(0, limit).reverse() : (messagesRaw || []).reverse();
 
     if (messagesError) {
       console.error('[Get Messages] Database error:', messagesError);
@@ -116,6 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       success: true,
       messages: transformedMessages,
+      hasMore,
     });
   } catch (error: any) {
     console.error('[Get Messages] Error:', error);

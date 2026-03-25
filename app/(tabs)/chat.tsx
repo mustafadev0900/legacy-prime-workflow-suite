@@ -139,6 +139,15 @@ export default function ChatScreen() {
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [locallyDeletedIds, setLocallyDeletedIds] = useState<Set<string>>(new Set());
 
+  // ── Pagination state (older-message loading) ───────────────────────────────
+  // olderMessages stores pages fetched via "load more" per conversation.
+  // They live in local state (not AppContext) so we can prepend without
+  // touching the global store.
+  const [olderMessages, setOlderMessages] = useState<Map<string, ChatMessage[]>>(new Map());
+  const [convHasMore, setConvHasMore] = useState<Map<string, boolean>>(new Map());
+  const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const oldestCursors = useRef<Map<string, string>>(new Map());
+
   // ── Unread / meta per conversation ────────────────────────────────────────
   const [conversationMeta, setConversationMeta] = useState<Map<string, ConversationMeta>>(new Map());
   const [conversationPreviews, setConversationPreviews] = useState<Map<string, PreviewEntry>>(new Map());
@@ -207,6 +216,24 @@ export default function ChatScreen() {
   const selectedConversation = conversations.find((c) => c.id === selectedChat);
   const messages = selectedConversation?.messages || [];
 
+  // Merge older (paginated) messages with the current AppContext messages.
+  // olderMessages are prepended; IDs are deduped so Realtime inserts never double-render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const allMessages = useMemo<ChatMessage[]>(() => {
+    if (!selectedChat) return messages;
+    const older = olderMessages.get(selectedChat) ?? [];
+    if (older.length === 0) return messages;
+    const seen = new Set<string>();
+    const merged: ChatMessage[] = [];
+    for (const m of [...older, ...messages]) {
+      if (!seen.has(m.id)) {
+        seen.add(m.id);
+        merged.push(m);
+      }
+    }
+    return merged;
+  }, [messages, olderMessages, selectedChat]);
+
   const getInitials = (name: string) =>
     name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2);
 
@@ -222,7 +249,7 @@ export default function ChatScreen() {
     const items: MessageItem[] = [];
     let lastDateStr = '';
 
-    messages.forEach((message) => {
+    allMessages.forEach((message) => {
       const isDeleted = locallyDeletedIds.has(message.id) || !!message.isDeleted;
       const raw = message.createdAt || message.timestamp;
       const date = raw ? new Date(raw) : null;
@@ -258,7 +285,7 @@ export default function ChatScreen() {
     });
 
     return items;
-  }, [messages, locallyDeletedIds, pendingUploads, selectedChat, user?.id]);
+  }, [allMessages, locallyDeletedIds, pendingUploads, selectedChat, user?.id]);
 
   // ── Scroll to end on new messages ─────────────────────────────────────────
   const prevMessageCountRef = useRef(0);
@@ -489,12 +516,18 @@ export default function ChatScreen() {
   useEffect(() => {
     if (!selectedChat || !user?.id || selectedChat === 'ai-assistant') return;
 
+    // Clear pagination state for this conversation on initial load so stale
+    // "older" pages from a previous visit don't bleed through.
+    setOlderMessages((prev) => { const n = new Map(prev); n.delete(selectedChat); return n; });
+    setConvHasMore((prev) => { const n = new Map(prev); n.delete(selectedChat); return n; });
+    oldestCursors.current.delete(selectedChat);
+
     const fetchMessages = async () => {
       const conversation = conversationsRef.current.find((c) => c.id === selectedChat);
       if (!conversation) return;
       try {
         const resp = await fetch(
-          `${rorkApi}/api/team/get-messages?conversationId=${selectedChat}&userId=${user.id}`
+          `${rorkApi}/api/team/get-messages?conversationId=${selectedChat}&userId=${user.id}&limit=50`
         );
         const result = await resp.json();
         if (!result.success) return;
@@ -513,7 +546,7 @@ export default function ChatScreen() {
               fileName: msg.fileName,
               duration: msg.duration,
               timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-              createdAt: msg.timestamp, // raw ISO for date separators & read receipts
+              createdAt: msg.timestamp,
               replyTo: msg.replyTo,
               isDeleted: msg.isDeleted,
             });
@@ -522,6 +555,12 @@ export default function ChatScreen() {
             setLocallyDeletedIds((prev) => new Set(prev).add(msg.id));
           }
         });
+
+        // Store the oldest message's timestamp as the cursor for "load more"
+        if (result.messages.length > 0) {
+          oldestCursors.current.set(selectedChat, result.messages[0].timestamp);
+        }
+        setConvHasMore((prev) => new Map(prev).set(selectedChat, result.hasMore ?? false));
       } catch (e) {
         console.error('[Chat] fetchMessages error:', e);
       }
@@ -841,6 +880,55 @@ export default function ChatScreen() {
     }
   };
 
+  // ── Load older messages (pagination) ─────────────────────────────────────
+  const fetchOlderMessages = async () => {
+    if (!selectedChat || !user?.id || isLoadingOlder) return;
+    const cursor = oldestCursors.current.get(selectedChat);
+    if (!cursor) return;
+
+    setIsLoadingOlder(true);
+    try {
+      const resp = await fetch(
+        `${rorkApi}/api/team/get-messages?conversationId=${selectedChat}&userId=${user.id}&limit=50&before=${encodeURIComponent(cursor)}`
+      );
+      const result = await resp.json();
+      if (!result.success) return;
+
+      if (result.messages.length > 0) {
+        const mapped: ChatMessage[] = result.messages.map((msg: any) => ({
+          id: msg.id,
+          senderId: msg.senderId,
+          type: msg.type,
+          content: msg.content,
+          text: msg.text,
+          fileName: msg.fileName,
+          duration: msg.duration,
+          timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          createdAt: msg.timestamp,
+          replyTo: msg.replyTo,
+          isDeleted: msg.isDeleted,
+        }));
+
+        // Prepend to existing older messages (already ASC from API)
+        setOlderMessages((prev) => {
+          const n = new Map(prev);
+          const existing = n.get(selectedChat) ?? [];
+          n.set(selectedChat, [...mapped, ...existing]);
+          return n;
+        });
+
+        // Advance cursor to the oldest message in this new batch
+        oldestCursors.current.set(selectedChat, result.messages[0].timestamp);
+      }
+
+      setConvHasMore((prev) => new Map(prev).set(selectedChat, result.hasMore ?? false));
+    } catch (e) {
+      console.error('[Chat] fetchOlderMessages error:', e);
+    } finally {
+      setIsLoadingOlder(false);
+    }
+  };
+
   // ── Image / video helpers ─────────────────────────────────────────────────
   const handlePickImage = async () => {
     setShowAttachMenu(false);
@@ -868,6 +956,23 @@ export default function ChatScreen() {
     } catch {
       Alert.alert('Error', 'Failed to take photo');
     }
+  };
+
+  // Retries an async operation up to maxAttempts times with exponential backoff.
+  // Trailing comma on <T,> prevents TSX from treating it as a JSX tag.
+  const withRetry = async <T,>(fn: () => Promise<T>, maxAttempts = 3): Promise<T> => {
+    let lastError: Error = new Error('Operation failed');
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        return await fn();
+      } catch (e: any) {
+        lastError = e;
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, attempt * 1000));
+        }
+      }
+    }
+    throw lastError;
   };
 
   const uploadToS3 = async (localUri: string, mimeType: string): Promise<{ publicUrl: string }> => {
@@ -963,7 +1068,7 @@ export default function ChatScreen() {
 
     try {
       const ext = localUri.split('.').pop()?.toLowerCase() || 'jpg';
-      const { publicUrl } = await uploadToS3(localUri, `image/${ext}`);
+      const { publicUrl } = await withRetry(() => uploadToS3(localUri, `image/${ext}`));
       await sendMediaMessage('image', publicUrl, undefined, convId);
     } catch (e: any) {
       Alert.alert('Error', 'Failed to send image: ' + e.message);
@@ -1021,7 +1126,7 @@ export default function ChatScreen() {
     setPendingUploads((prev) => { const next = new Map(prev); next.set(tempId, pendingEntry); return next; });
 
     try {
-      const { publicUrl } = await uploadToS3(localUri, mimeType);
+      const { publicUrl } = await withRetry(() => uploadToS3(localUri, mimeType));
       await sendMediaMessage('video', publicUrl, { duration }, convId);
     } catch (e: any) {
       Alert.alert('Error', 'Failed to send video: ' + e.message);
@@ -1060,7 +1165,7 @@ export default function ChatScreen() {
 
         try {
           const mime = file.mimeType || 'application/octet-stream';
-          const { publicUrl } = await uploadToS3(file.uri, mime);
+          const { publicUrl } = await withRetry(() => uploadToS3(file.uri, mime));
           await sendMediaMessage('file', publicUrl, { fileName: file.name }, convId);
         } catch (e: any) {
           Alert.alert('Error', e.message || 'Failed to send document');
@@ -1120,7 +1225,7 @@ export default function ChatScreen() {
     setPendingUploads((prev) => { const next = new Map(prev); next.set(tempId, pendingEntry); return next; });
 
     try {
-      const { publicUrl: audioUrl } = await uploadToS3(audioLocalUri, result.mimeType);
+      const { publicUrl: audioUrl } = await withRetry(() => uploadToS3(audioLocalUri!, result.mimeType));
       if (blobUrl) URL.revokeObjectURL(blobUrl);
 
       const msgResp = await fetch(`${rorkApi}/api/team/send-message`, {
@@ -1404,6 +1509,21 @@ export default function ChatScreen() {
                     maxToRenderPerBatch={10}
                     windowSize={10}
                     removeClippedSubviews={Platform.OS !== 'web'}
+                    ListHeaderComponent={
+                      selectedChat && selectedChat !== 'ai-assistant' && convHasMore.get(selectedChat) ? (
+                        <TouchableOpacity
+                          style={styles.loadMoreButton}
+                          onPress={fetchOlderMessages}
+                          disabled={isLoadingOlder}
+                        >
+                          {isLoadingOlder ? (
+                            <ActivityIndicator size="small" color="#2563EB" />
+                          ) : (
+                            <Text style={styles.loadMoreText}>Load older messages</Text>
+                          )}
+                        </TouchableOpacity>
+                      ) : null
+                    }
                     ListFooterComponent={
                       typingUsers.size > 0 ? <TypingIndicator typingUsers={typingUsers} /> : null
                     }
@@ -1679,6 +1799,8 @@ const styles = StyleSheet.create({
   aiChatContainer: { flex: 1, backgroundColor: '#FFFFFF' },
   messagesContainer: { flex: 1 },
   messagesContent: { paddingVertical: 12 },
+  loadMoreButton: { alignSelf: 'center', marginVertical: 8, paddingVertical: 6, paddingHorizontal: 16, backgroundColor: '#F3F4F6', borderRadius: 16, minWidth: 48, minHeight: 32, alignItems: 'center', justifyContent: 'center' },
+  loadMoreText: { fontSize: 13, color: '#2563EB', fontWeight: '500' },
   replyBar: { flexDirection: 'row', alignItems: 'flex-start', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#F9FAFB', borderTopWidth: 1, borderTopColor: '#E5E7EB', gap: 8 },
   replyBarContent: { flex: 1 },
   recorderContainer: { flexDirection: 'row', paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#E5E7EB', backgroundColor: '#FFFFFF', alignItems: 'center' },
