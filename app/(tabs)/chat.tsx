@@ -287,26 +287,21 @@ export default function ChatScreen() {
     return items;
   }, [allMessages, locallyDeletedIds, pendingUploads, selectedChat, user?.id]);
 
-  // ── Scroll to end on new messages ─────────────────────────────────────────
-  const prevMessageCountRef = useRef(0);
-  useEffect(() => {
-    if (messages.length > prevMessageCountRef.current) {
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
-      prevMessageCountRef.current = messages.length;
-    }
-  }, [messages.length]);
+  // ── Auto-scroll to bottom ──────────────────────────────────────────────────
+  // userScrolledUpRef: true once the user has manually scrolled away from the
+  // bottom. Reset on conversation switch so every new conv starts pinned to end.
+  // We check this in onContentSizeChange so every batch of incoming messages
+  // (initial fetch, Realtime, 30s poll) scrolls to bottom automatically — unless
+  // the user is actively reading history.
+  const userScrolledUpRef = useRef(false);
 
-  // scrollTrackRef.scrolled: true once we've scrolled to bottom for the current conv.
-  // Reset synchronously in the render body (not in useEffect) so it's already false
-  // before onContentSizeChange fires — useEffect would run too late and miss it.
-  const scrollTrackRef = useRef<{ conv: string | null; scrolled: boolean }>({ conv: null, scrolled: false });
-  if (scrollTrackRef.current.conv !== selectedChat) {
-    scrollTrackRef.current = { conv: selectedChat, scrolled: false };
+  // Reset synchronously in render (not useEffect) — effects run after layout
+  // callbacks, so a useEffect reset arrives too late for onContentSizeChange.
+  const prevConvForScrollRef = useRef<string | null>(null);
+  if (prevConvForScrollRef.current !== selectedChat) {
+    prevConvForScrollRef.current = selectedChat;
+    userScrolledUpRef.current = false;
   }
-
-  useEffect(() => {
-    prevMessageCountRef.current = 0;
-  }, [selectedChat]);
 
   // ── Preload voice messages ────────────────────────────────────────────────
   // Run all preloads concurrently (Promise.allSettled) so messages 2-6 start
@@ -1513,11 +1508,16 @@ export default function ChatScreen() {
                     windowSize={10}
                     removeClippedSubviews={Platform.OS !== 'web'}
                     onContentSizeChange={() => {
-                      if (!scrollTrackRef.current.scrolled && messageItems.length > 0) {
+                      if (!userScrolledUpRef.current && messageItems.length > 0) {
                         flatListRef.current?.scrollToEnd({ animated: false });
-                        scrollTrackRef.current.scrolled = true;
                       }
                     }}
+                    onScroll={(e) => {
+                      const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+                      const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+                      userScrolledUpRef.current = distanceFromBottom > 80;
+                    }}
+                    scrollEventThrottle={100}
                     ListHeaderComponent={
                       selectedChat && selectedChat !== 'ai-assistant' && convHasMore.get(selectedChat) ? (
                         <TouchableOpacity
