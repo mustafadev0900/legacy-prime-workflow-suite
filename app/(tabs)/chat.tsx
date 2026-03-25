@@ -296,16 +296,16 @@ export default function ChatScreen() {
     }
   }, [messages.length]);
 
-  // Track which conversation we last scrolled-to-bottom for.
-  // onContentSizeChange scrolls whenever the conversation changes and content is ready.
-  // Avoids the useEffect timing race (effects run after layout, so a flag set in an
-  // effect would always be false when onContentSizeChange first fires for a new conv).
-  const lastScrolledConvRef = useRef<string | null>(null);
+  // scrollTrackRef.scrolled: true once we've scrolled to bottom for the current conv.
+  // Reset synchronously in the render body (not in useEffect) so it's already false
+  // before onContentSizeChange fires — useEffect would run too late and miss it.
+  const scrollTrackRef = useRef<{ conv: string | null; scrolled: boolean }>({ conv: null, scrolled: false });
+  if (scrollTrackRef.current.conv !== selectedChat) {
+    scrollTrackRef.current = { conv: selectedChat, scrolled: false };
+  }
 
   useEffect(() => {
     prevMessageCountRef.current = 0;
-    // Force a new scroll-to-bottom for this conversation when content renders.
-    lastScrolledConvRef.current = null;
   }, [selectedChat]);
 
   // ── Preload voice messages ────────────────────────────────────────────────
@@ -1513,9 +1513,9 @@ export default function ChatScreen() {
                     windowSize={10}
                     removeClippedSubviews={Platform.OS !== 'web'}
                     onContentSizeChange={() => {
-                      if (lastScrolledConvRef.current !== selectedChat && messageItems.length > 0) {
+                      if (!scrollTrackRef.current.scrolled && messageItems.length > 0) {
                         flatListRef.current?.scrollToEnd({ animated: false });
-                        lastScrolledConvRef.current = selectedChat;
+                        scrollTrackRef.current.scrolled = true;
                       }
                     }}
                     ListHeaderComponent={
