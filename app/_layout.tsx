@@ -67,12 +67,14 @@ function RootLayoutNav() {
         const result = await resp.json();
         if (!result?.success) return;
         const convs: any[] = Array.isArray(result?.conversations) ? result.conversations : [];
-        const unread = convs.filter((conv: any) =>
-          conv?.lastMessageAt &&
-          conv?.lastMessage?.sender_id !== user?.id &&
-          (!conv?.lastReadAt || conv.lastMessageAt > conv.lastReadAt)
+        // Sum unreadCount from the API — same field chat.tsx uses, so both
+        // sources stay in sync and the ghost-conversation bug (null lastMessage
+        // satisfying `sender_id !== userId`) is eliminated.
+        const total = convs.reduce(
+          (sum: number, conv: any) => sum + (conv?.unreadCount ?? 0),
+          0
         );
-        setUnreadChatCount(unread.length);
+        setUnreadChatCount(total);
       } catch (err: any) {
         console.warn('[ChatBadge] fetch failed:', err?.message ?? err);
       }
