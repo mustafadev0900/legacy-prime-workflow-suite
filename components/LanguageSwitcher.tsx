@@ -14,15 +14,17 @@ export default function LanguageSwitcher() {
   return (
     <View style={styles.container}>
       <TouchableOpacity
-        style={[styles.flagButton, currentLanguage === 'en' && styles.activeFlag]}
+        style={[styles.option, currentLanguage === 'en' && styles.activeOption]}
         onPress={() => changeLanguage('en')}
       >
         <Text style={styles.flag}>🇺🇸</Text>
         <Text style={[styles.label, currentLanguage === 'en' && styles.activeLabel]}>EN</Text>
       </TouchableOpacity>
-      
+
+      <View style={styles.separator} />
+
       <TouchableOpacity
-        style={[styles.flagButton, currentLanguage === 'es' && styles.activeFlag]}
+        style={[styles.option, currentLanguage === 'es' && styles.activeOption]}
         onPress={() => changeLanguage('es')}
       >
         <Text style={styles.flag}>🇪🇸</Text>
@@ -35,31 +37,43 @@ export default function LanguageSwitcher() {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    gap: 12,
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    gap: 2,
   },
-  flagButton: {
+  option: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
   },
-  activeFlag: {
-    borderColor: '#2563EB',
-    backgroundColor: '#EFF6FF',
+  activeOption: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  separator: {
+    width: 1,
+    height: 14,
+    backgroundColor: '#D1D5DB',
   },
   flag: {
-    fontSize: 24,
+    fontSize: 14,
   },
   label: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#6B7280',
+    color: '#9CA3AF',
   },
   activeLabel: {
-    color: '#2563EB',
+    color: '#1F2937',
   },
 });
