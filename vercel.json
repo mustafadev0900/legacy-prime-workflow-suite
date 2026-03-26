@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/check-task-reminders",
-      "schedule": "0 8 * * *"
+      "schedule": "*/5 * * * *"
     }
   ],
   "buildCommand": "bunx expo export -p web",
