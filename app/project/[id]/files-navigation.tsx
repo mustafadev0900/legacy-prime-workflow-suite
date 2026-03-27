@@ -594,6 +594,13 @@ export default function FilesNavigationScreen() {
   };
 
   const handleDeletePhoto = (photoId: string) => {
+    if (Platform.OS === 'web') {
+      if (!window.confirm('Are you sure you want to delete this photo?')) return;
+      deletePhoto(photoId).catch((err: any) => {
+        window.alert(err.message || 'Failed to delete photo');
+      });
+      return;
+    }
     Alert.alert('Delete Photo', 'Are you sure you want to delete this photo?', [
       { text: 'Cancel', style: 'cancel' },
       {

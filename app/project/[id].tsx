@@ -133,6 +133,7 @@ export default function ProjectDetailScreen() {
   const [photoCategory, setPhotoCategory] = useState<string>('Foundation');
   const [showAIReportModal, setShowAIReportModal] = useState<boolean>(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
+  const isUploadingPhotoRef = useRef(false);
   const [viewingPhoto, setViewingPhoto] = useState<{ url: string; category: string; notes?: string; date: string } | null>(null);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [budgetInput, setBudgetInput] = useState('');
@@ -254,31 +255,6 @@ export default function ProjectDetailScreen() {
     return photos.filter(p => p.projectId === id);
   }, [photos, id]);
 
-  useEffect(() => {
-    projectPhotos.forEach(photo => {
-      const existingFile = projectFiles.find(f => 
-        f.category === 'photos' && 
-        f.uri === photo.url && 
-        f.projectId === id
-      );
-      
-      if (!existingFile) {
-        const photoFile: ProjectFile = {
-          id: `photo-file-${photo.id}`,
-          projectId: id as string,
-          name: `${photo.category} - ${new Date(photo.date).toLocaleDateString()}`,
-          category: 'photos',
-          fileType: 'image/jpeg',
-          fileSize: 0,
-          uri: photo.url,
-          uploadDate: photo.date,
-          notes: photo.notes || `Category: ${photo.category}`,
-        };
-        addProjectFile(photoFile);
-        console.log('[Files] Auto-synced photo to files:', photoFile.name);
-      }
-    });
-  }, [projectPhotos, projectFiles, id, addProjectFile]);
 
   const projectReports = useMemo(() => {
     return reports.filter(r => r.projectIds.includes(id as string));
@@ -2405,8 +2381,8 @@ export default function ProjectDetailScreen() {
         };
 
         const handlePhotoSave = async () => {
-          if (!selectedPhotoImage) return;
-
+          if (!selectedPhotoImage || isUploadingPhotoRef.current) return;
+          isUploadingPhotoRef.current = true;
           setIsUploadingPhoto(true);
           try {
             console.log('[Photos] Uploading photo to S3...');
@@ -2478,6 +2454,7 @@ export default function ProjectDetailScreen() {
             console.error('[Photos] Upload error:', error);
             Alert.alert('Error', 'Failed to upload photo. Please try again.');
           } finally {
+            isUploadingPhotoRef.current = false;
             setIsUploadingPhoto(false);
           }
         };

@@ -1548,6 +1548,11 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
           throw new Error(error.error || 'Failed to save photo');
         }
 
+        const result = await response.json();
+        // Replace optimistic entry (client UUID) with the real DB-assigned ID
+        if (result.photo?.id) {
+          setPhotos(prev => prev.map(p => p.id === photo.id ? { ...p, id: result.photo.id } : p));
+        }
         console.log('[App] Photo saved to backend');
       } catch (error) {
         console.error('[App] Error saving photo to backend:', error);
@@ -2749,19 +2754,17 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
 
   // Delete photo
   const deletePhoto = useCallback(async (photoId: string) => {
-    try {
-      const response = await fetch('/api/delete-photo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ photoId, companyId: company?.id }),
-      });
-      if (response.ok) {
-        setPhotos(prev => prev.filter(p => p.id !== photoId));
-      }
-    } catch (error) {
-      console.error('[AppContext] Error deleting photo:', error);
-      setPhotos(prev => prev.filter(p => p.id !== photoId));
+    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+    const response = await fetch(`${apiUrl}/api/delete-photo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photoId, companyId: company?.id }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Failed to delete photo' }));
+      throw new Error(err.error || 'Failed to delete photo');
     }
+    setPhotos(prev => prev.filter(p => p.id !== photoId));
   }, [company?.id]);
 
   // ===== DAILY TASKS MANAGEMENT =====
