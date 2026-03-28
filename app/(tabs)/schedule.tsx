@@ -1628,11 +1628,15 @@ ${pdfDates.length > 0 ? `
                     ref={gridPressableRef}
                     onPress={(e) => {
                       let lx: number;
-                      if (Platform.OS === 'web' && gridPressableRef.current?.getBoundingClientRect) {
-                        // offsetX is relative to the innermost child that received the click,
-                        // not the Pressable — use pageX + scroll offset for absolute content position.
-                        const rect = gridPressableRef.current.getBoundingClientRect();
-                        lx = currentScrollXRef.current + ((e.nativeEvent as any).pageX - rect.left);
+                      if (Platform.OS === 'web' && ganttAreaRef.current) {
+                        // offsetX is relative to the innermost clicked child, not the Pressable.
+                        // Use pageX - ganttArea.left - sidebarWidth + scrollX for true content position.
+                        const rect = (ganttAreaRef.current as any).getBoundingClientRect?.();
+                        if (rect) {
+                          lx = (e.nativeEvent as any).pageX - rect.left - SIDEBAR_WIDTH + currentScrollXRef.current;
+                        } else {
+                          lx = (e.nativeEvent as any).locationX ?? (e.nativeEvent as any).offsetX ?? 0;
+                        }
                       } else {
                         lx = (e.nativeEvent as any).locationX ?? (e.nativeEvent as any).offsetX ?? 0;
                       }
