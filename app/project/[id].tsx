@@ -2608,7 +2608,7 @@ export default function ProjectDetailScreen() {
                           </View>
                         </TouchableOpacity>
 
-                        {project?.status !== 'completed' && (
+                        {project?.status !== 'completed' && photo.uploadedBy === user?.id && (
                           <TouchableOpacity
                             style={styles.photosGalleryDeleteBtn}
                             onPress={() => {
