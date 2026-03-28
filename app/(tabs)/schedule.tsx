@@ -213,6 +213,7 @@ export default function ScheduleScreen() {
   const gridHRef = useRef<ScrollView>(null);
   const bodyScrollRef = useRef<ScrollView>(null);
   const ganttAreaRef = useRef<View>(null);
+  const gridPressableRef = useRef<any>(null);
   const isPanningRef = useRef<boolean>(false);
   const panStartRef = useRef<{ x: number; y: number; scrollX: number; scrollY: number }>({ x: 0, y: 0, scrollX: 0, scrollY: 0 });
   const currentScrollXRef = useRef<number>(0);
@@ -1624,8 +1625,17 @@ ${pdfDates.length > 0 ? `
                   nestedScrollEnabled
                 >
                   <Pressable
+                    ref={gridPressableRef}
                     onPress={(e) => {
-                      const lx = (e.nativeEvent as any).locationX ?? (e.nativeEvent as any).offsetX ?? 0;
+                      let lx: number;
+                      if (Platform.OS === 'web' && gridPressableRef.current?.getBoundingClientRect) {
+                        // offsetX is relative to the innermost child that received the click,
+                        // not the Pressable — use pageX + scroll offset for absolute content position.
+                        const rect = gridPressableRef.current.getBoundingClientRect();
+                        lx = currentScrollXRef.current + ((e.nativeEvent as any).pageX - rect.left);
+                      } else {
+                        lx = (e.nativeEvent as any).locationX ?? (e.nativeEvent as any).offsetX ?? 0;
+                      }
                       handleGridTap(lx);
                     }}
                     style={{ width: effectiveGridWidth, height: GRID_HEIGHT }}
