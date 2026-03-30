@@ -43,6 +43,10 @@ async function findAndBuyTwilioNumber(
       if (available.length > 0) {
         const purchased = await client.incomingPhoneNumbers.create({
           phoneNumber: available[0].phoneNumber,
+          voiceUrl: 'https://legacy-prime-workflow-suite.vercel.app/api/voice-webhook',
+          voiceMethod: 'POST',
+          smsUrl: 'https://legacy-prime-workflow-suite.vercel.app/api/twilio-webhook',
+          smsMethod: 'POST',
         });
         console.log(`[provision-twilio] Purchased ${purchased.phoneNumber} (${distance}mi radius)`);
         return purchased.phoneNumber;
