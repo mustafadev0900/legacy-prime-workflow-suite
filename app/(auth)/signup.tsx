@@ -29,6 +29,8 @@ export default function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [companyName, setCompanyName] = useState<string>('');
   const [employeeCount, setEmployeeCount] = useState<string>('2');
+  const [companyAddress, setCompanyAddress] = useState<string>('');
+  const [companyPostalCode, setCompanyPostalCode] = useState<string>('');
   const [companyCode, setCompanyCode] = useState<string>('');
   const [phone, setPhone] = useState<string>(initialPhone);
   const [address, setAddress] = useState<string>('');
@@ -83,6 +85,14 @@ export default function SignupScreen() {
       }
       if (!employeeCount || parseInt(employeeCount) < 1) {
         showAlert('Error', 'Please enter number of employees (at least 1)');
+        return;
+      }
+      if (!companyAddress.trim()) {
+        showAlert('Error', 'Please enter your company address');
+        return;
+      }
+      if (!companyPostalCode.trim()) {
+        showAlert('Error', 'Please enter your postal code');
         return;
       }
     } else if (accountType === 'employee') {
@@ -155,6 +165,8 @@ export default function SignupScreen() {
               companyId: result.company.id,
               companyName: result.company.name,
               companyCode: (result as any).companyCode,
+              address: companyAddress.trim(),
+              postalCode: companyPostalCode.trim(),
             },
           });
         } else if (result.pendingApproval) {
@@ -240,6 +252,8 @@ export default function SignupScreen() {
               companyId: result.company!.id,
               companyName: result.company!.name,
               companyCode: result.companyCode,
+              address: companyAddress.trim(),
+              postalCode: companyPostalCode.trim(),
             },
           });
         } else {
@@ -259,6 +273,8 @@ export default function SignupScreen() {
                       companyId: result.company!.id,
                       companyName: result.company!.name,
                       companyCode: result.companyCode,
+                      address: companyAddress.trim(),
+                      postalCode: companyPostalCode.trim(),
                     },
                   });
                 },
@@ -520,6 +536,28 @@ export default function SignupScreen() {
                 keyboardType="number-pad"
               />
               <Text style={styles.hint}>{t('signup.employeeCountHint')}</Text>
+
+              <Text style={styles.label}>Company Address</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="123 Main St, City, State"
+                placeholderTextColor="#9CA3AF"
+                value={companyAddress}
+                onChangeText={setCompanyAddress}
+                autoCapitalize="words"
+              />
+
+              <Text style={styles.label}>Postal Code</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="90210"
+                placeholderTextColor="#9CA3AF"
+                value={companyPostalCode}
+                onChangeText={(t) => setCompanyPostalCode(t.replace(/\D/g, '').slice(0, 5))}
+                keyboardType="number-pad"
+                maxLength={5}
+              />
+              <Text style={styles.hint}>Used to assign a local phone number to your company</Text>
             </>
           )}
 

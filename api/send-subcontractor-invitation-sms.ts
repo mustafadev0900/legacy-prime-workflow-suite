@@ -59,7 +59,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Get Twilio credentials using helper functions
     const twilioAccountSid = getTwilioAccountSid();
     const twilioAuthToken = getTwilioAuthToken();
-    const twilioPhoneNumber = getTwilioPhoneNumber();
+
+    // Use company's unique Twilio number if available, fall back to global
+    let twilioPhoneNumber = getTwilioPhoneNumber();
+    try {
+      const supabaseTmp = createClient(process.env.EXPO_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+      const { data: companyData } = await supabaseTmp.from('companies').select('twilio_phone_number').eq('id', companyId).single();
+      if (companyData?.twilio_phone_number) twilioPhoneNumber = companyData.twilio_phone_number;
+    } catch (_) {}
 
     console.log('[API] Resolved Twilio credentials:', {
       accountSid: twilioAccountSid ? `${twilioAccountSid.substring(0, 10)}...` : 'MISSING',

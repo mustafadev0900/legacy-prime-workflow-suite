@@ -14,6 +14,7 @@ import { sendEstimate as sendEstimateUtil } from '@/utils/sendEstimate';
 import { z } from 'zod';
 import { useTwilioSMS, useTwilioCalls } from '@/components/TwilioIntegration';
 import { supabase } from '@/lib/supabase';
+import CompanyHeader from '@/components/CompanyHeader';
 import { generateUUID } from '@/utils/uuid';
 
 // Phone validation helpers
@@ -1329,6 +1330,7 @@ export default function CRMScreen() {
 
   return (
     <View style={styles.container}>
+      <CompanyHeader />
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}

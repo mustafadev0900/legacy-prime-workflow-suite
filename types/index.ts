@@ -266,6 +266,8 @@ export interface Company {
   subscriptionEndDate?: string;
   employeeCount?: number;
   companyCode?: string;
+  postalCode?: string;
+  twilioPhoneNumber?: string;
   stripePaymentIntentId?: string;
   stripeCustomerId?: string;
   stripeSubscriptionId?: string;

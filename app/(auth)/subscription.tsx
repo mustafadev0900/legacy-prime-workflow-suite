@@ -23,6 +23,8 @@ function SubscriptionContent() {
     accountType?: string;
     companyCode?: string;
     companyId?: string;
+    address?: string;
+    postalCode?: string;
   }>();
 
   const [selectedPlan, setSelectedPlan] = useState<'basic' | 'premium'>('premium');
@@ -62,6 +64,31 @@ function SubscriptionContent() {
     });
 
     console.log('[Subscription] Subscription updated successfully');
+
+    // Provision a unique Twilio number for this company based on their location
+    if (params.companyId && params.address && params.postalCode) {
+      try {
+        const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+        console.log('[Subscription] Provisioning Twilio number...');
+        const twilioRes = await fetch(`${API_BASE}/api/provision-twilio-number`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            companyId: params.companyId,
+            address: params.address,
+            postalCode: params.postalCode,
+          }),
+        });
+        const twilioData = await twilioRes.json();
+        if (twilioData.success) {
+          console.log('[Subscription] Twilio number assigned:', twilioData.phoneNumber);
+        } else {
+          console.warn('[Subscription] Twilio provisioning failed (non-fatal):', twilioData.error);
+        }
+      } catch (err) {
+        console.warn('[Subscription] Twilio provisioning error (non-fatal):', err);
+      }
+    }
 
     // Navigate to dashboard
     if (Platform.OS === 'web') {
