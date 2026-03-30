@@ -19,14 +19,9 @@ export default function FloatingChatButton() {
     <TouchableOpacity
       style={styles.floatingButton}
       onPress={() => router.push('/chat')}
-      activeOpacity={0.85}
+      activeOpacity={0.8}
     >
-      {/* Glow ring */}
-      <View style={styles.glowRing} />
-
-      <MessageCircle size={22} color="#FFFFFF" strokeWidth={2.5} />
-      <Text style={styles.label}>Chat</Text>
-
+      <MessageCircle size={26} color="#FFFFFF" strokeWidth={2.5} />
       {unreadChatCount > 0 && (
         <View style={styles.badge}>
           <Text style={styles.badgeText}>
@@ -43,39 +38,23 @@ const styles = StyleSheet.create({
     position: 'absolute' as const,
     bottom: 90,
     right: 16,
-    flexDirection: 'row',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#10B981',
     alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderRadius: 30,
-    backgroundColor: '#2563EB',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    elevation: 10,
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
     zIndex: 997,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.18)',
-  },
-  glowRing: {
-    position: 'absolute' as const,
-    inset: -3,
-    borderRadius: 33,
-    borderWidth: 1,
-    borderColor: 'rgba(37,99,235,0.3)',
-  },
-  label: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600' as const,
-    letterSpacing: 0.3,
   },
   badge: {
     position: 'absolute' as const,
-    top: -6,
-    right: -6,
+    top: -4,
+    right: -4,
     minWidth: 22,
     height: 22,
     borderRadius: 11,
