@@ -26,7 +26,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).send('Method Not Allowed');
   }
 
-  const { From, To, SpeechResult, conversationState } = req.body;
+  const { From, To, SpeechResult } = req.body;
+  const conversationState = (req.query.conversationState as string) || req.body.conversationState;
   const webhookUrl = 'https://legacy-prime-workflow-suite.vercel.app/api/voice-webhook';
 
   // Look up company by the Twilio number that was called
@@ -75,9 +76,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather input="speech" action="${webhookUrl}" method="POST" speechTimeout="auto">
+  <Gather input="speech" action="${webhookUrl}?conversationState=${encodeURIComponent(encodedState)}" method="POST" speechTimeout="auto">
     <Say voice="alice">Thank you for calling ${companyName}. How can I help you today?</Say>
-    <Parameter name="conversationState" value="${encodedState}"/>
   </Gather>
 </Response>`;
 
@@ -92,12 +92,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const lower = SpeechResult.toLowerCase();
 
-    // Extract name
+    // Extract name — match "my name is John", "I'm John", or just "John Smith"
     if (!state.name) {
-      const nameMatch = SpeechResult.match(/(?:name is|i'm|this is|call me)\s+([a-z]+(?:\s+[a-z]+)?)/i);
+      const nameMatch = SpeechResult.match(/(?:name is|i(?:'|')?m|this is|call me)\s+([a-z]+(?:\s+[a-z]+)?)/i)
+        || SpeechResult.match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)$/);
       if (nameMatch && nameMatch[1]) {
         state.name = nameMatch[1].trim();
         console.log('[Voice Webhook] Extracted name:', state.name);
+      } else if (SpeechResult.trim().split(' ').length <= 3) {
+        // Fallback: if short response with no keywords, treat whole thing as name
+        state.name = SpeechResult.trim();
+        console.log('[Voice Webhook] Extracted name (fallback):', state.name);
       }
     }
 
@@ -188,9 +193,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather input="speech" action="${webhookUrl}" method="POST" speechTimeout="auto">
+  <Gather input="speech" action="${webhookUrl}?conversationState=${encodeURIComponent(encodedState)}" method="POST" speechTimeout="auto">
     <Say voice="alice">${question}</Say>
-    <Parameter name="conversationState" value="${encodedState}"/>
   </Gather>
 </Response>`;
 
