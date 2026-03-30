@@ -126,7 +126,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Check if we have enough information to qualify the lead
-  const hasEnoughInfo = state.name && (state.project || state.budget);
+  const hasEnoughInfo = state.name && state.project && state.budget;
 
   if (hasEnoughInfo) {
     console.log('[Voice Webhook] ✅ QUALIFIED LEAD:', state);
