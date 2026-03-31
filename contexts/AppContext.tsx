@@ -593,7 +593,25 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
       
       const parsedCompany = safeJsonParse<Company | null>(storedCompany, 'company', null);
       if (parsedCompany && typeof parsedCompany === 'object') {
-        setCompanyState(parsedCompany);
+        // Fetch twilio_phone_number from Supabase to ensure it's always up to date
+        if (parsedCompany.id && !parsedCompany.twilioPhoneNumber) {
+          supabase
+            .from('companies')
+            .select('twilio_phone_number')
+            .eq('id', parsedCompany.id)
+            .single()
+            .then(({ data }) => {
+              if (data?.twilio_phone_number) {
+                const updated = { ...parsedCompany, twilioPhoneNumber: data.twilio_phone_number };
+                setCompanyState(updated);
+                AsyncStorage.setItem('company', JSON.stringify(updated));
+              } else {
+                setCompanyState(parsedCompany);
+              }
+            });
+        } else {
+          setCompanyState(parsedCompany);
+        }
       }
       
       const parsedSubscription = safeJsonParse<Subscription | null>(storedSubscription, 'subscription', null);
