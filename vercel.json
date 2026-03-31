@@ -33,6 +33,14 @@
       "maxDuration": 30,
       "memory": 512
     },
+    "api/voice-webhook.ts": {
+      "maxDuration": 30,
+      "memory": 512
+    },
+    "api/twilio-webhook.ts": {
+      "maxDuration": 30,
+      "memory": 512
+    },
     "api/team/send-message.ts": {
       "maxDuration": 30,
       "memory": 1024

@@ -34,31 +34,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).send('Method Not Allowed');
   }
 
-  const { From, To, SpeechResult } = req.body;
-  const conversationState = (req.query.conversationState as string) || req.body.conversationState;
+  const body = req.body || {};
+  const { From, To, SpeechResult } = body;
+  const conversationState = (req.query.conversationState as string) || body.conversationState;
   const webhookUrl = 'https://legacy-prime-workflow-suite.vercel.app/api/voice-webhook';
 
-  // Look up company by the Twilio number that was called
+  // Fetch company + assistant config in parallel
   let companyName = 'Legacy Prime Construction';
   let companyId: string | null = null;
-  if (To) {
-    try {
-      const { data } = await supabase
-        .from('companies')
-        .select('id, name')
-        .eq('twilio_phone_number', To)
-        .single();
-      if (data?.name) {
-        companyName = data.name;
-        companyId = data.id;
-        console.log('[Voice Webhook] Company found:', companyName, companyId);
-      }
-    } catch (e) {
-      console.warn('[Voice Webhook] Could not look up company, using default');
-    }
-  }
 
-  // Load call assistant config for this company
   const assistantConfig: AssistantConfig = {
     enabled: true,
     greeting: `Thank you for calling ${companyName}. How can I help you today?`,
@@ -67,24 +51,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     autoAddToCRM: true,
   };
 
-  if (companyId) {
+  if (To) {
     try {
-      const { data: config } = await supabase
-        .from('call_assistant_config')
-        .select('*')
-        .eq('company_id', companyId)
+      const { data: company } = await supabase
+        .from('companies')
+        .select('id, name')
+        .eq('twilio_phone_number', To)
         .single();
 
-      if (config) {
-        assistantConfig.enabled = config.enabled ?? true;
-        assistantConfig.greeting = config.greeting || assistantConfig.greeting;
-        assistantConfig.projectQuestion = config.project_question || assistantConfig.projectQuestion;
-        assistantConfig.budgetQuestion = config.budget_question || assistantConfig.budgetQuestion;
-        assistantConfig.autoAddToCRM = config.auto_add_to_crm ?? true;
-        console.log('[Voice Webhook] Loaded assistant config for company:', companyId);
+      if (company?.name) {
+        companyName = company.name;
+        companyId = company.id;
+        assistantConfig.greeting = `Thank you for calling ${companyName}. How can I help you today?`;
+        console.log('[Voice Webhook] Company found:', companyName, companyId);
+
+        // Load config now that we have companyId
+        const { data: config } = await supabase
+          .from('call_assistant_config')
+          .select('*')
+          .eq('company_id', companyId)
+          .single();
+
+        if (config) {
+          assistantConfig.enabled = config.enabled ?? true;
+          assistantConfig.greeting = config.greeting || assistantConfig.greeting;
+          assistantConfig.projectQuestion = config.project_question || assistantConfig.projectQuestion;
+          assistantConfig.budgetQuestion = config.budget_question || assistantConfig.budgetQuestion;
+          assistantConfig.autoAddToCRM = config.auto_add_to_crm ?? true;
+          console.log('[Voice Webhook] Loaded assistant config for company:', companyId);
+        }
       }
-    } catch (e) {
-      console.warn('[Voice Webhook] No assistant config found, using defaults');
+    } catch (e: any) {
+      console.warn('[Voice Webhook] DB lookup failed, using defaults:', e.message);
     }
   }
 
