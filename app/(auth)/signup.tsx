@@ -9,6 +9,8 @@ import { useApp } from '@/contexts/AppContext';
 import { auth, supabase } from '@/lib/supabase';
 import Logo from '@/components/Logo';
 
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+
 function validateAddress(value: string): string | null {
   const trimmed = value.trim();
   if (trimmed.length < 8) return 'Please enter a complete address';
@@ -140,6 +142,31 @@ export default function SignupScreen() {
     setIsCreatingAccount(true);
 
     try {
+      // Live street-level address check via Nominatim
+      if (accountType === 'company') {
+        const r = await fetch(`${API_BASE}/api/validate-address`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address: companyAddress, postalCode: companyPostalCode }),
+        });
+        const result = await r.json();
+        if (!result.valid) {
+          showAlert('Invalid Address', result.error || 'Please enter a real street address');
+          return;
+        }
+      } else if (accountType === 'employee') {
+        const r = await fetch(`${API_BASE}/api/validate-address`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address }),
+        });
+        const result = await r.json();
+        if (!result.valid) {
+          showAlert('Invalid Address', result.error || 'Please enter a real street address');
+          return;
+        }
+      }
+
       console.log('[Signup] Starting account creation...');
 
       // Google OAuth path — auth user already exists, only create DB records
