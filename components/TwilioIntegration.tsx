@@ -23,7 +23,7 @@ export const useTwilioSMS = () => {
   const [isSendingSMS, setIsSendingSMS] = useState(false);
   const [isSendingBulk, setIsSendingBulk] = useState(false);
 
-  const sendSingleSMS = async (phone: string, message: string, name?: string) => {
+  const sendSingleSMS = async (phone: string, message: string, name?: string, companyId?: string) => {
     const personalizedMessage = name ? message.replace('{name}', name.split(' ')[0]) : message;
     const e164Phone = toE164(phone);
     setIsSendingSMS(true);
@@ -31,7 +31,7 @@ export const useTwilioSMS = () => {
       const res = await fetch(`${API_BASE}/api/twilio-send-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: e164Phone, body: personalizedMessage }),
+        body: JSON.stringify({ to: e164Phone, body: personalizedMessage, companyId }),
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Failed to send SMS');
@@ -52,7 +52,8 @@ export const useTwilioSMS = () => {
 
   const sendBulkSMSMessages = async (
     recipients: { phone: string; name: string }[],
-    message: string
+    message: string,
+    companyId?: string
   ) => {
     // Normalize all phone numbers to E.164 before sending
     const normalizedRecipients = recipients.map(r => ({ ...r, phone: toE164(r.phone) }));
@@ -61,7 +62,7 @@ export const useTwilioSMS = () => {
       const res = await fetch(`${API_BASE}/api/twilio-send-bulk-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipients: normalizedRecipients, body: message }),
+        body: JSON.stringify({ recipients: normalizedRecipients, body: message, companyId }),
       });
       const result = await res.json();
       if (!res.ok) throw new Error(result.error || 'Failed to send bulk SMS');

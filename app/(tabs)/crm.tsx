@@ -724,7 +724,7 @@ export default function CRMScreen() {
 
       if (smsRecipients.length === 1) {
         const client = smsRecipients[0];
-        const success = await sendSingleSMS(client.phone, messageBody, client.name);
+        const success = await sendSingleSMS(client.phone, messageBody, client.name, company?.id);
         if (success) {
           setShowMessageModal(false);
           setSelectedClients(new Set());
@@ -736,7 +736,7 @@ export default function CRMScreen() {
           phone: client.phone,
           name: client.name,
         }));
-        const result = await sendBulkSMSMessages(recipientList, messageBody);
+        const result = await sendBulkSMSMessages(recipientList, messageBody, company?.id);
         if (result && result.success) {
           setShowMessageModal(false);
           setSelectedClients(new Set());
