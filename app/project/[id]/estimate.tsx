@@ -1426,11 +1426,12 @@ export default function EstimateScreen() {
         });
 
         console.log('[Estimate] Email composer closed');
-        Alert.alert(
-          'Success',
-          'Estimate saved to database!',
-          [{ text: 'OK', onPress: () => router.push('/crm') }]
-        );
+        if (Platform.OS === 'web') {
+          alert('Estimate saved to database!');
+          router.push('/crm');
+        } else {
+          Alert.alert('Success', 'Estimate saved to database!', [{ text: 'OK', onPress: () => router.push('/crm') }]);
+        }
       }
     } catch (error: any) {
       console.error('[Estimate] Error sending estimate:', error);
@@ -1607,11 +1608,12 @@ export default function EstimateScreen() {
       });
     }
 
-      Alert.alert(
-        'Success',
-        'Estimate saved to database and signature request sent! Your email client should open with the estimate details.',
-        [{ text: 'OK', onPress: () => router.push('/crm') }]
-      );
+      if (Platform.OS === 'web') {
+        alert('Estimate saved to database and signature request sent! Your email client should open with the estimate details.');
+        router.push('/crm');
+      } else {
+        Alert.alert('Success', 'Estimate saved to database and signature request sent! Your email client should open with the estimate details.', [{ text: 'OK', onPress: () => router.push('/crm') }]);
+      }
     } catch (error: any) {
       console.error('[Estimate] Error requesting signature:', error);
       Alert.alert('Error', `Failed to request signature: ${error.message || 'Unknown error'}`);
