@@ -472,7 +472,7 @@ function generateEstimateHtml(params: GenerateHtmlParams): string {
       <div class="company-info">
         <h1>${company?.name || 'Legacy Prime Construction'}</h1>
         <p>${company?.email || 'info@legacyprime.com'}</p>
-        <p>${company?.phone || '(555) 123-4567'}</p>
+        <p>${company?.officePhone || company?.cellPhone || company?.twilioPhoneNumber || ''}</p>
       </div>
       <div class="estimate-info">
         <h2>ESTIMATE</h2>
@@ -556,7 +556,7 @@ function generateEstimateHtml(params: GenerateHtmlParams): string {
     <div class="footer">
       <p>This estimate is valid for 30 days from the date of issue.</p>
       <p>Thank you for considering ${company?.name || 'Legacy Prime Construction'} for your project!</p>
-      <p style="margin-top: 10px;">Questions? Contact us at ${company?.email || 'info@legacyprime.com'} or ${company?.phone || '(555) 123-4567'}</p>
+      <p style="margin-top: 10px;">Questions? Contact us at ${company?.email || 'info@legacyprime.com'}${company?.officePhone || company?.cellPhone || company?.twilioPhoneNumber ? ` or ${company?.officePhone || company?.cellPhone || company?.twilioPhoneNumber}` : ''}</p>
     </div>
   </div>
 </body>

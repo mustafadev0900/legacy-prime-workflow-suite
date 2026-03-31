@@ -1225,7 +1225,7 @@ export default function CRMScreen() {
         `If you have any questions, please don't hesitate to contact us.\n\n` +
         `Best regards,\n` +
         `${company?.name || 'Legacy Prime Construction'}\n` +
-        `${company?.phone || '(555) 123-4567'}`
+        `${company?.officePhone || company?.cellPhone || company?.twilioPhoneNumber || ''}`
       );
 
       const mailtoUrl = `mailto:${client.email}?subject=${emailSubject}&body=${emailBody}`;
