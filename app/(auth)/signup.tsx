@@ -9,6 +9,22 @@ import { useApp } from '@/contexts/AppContext';
 import { auth, supabase } from '@/lib/supabase';
 import Logo from '@/components/Logo';
 
+function validateAddress(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed.length < 8) return 'Please enter a complete address';
+  if (!/^\d{1,5}\s/.test(trimmed)) return 'Address must start with a street number (e.g., 123 Main St)';
+  if (trimmed.split(/\s+/).filter(Boolean).length < 2) return 'Please enter a complete address including street name';
+  const fakePhrases = ['fake', 'test ', 'asdf', 'qwerty', 'xxxx', 'n/a', 'none', 'no address'];
+  if (fakePhrases.some(p => trimmed.toLowerCase().includes(p))) return 'Please enter a valid address';
+  return null;
+}
+
+function validatePostalCode(zip: string): string | null {
+  if (zip.length !== 5) return 'Postal code must be exactly 5 digits';
+  if (zip === '00000') return 'Please enter a valid postal code';
+  return null;
+}
+
 export default function SignupScreen() {
   const { phone: phoneParam, email: emailParam, googleAuthId: googleAuthIdParam, googleName: googleNameParam } =
     useLocalSearchParams<{ phone?: string; email?: string; googleAuthId?: string; googleName?: string }>();
@@ -87,12 +103,14 @@ export default function SignupScreen() {
         showAlert('Error', 'Please enter number of employees (at least 1)');
         return;
       }
-      if (!companyAddress.trim()) {
-        showAlert('Error', 'Please enter your company address');
+      const companyAddrErr = validateAddress(companyAddress);
+      if (companyAddrErr) {
+        showAlert('Error', companyAddrErr);
         return;
       }
-      if (!companyPostalCode.trim()) {
-        showAlert('Error', 'Please enter your postal code');
+      const zipErr = validatePostalCode(companyPostalCode);
+      if (zipErr) {
+        showAlert('Error', zipErr);
         return;
       }
     } else if (accountType === 'employee') {
@@ -112,8 +130,9 @@ export default function SignupScreen() {
         return;
       }
 
-      if (!address.trim()) {
-        showAlert('Error', 'Please enter your address');
+      const empAddrErr = validateAddress(address);
+      if (empAddrErr) {
+        showAlert('Error', empAddrErr);
         return;
       }
     }
