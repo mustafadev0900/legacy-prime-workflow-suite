@@ -1,4 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, FlatList, Platform, Linking, Dimensions, Modal, ActivityIndicator, Image } from 'react-native';
+
+const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
@@ -909,7 +911,7 @@ export default function EstimateScreen() {
       if (savedEstimateId) {
         // Update existing estimate
         console.log('[Estimate] Updating existing estimate:', savedEstimateId);
-        const response = await fetch('/api/update-estimate', {
+        const response = await fetch(`${API_BASE}/api/update-estimate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -934,7 +936,7 @@ export default function EstimateScreen() {
       } else {
         // Create new estimate
         console.log('[Estimate] Creating new estimate...');
-        const response = await fetch('/api/create-estimate', {
+        const response = await fetch(`${API_BASE}/api/create-estimate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1071,7 +1073,7 @@ export default function EstimateScreen() {
       if (savedEstimateId) {
         // Update existing estimate with sent status
         console.log('[Estimate] Updating existing estimate as sent:', savedEstimateId);
-        const response = await fetch('/api/update-estimate', {
+        const response = await fetch(`${API_BASE}/api/update-estimate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1096,7 +1098,7 @@ export default function EstimateScreen() {
       } else {
         // Create new estimate with sent status
         console.log('[Estimate] Creating new estimate as sent...');
-        const response = await fetch('/api/create-estimate', {
+        const response = await fetch(`${API_BASE}/api/create-estimate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1496,7 +1498,7 @@ export default function EstimateScreen() {
       if (savedEstimateId) {
         // Update existing estimate
         console.log('[Estimate] Updating existing estimate:', savedEstimateId);
-        response = await fetch('/api/update-estimate', {
+        response = await fetch(`${API_BASE}/api/update-estimate`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1517,7 +1519,7 @@ export default function EstimateScreen() {
       } else {
         // Create new estimate
         console.log('[Estimate] Creating new estimate');
-        response = await fetch('/api/create-estimate', {
+        response = await fetch(`${API_BASE}/api/create-estimate`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -3607,7 +3609,7 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
             const pageNum = i + 1;
 
             // Get pre-signed upload URL
-            const urlResponse = await fetch('/api/get-s3-upload-url', {
+            const urlResponse = await fetch(`${API_BASE}/api/get-s3-upload-url`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -3641,7 +3643,7 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
           console.log(`[AI Estimate] All ${imageUrls.length} pages uploaded, calling backend API...`);
 
           // Call backend API with image URLs
-          const apiResponse = await fetch('/api/analyze-document', {
+          const apiResponse = await fetch(`${API_BASE}/api/analyze-document`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -3771,7 +3773,7 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
           console.log('[AI Estimate] Calling backend API with image...');
 
           // Call backend API
-          const apiResponse = await fetch('/api/analyze-document', {
+          const apiResponse = await fetch(`${API_BASE}/api/analyze-document`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
