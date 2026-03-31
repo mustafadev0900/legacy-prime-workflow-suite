@@ -1100,23 +1100,22 @@ export default function CRMScreen() {
     setSelectedClientForConversion(null);
 
     try {
-      // Save project directly to database using tRPC
       const baseUrl = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
-      const response = await fetch(`${baseUrl}/trpc/projects.addProject`, {
+      const response = await fetch(`${baseUrl}/api/add-project`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          json: {
-            companyId: company.id,
-            name: `${client.name} - ${estimate.name}`,
-            budget: estimate.total,
-            expenses: 0,
-            progress: 0,
-            status: 'active',
-            image: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400',
-            hoursWorked: 0,
-            startDate: new Date().toISOString(),
-          },
+          companyId: company.id,
+          clientId: client.id,
+          estimateId,
+          name: `${client.name} - ${estimate.name}`,
+          budget: estimate.total,
+          expenses: 0,
+          progress: 0,
+          status: 'active',
+          image: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400',
+          hoursWorked: 0,
+          startDate: new Date().toISOString(),
         }),
       });
 
@@ -1125,26 +1124,11 @@ export default function CRMScreen() {
       }
 
       const data = await response.json();
-      const result = data.result.data.json;
 
-      if (result.success && result.project) {
-        // Add to local state
-        const newProject: Project = {
-          id: result.project.id,
-          name: result.project.name,
-          budget: result.project.budget,
-          expenses: result.project.expenses,
-          progress: result.project.progress,
-          status: result.project.status,
-          image: result.project.image,
-          hoursWorked: result.project.hoursWorked,
-          startDate: result.project.startDate,
-          endDate: result.project.endDate,
-        };
+      if (data.success && data.project) {
+        addProject(data.project);
 
-        addProject(newProject);
-
-        // Remove the estimate from the list (mark as converted)
+        // Mark estimate as converted
         updateEstimate(estimateId, { status: 'approved' });
 
         // Show success message
