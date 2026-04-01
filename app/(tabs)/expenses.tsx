@@ -588,10 +588,10 @@ export default function ExpensesScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.header}>
-          <View>
+          <View style={{ flex: 1, marginRight: 12 }}>
             <Text style={styles.title}>Expenses</Text>
             {selectedProject && (
-              <Text style={styles.subtitle}>{selectedProject.name}</Text>
+              <Text style={styles.subtitle} numberOfLines={1}>{selectedProject.name}</Text>
             )}
           </View>
           <View style={styles.headerButtons}>
@@ -626,9 +626,9 @@ export default function ExpensesScreen() {
           style={styles.projectSelector}
           onPress={() => setShowProjectPicker(true)}
         >
-          <View>
+          <View style={{ flex: 1, marginRight: 8 }}>
             <Text style={styles.projectSelectorLabel}>Project</Text>
-            <Text style={styles.projectSelectorValue}>
+            <Text style={styles.projectSelectorValue} numberOfLines={1}>
               {selectedProject?.name || 'Select Project'}
             </Text>
           </View>
@@ -805,7 +805,7 @@ export default function ExpensesScreen() {
                     )}
 
                     <View style={styles.expenseNameSection}>
-                      <Text style={styles.expenseUploaderName}>
+                      <Text style={styles.expenseUploaderName} numberOfLines={1}>
                         {expense.uploader ? expense.uploader.name : 'Unknown'}
                       </Text>
                       <Text style={styles.expenseType}>{expense.type}</Text>
@@ -836,7 +836,7 @@ export default function ExpensesScreen() {
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Project</Text>
+              <Text style={styles.modalTitle} numberOfLines={1}>Select Project</Text>
               <TouchableOpacity onPress={() => setShowProjectPicker(false)}>
                 <X size={24} color="#1F2937" />
               </TouchableOpacity>
@@ -884,7 +884,7 @@ export default function ExpensesScreen() {
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Expense Type</Text>
+              <Text style={styles.modalTitle} numberOfLines={1}>Select Expense Type</Text>
               <TouchableOpacity onPress={() => setShowExpenseTypePicker(false)}>
                 <X size={24} color="#1F2937" />
               </TouchableOpacity>
@@ -932,7 +932,7 @@ export default function ExpensesScreen() {
         >
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Category</Text>
+              <Text style={styles.modalTitle} numberOfLines={1}>Select Category</Text>
               <TouchableOpacity onPress={() => setShowSubcategoryPicker(false)}>
                 <X size={24} color="#1F2937" />
               </TouchableOpacity>
@@ -954,7 +954,7 @@ export default function ExpensesScreen() {
                     setShowSubcategoryPicker(false);
                   }}
                 >
-                  <Text style={styles.addCustomButtonText}>Add &quot;{customCategory.trim()}&quot;</Text>
+                  <Text style={styles.addCustomButtonText} numberOfLines={1}>Add &quot;{customCategory.trim()}&quot;</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -1339,6 +1339,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700' as const,
     color: '#1F2937',
+    flex: 1,
+    marginRight: 12,
   },
   pickerOption: {
     padding: 16,
