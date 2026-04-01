@@ -3718,7 +3718,11 @@ Generate appropriate line items from the price list that fit this scope of work$
 
   if (inline) {
     return (
-      <View style={styles.inlineContainer}>
+      <KeyboardAvoidingView
+        style={styles.inlineContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
         <ScrollView
           ref={scrollViewRef}
           style={styles.messagesContainer}
@@ -4071,6 +4075,7 @@ Generate appropriate line items from the price list that fit this scope of work$
                   multiline
                   maxLength={500}
                   editable={!isTranscribing}
+                  onFocus={() => setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 150)}
                 />
                 <TouchableOpacity
                   style={styles.micButton}
@@ -4159,7 +4164,7 @@ Generate appropriate line items from the price list that fit this scope of work$
             </TouchableOpacity>
           </TouchableOpacity>
         </Modal>
-      </View>
+      </KeyboardAvoidingView>
     );
   }
 
