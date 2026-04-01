@@ -175,9 +175,9 @@ export default function ClockScreen() {
             <View style={styles.headerTop}>
               <View style={styles.headerTitleRow}>
                 {isWeb && <Clock size={22} color="#2563EB" style={{ marginRight: 10 }} />}
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={[styles.title, isWeb && styles.titleWeb]}>Clock In/Out</Text>
-                  <Text style={styles.subtitle}>{selectedProject.name}</Text>
+                  <Text style={styles.subtitle} numberOfLines={1}>{selectedProject.name}</Text>
                 </View>
               </View>
               <TouchableOpacity
@@ -314,6 +314,8 @@ const styles = StyleSheet.create({
   headerTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    marginRight: 12,
   },
   title: {
     fontSize: 24,
@@ -330,6 +332,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: '#EFF6FF',
     borderRadius: 8,
+    flexShrink: 0,
   },
   changeProjectText: {
     fontSize: 14,
