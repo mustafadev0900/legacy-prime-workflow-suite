@@ -1391,7 +1391,17 @@ export default function ChatScreen() {
           <View style={[styles.chatArea, isSmallScreen && styles.chatAreaMobile]}>
             {selectedChat === 'ai-assistant' ? (
               <View style={styles.aiChatContainer}>
-                {!isSmallScreen && (
+                {isSmallScreen ? (
+                  <View style={[styles.mobileHeader, { paddingTop: insets.top + 6 }]}>
+                    <TouchableOpacity onPress={() => setSelectedChat(null)} style={styles.backButton} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <ChevronLeft size={28} color="#2563EB" />
+                    </TouchableOpacity>
+                    <View style={styles.aiAvatarContainer}>
+                      <Bot size={20} color="#2563EB" strokeWidth={2.5} />
+                    </View>
+                    <Text style={styles.mobileHeaderName}>AI Assistant</Text>
+                  </View>
+                ) : (
                   <View style={styles.chatHeader}>
                     <View style={styles.aiHeaderInfo}>
                       <View style={styles.aiAvatarContainer}>
