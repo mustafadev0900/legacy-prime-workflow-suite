@@ -2488,6 +2488,9 @@ Generate appropriate line items from the price list that fit this scope of work$
 
           mediaRecorderRef.current = null;
           audioChunksRef.current = [];
+        } else {
+          // No active recorder — nothing to transcribe
+          setIsTranscribing(false);
         }
 
         // Stop the stream if NOT in conversation mode (for one-time recordings)
@@ -2501,32 +2504,28 @@ Generate appropriate line items from the price list that fit this scope of work$
           streamRef.current = null;
         }
       } else {
-        if (nativeRecorder.isRecording) {
-          try {
-            await nativeRecorder.stop();
-            const uri = nativeRecorder.uri;
-            if (uri) {
-              const base64 = await FileSystem.readAsStringAsync(uri, {
-                encoding: 'base64' as any,
-              });
-              await transcribeAudioBase64(base64, sendImmediately);
-            } else {
-              // No URI — nothing to transcribe, clear the spinner
-              setIsTranscribing(false);
-            }
-          } catch (recordError) {
-            console.error('Error stopping recording:', recordError);
+        // Native (iOS/Android): always attempt stop — don't rely on nativeRecorder.isRecording
+        // which can read stale state inside this closure.
+        try {
+          await nativeRecorder.stop();
+          const uri = nativeRecorder.uri;
+          if (uri) {
+            const base64 = await FileSystem.readAsStringAsync(uri, {
+              encoding: 'base64' as any,
+            });
+            await transcribeAudioBase64(base64, sendImmediately);
+          } else {
             setIsTranscribing(false);
-          } finally {
-            try {
-              await AudioModule.setAudioModeAsync({ allowsRecording: false });
-            } catch (audioModeError) {
-              console.error('Error resetting audio mode:', audioModeError);
-            }
           }
-        } else {
-          // Recorder was not active — nothing to transcribe, clear the spinner
+        } catch (recordError) {
+          console.error('Error stopping recording:', recordError);
           setIsTranscribing(false);
+        } finally {
+          try {
+            await AudioModule.setAudioModeAsync({ allowsRecording: false });
+          } catch (audioModeError) {
+            console.error('Error resetting audio mode:', audioModeError);
+          }
         }
       }
     } catch (error) {
