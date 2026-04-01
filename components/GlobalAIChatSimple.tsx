@@ -2543,7 +2543,7 @@ Generate appropriate line items from the price list that fit this scope of work$
       const response = await fetch(`${API_BASE}/api/speech-to-text`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioBase64: base64 }),
+        body: JSON.stringify({ audioBase64: base64, audioExtension: 'm4a' }),
       });
 
       if (!response.ok) {

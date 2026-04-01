@@ -8,7 +8,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { audioBase64 } = req.body;
+    const { audioBase64, audioExtension = 'webm' } = req.body;
 
     if (!audioBase64) {
       return res.status(400).json({ error: 'Audio data is required' });
@@ -23,8 +23,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Convert base64 to buffer
     const audioBuffer = Buffer.from(audioBase64, 'base64');
 
-    // Create a temporary file
-    const tempFile = `/tmp/audio-${Date.now()}.webm`;
+    // Use the extension sent by the client (m4a for native iOS/Android, webm for web)
+    const safeExt = /^[a-z0-9]+$/.test(audioExtension) ? audioExtension : 'webm';
+    const tempFile = `/tmp/audio-${Date.now()}.${safeExt}`;
     fs.writeFileSync(tempFile, audioBuffer);
 
     // Use Whisper translation to convert any language to English
