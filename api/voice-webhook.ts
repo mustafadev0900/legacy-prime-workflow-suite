@@ -10,17 +10,21 @@ interface State {
   step: number;
   name: string;
   phone: string;
-  project: string;
-  budget: string;
+  answers: string[];   // one answer per custom question, in order
 }
 
 interface AssistantConfig {
   enabled: boolean;
   greeting: string;
-  projectQuestion: string;
-  budgetQuestion: string;
+  customQuestions: string[];
   autoAddToCRM: boolean;
 }
+
+const DEFAULT_QUESTIONS = [
+  'What type of project do you need help with?',
+  'What is your budget for this project?',
+  'When are you looking to start?',
+];
 
 function escapeXml(str: string): string {
   return str
@@ -48,15 +52,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const conversationState = (req.query.conversationState as string) || body.conversationState;
   const webhookUrl = 'https://legacy-prime-workflow-suite.vercel.app/api/voice-webhook';
 
-  // Fetch company + assistant config in parallel
+  // ── Load company + assistant config ────────────────────────────────────────
   let companyName = 'Legacy Prime Construction';
   let companyId: string | null = null;
 
   const assistantConfig: AssistantConfig = {
     enabled: true,
     greeting: `Thank you for calling ${companyName}. How can I help you today?`,
-    projectQuestion: 'What type of project do you need help with?',
-    budgetQuestion: 'What is your budget for this project?',
+    customQuestions: [...DEFAULT_QUESTIONS],
     autoAddToCRM: true,
   };
 
@@ -74,7 +77,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         assistantConfig.greeting = `Thank you for calling ${companyName}. How can I help you today?`;
         console.log('[Voice Webhook] Company found:', companyName, companyId);
 
-        // Load config now that we have companyId
         const { data: config } = await supabase
           .from('call_assistant_config')
           .select('*')
@@ -84,10 +86,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (config) {
           assistantConfig.enabled = config.enabled ?? true;
           assistantConfig.greeting = config.greeting || assistantConfig.greeting;
-          assistantConfig.projectQuestion = config.project_question || assistantConfig.projectQuestion;
-          assistantConfig.budgetQuestion = config.budget_question || assistantConfig.budgetQuestion;
           assistantConfig.autoAddToCRM = config.auto_add_to_crm ?? true;
-          console.log('[Voice Webhook] Loaded assistant config for company:', companyId);
+
+          // Prefer new custom_questions; fall back to legacy fields for old rows
+          if (Array.isArray(config.custom_questions) && config.custom_questions.length > 0) {
+            assistantConfig.customQuestions = config.custom_questions;
+          } else {
+            assistantConfig.customQuestions = [
+              config.project_question || DEFAULT_QUESTIONS[0],
+              config.budget_question  || DEFAULT_QUESTIONS[1],
+              DEFAULT_QUESTIONS[2],
+            ];
+          }
+          console.log('[Voice Webhook] Loaded config, questions:', assistantConfig.customQuestions.length);
         }
       }
     } catch (e: any) {
@@ -95,25 +106,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // If assistant is disabled, politely decline
+  // ── Disabled check ──────────────────────────────────────────────────────────
   if (!assistantConfig.enabled) {
     console.log('[Voice Webhook] Assistant disabled for company:', companyId);
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="alice">Thank you for calling ${companyName}. Our office is currently unavailable. Please call back during business hours or leave a message on our website.</Say>
+  <Say voice="alice">Thank you for calling ${escapeXml(companyName)}. Our office is currently unavailable. Please call back during business hours or leave a message on our website.</Say>
   <Hangup/>
 </Response>`;
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(twiml);
   }
 
-  // Initialize or restore state
+  // ── Restore state ───────────────────────────────────────────────────────────
   let state: State = {
     step: 0,
     name: '',
     phone: From || '',
-    project: '',
-    budget: '',
+    answers: [],
   };
 
   if (conversationState && typeof conversationState === 'string') {
@@ -124,74 +134,57 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // First call - send greeting
+  // ── Initial greeting ────────────────────────────────────────────────────────
   if (state.step === 0 && !SpeechResult) {
     console.log('[Voice Webhook] Sending greeting for:', companyName);
     state.step = 1;
-
     const encodedState = Buffer.from(JSON.stringify(state)).toString('base64');
-
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather input="speech" action="${webhookUrl}?conversationState=${encodeURIComponent(encodedState)}" method="POST" speechTimeout="auto">
     <Say voice="alice">${escapeXml(assistantConfig.greeting)}</Say>
   </Gather>
 </Response>`;
-
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(twiml);
   }
 
-  // Process speech input
+  // ── Process speech ──────────────────────────────────────────────────────────
   if (SpeechResult) {
-    console.log('[Voice Webhook] Processing speech:', SpeechResult);
-    state.step++;
-
-    const lower = SpeechResult.toLowerCase();
-
-    // Extract name — match "my name is John", "I'm John", or just "John Smith"
     if (!state.name) {
-      const nameMatch = SpeechResult.match(/(?:name is|i(?:'|')?m|this is|call me)\s+([a-z]+(?:\s+[a-z]+)?)/i)
-        || SpeechResult.match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)$/);
-      if (nameMatch && nameMatch[1]) {
+      // First response is always treated as the caller's name
+      const nameMatch =
+        SpeechResult.match(/(?:name is|i(?:'|')?m|this is|call me)\s+([a-z]+(?:\s+[a-z]+)?)/i) ||
+        SpeechResult.match(/^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)$/);
+      if (nameMatch?.[1]) {
         state.name = nameMatch[1].trim();
-        console.log('[Voice Webhook] Extracted name:', state.name);
       } else if (SpeechResult.trim().split(' ').length <= 3) {
         state.name = SpeechResult.trim();
-        console.log('[Voice Webhook] Extracted name (fallback):', state.name);
+      } else {
+        // Take first two words as name fallback
+        state.name = SpeechResult.trim().split(' ').slice(0, 2).join(' ');
       }
-    }
-
-    // Extract project
-    if (!state.project) {
-      if (lower.includes('kitchen')) state.project = 'Kitchen';
-      else if (lower.includes('bathroom')) state.project = 'Bathroom';
-      else if (lower.includes('remodel') || lower.includes('renovation')) state.project = 'Remodel';
-      else if (lower.includes('addition')) state.project = 'Addition';
-      if (state.project) console.log('[Voice Webhook] Extracted project:', state.project);
-    }
-
-    // Extract budget — matches $15000, 15,000, 15000, $5k etc.
-    if (!state.budget) {
-      const budgetMatch = SpeechResult.match(/\$?\d[\d,]*(?:k)?/i);
-      if (budgetMatch) {
-        const raw = budgetMatch[0];
-        state.budget = raw.startsWith('$') ? raw : `$${raw}`;
-        console.log('[Voice Webhook] Extracted budget:', state.budget);
-      }
+      console.log('[Voice Webhook] Captured name:', state.name);
+    } else {
+      // Subsequent responses are answers to custom questions in order
+      state.answers = [...(state.answers || []), SpeechResult.trim()];
+      console.log(`[Voice Webhook] Answer ${state.answers.length}/${assistantConfig.customQuestions.length}:`, SpeechResult);
     }
   }
 
-  // Check if we have enough information to qualify the lead
-  const hasEnoughInfo = state.name && state.project && state.budget;
+  // ── Check if all questions answered ────────────────────────────────────────
+  const allAnswered = state.name && state.answers.length >= assistantConfig.customQuestions.length;
 
-  if (hasEnoughInfo) {
-    console.log('[Voice Webhook] ✅ QUALIFIED LEAD:', state);
+  if (allAnswered) {
+    console.log('[Voice Webhook] ✅ All questions answered, saving lead:', state.name);
 
-    // Save lead to clients table (if enabled)
     if (companyId && assistantConfig.autoAddToCRM) {
       try {
-        const notes = `[AI Call] ${state.project || 'Project'}${state.budget ? ' - Budget: ' + state.budget : ''}`;
+        const notesLines = assistantConfig.customQuestions
+          .map((q, i) => `Q: ${q}\nA: ${state.answers[i] || 'No answer'}`)
+          .join('\n\n');
+        const notes = `[AI Call]\n${notesLines}`;
+
         const { data: newClient, error: clientError } = await supabase
           .from('clients')
           .insert({
@@ -216,40 +209,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (err: any) {
         console.error('[Voice Webhook] Error saving lead:', err.message);
       }
-    } else if (!assistantConfig.autoAddToCRM) {
-      console.log('[Voice Webhook] Auto-add to CRM disabled — lead not saved');
-    } else {
-      console.warn('[Voice Webhook] No companyId — lead not saved to CRM');
     }
 
-    const closingMessage = `Thank you ${state.name.split(' ')[0]}. We have received your ${state.project || 'project'} inquiry${state.budget ? ' with a budget of ' + state.budget : ''}. We will call you back within 24 hours.`;
+    const firstName = state.name.split(' ')[0];
+    const closingMessage = `Thank you ${firstName}. We have received your information and will be in touch within 24 hours. Have a great day!`;
 
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="alice">${escapeXml(closingMessage)}</Say>
   <Pause length="1"/>
-  <Say voice="alice">Have a great day!</Say>
   <Hangup/>
 </Response>`;
-
     res.setHeader('Content-Type', 'text/xml');
     return res.status(200).send(twiml);
   }
 
-  // Ask for missing information
-  let question = '';
+  // ── Ask next question ───────────────────────────────────────────────────────
+  let question: string;
   if (!state.name) {
-    question = 'What is your name?';
-  } else if (!state.project) {
-    question = assistantConfig.projectQuestion;
-  } else if (!state.budget) {
-    question = assistantConfig.budgetQuestion;
+    question = 'May I have your name please?';
+  } else {
+    question = assistantConfig.customQuestions[state.answers.length];
   }
 
   console.log('[Voice Webhook] Asking:', question);
 
   const encodedState = Buffer.from(JSON.stringify(state)).toString('base64');
-
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Gather input="speech" action="${webhookUrl}?conversationState=${encodeURIComponent(encodedState)}" method="POST" speechTimeout="auto">

@@ -365,12 +365,16 @@ export default function CRMScreen() {
     enabled: true,
     businessName: 'Legacy Prime Construction',
     greeting: 'Thank you for calling us. How can I help you today?',
-    projectQuestion: 'What type of project do you need help with?',
-    budgetQuestion: 'What is your budget for this project?',
+    customQuestions: [
+      'What type of project do you need help with?',
+      'What is your budget for this project?',
+      'When are you looking to start?',
+    ] as string[],
     autoAddToCRM: true,
     autoSchedule: true,
     seriousLeadCriteria: 'Budget over $10,000 and ready to start within 3 months',
   });
+  const [newQuestionText, setNewQuestionText] = useState('');
   const [isLoadingAssistantConfig, setIsLoadingAssistantConfig] = useState(false);
   const [isSavingAssistantConfig, setIsSavingAssistantConfig] = useState(false);
 
@@ -384,12 +388,20 @@ export default function CRMScreen() {
         .eq('company_id', company.id)
         .single();
       if (data) {
+        // Prefer new custom_questions array; fall back to legacy columns for old rows
+        const loadedQuestions =
+          Array.isArray(data.custom_questions) && data.custom_questions.length > 0
+            ? data.custom_questions
+            : [
+                data.project_question || 'What type of project do you need help with?',
+                data.budget_question  || 'What is your budget for this project?',
+                'When are you looking to start?',
+              ];
         setCallAssistantConfig(prev => ({
           ...prev,
           enabled: data.enabled ?? true,
           greeting: data.greeting || prev.greeting,
-          projectQuestion: data.project_question || prev.projectQuestion,
-          budgetQuestion: data.budget_question || prev.budgetQuestion,
+          customQuestions: loadedQuestions,
           autoAddToCRM: data.auto_add_to_crm ?? true,
         }));
       }
@@ -410,8 +422,10 @@ export default function CRMScreen() {
           company_id: company.id,
           enabled: callAssistantConfig.enabled,
           greeting: callAssistantConfig.greeting,
-          project_question: callAssistantConfig.projectQuestion,
-          budget_question: callAssistantConfig.budgetQuestion,
+          // Keep legacy columns in sync for any old consumers
+          project_question: callAssistantConfig.customQuestions[0] || '',
+          budget_question: callAssistantConfig.customQuestions[1] || '',
+          custom_questions: callAssistantConfig.customQuestions,
           auto_add_to_crm: callAssistantConfig.autoAddToCRM,
           updated_at: new Date().toISOString(),
         }, { onConflict: 'company_id' });
@@ -2715,24 +2729,62 @@ export default function CRMScreen() {
               <View style={styles.configSection}>
                 <Text style={styles.configTitle}>Qualification Questions</Text>
                 <Text style={styles.configDescription}>
-                  These questions will be asked to qualify leads
+                  These questions are asked in order after the caller gives their name. Tap to edit, swipe trash to remove.
                 </Text>
-                <Text style={styles.inputLabel}>Project Question</Text>
-                <TextInput
-                  style={styles.configInput}
-                  value={callAssistantConfig.projectQuestion}
-                  onChangeText={(text) => setCallAssistantConfig(prev => ({ ...prev, projectQuestion: text }))}
-                  placeholder="What type of project do you need help with?"
-                  placeholderTextColor="#9CA3AF"
-                />
-                <Text style={styles.inputLabel}>Budget Question</Text>
-                <TextInput
-                  style={styles.configInput}
-                  value={callAssistantConfig.budgetQuestion}
-                  onChangeText={(text) => setCallAssistantConfig(prev => ({ ...prev, budgetQuestion: text }))}
-                  placeholder="What is your budget for this project?"
-                  placeholderTextColor="#9CA3AF"
-                />
+
+                {callAssistantConfig.customQuestions.map((q, index) => (
+                  <View key={index} style={styles.questionRow}>
+                    <View style={styles.questionNumberBadge}>
+                      <Text style={styles.questionNumber}>{index + 1}</Text>
+                    </View>
+                    <TextInput
+                      style={[styles.configInput, styles.questionInput]}
+                      value={q}
+                      onChangeText={(text) => {
+                        const updated = [...callAssistantConfig.customQuestions];
+                        updated[index] = text;
+                        setCallAssistantConfig(prev => ({ ...prev, customQuestions: updated }));
+                      }}
+                      placeholder={`Question ${index + 1}`}
+                      placeholderTextColor="#9CA3AF"
+                    />
+                    {callAssistantConfig.customQuestions.length > 1 && (
+                      <TouchableOpacity
+                        style={styles.removeQuestionBtn}
+                        onPress={() => {
+                          const updated = callAssistantConfig.customQuestions.filter((_, i) => i !== index);
+                          setCallAssistantConfig(prev => ({ ...prev, customQuestions: updated }));
+                        }}
+                      >
+                        <Trash2 size={18} color="#EF4444" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+
+                <View style={styles.addQuestionRow}>
+                  <TextInput
+                    style={[styles.configInput, styles.addQuestionInput]}
+                    value={newQuestionText}
+                    onChangeText={setNewQuestionText}
+                    placeholder="Type a new question..."
+                    placeholderTextColor="#9CA3AF"
+                  />
+                  <TouchableOpacity
+                    style={[styles.addQuestionBtn, !newQuestionText.trim() && styles.addQuestionBtnDisabled]}
+                    disabled={!newQuestionText.trim()}
+                    onPress={() => {
+                      if (!newQuestionText.trim()) return;
+                      setCallAssistantConfig(prev => ({
+                        ...prev,
+                        customQuestions: [...prev.customQuestions, newQuestionText.trim()],
+                      }));
+                      setNewQuestionText('');
+                    }}
+                  >
+                    <Plus size={20} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.configSection}>
@@ -4508,6 +4560,55 @@ const styles = StyleSheet.create({
   aiSendButtonDisabled: {
     backgroundColor: '#9CA3AF',
     opacity: 0.5,
+  },
+  questionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  questionNumberBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  questionNumber: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#2563EB',
+  },
+  questionInput: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  removeQuestionBtn: {
+    padding: 6,
+    flexShrink: 0,
+  },
+  addQuestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 4,
+  },
+  addQuestionInput: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  addQuestionBtn: {
+    backgroundColor: '#2563EB',
+    borderRadius: 8,
+    padding: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  addQuestionBtnDisabled: {
+    backgroundColor: '#9CA3AF',
   },
   callAssistantButton: {
     flexDirection: 'row',
