@@ -23,7 +23,6 @@ interface AssistantConfig {
 const DEFAULT_QUESTIONS = [
   'What type of project do you need help with?',
   'What is your budget for this project?',
-  'When are you looking to start?',
 ];
 
 function escapeXml(str: string): string {
@@ -180,10 +179,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (companyId && assistantConfig.autoAddToCRM) {
       try {
-        const notesLines = assistantConfig.customQuestions
-          .map((q, i) => `Q: ${q}\nA: ${state.answers[i] || 'No answer'}`)
-          .join('\n\n');
-        const notes = `[AI Call]\n${notesLines}`;
+        // Build compact one-line summary for CRM card display
+        const isDefault =
+          assistantConfig.customQuestions.length === 2 &&
+          assistantConfig.customQuestions[0] === DEFAULT_QUESTIONS[0] &&
+          assistantConfig.customQuestions[1] === DEFAULT_QUESTIONS[1];
+
+        let notes: string;
+        if (isDefault) {
+          const project = state.answers[0] || '';
+          const budget = state.answers[1] || '';
+          notes = `[AI Call] ${project} - Budget: ${budget}`.trim();
+        } else {
+          // Custom questions: compact joined summary
+          const summary = state.answers
+            .map((a, i) => a || 'No answer')
+            .join(' · ');
+          notes = `[AI Call] ${summary}`.trim();
+        }
 
         const { data: newClient, error: clientError } = await supabase
           .from('clients')

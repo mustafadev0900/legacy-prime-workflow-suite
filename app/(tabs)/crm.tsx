@@ -1575,7 +1575,20 @@ export default function CRMScreen() {
                       );
                     })()}
                   </View>
-                  {client.address && <Text style={styles.clientAddress}>{client.address}</Text>}
+                  {client.address && (
+                    client.address.startsWith('[AI Call]') ? (
+                      <View style={styles.aiCallRow}>
+                        <View style={styles.aiCallBadge}>
+                          <Text style={styles.aiCallBadgeText}>AI Call</Text>
+                        </View>
+                        <Text style={styles.aiCallSummary} numberOfLines={2}>
+                          {client.address.replace(/^\[AI Call\]\s*/, '')}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.clientAddress}>{client.address}</Text>
+                    )
+                  )}
                   <Text style={styles.clientEmail}>{client.email}</Text>
                   <Text style={styles.clientPhone}>{client.phone}</Text>
                   <Text style={styles.clientSource}>{client.source}</Text>
@@ -2763,14 +2776,24 @@ export default function CRMScreen() {
               <View style={styles.configSection}>
                 <Text style={styles.configTitle}>Qualification Questions</Text>
                 <Text style={styles.configDescription}>
-                  These questions are asked in order after the caller gives their name. Tap to edit, swipe trash to remove.
+                  These questions are asked in order on every call. Tap to edit, trash to remove.
                 </Text>
+
+                {/* Locked built-in name question */}
+                <View style={styles.questionRow}>
+                  <View style={[styles.questionNumberBadge, { backgroundColor: '#E5E7EB' }]}>
+                    <Text style={[styles.questionNumber, { color: '#9CA3AF' }]}>1</Text>
+                  </View>
+                  <View style={[styles.configInput, styles.questionInput, { justifyContent: 'center', backgroundColor: '#F9FAFB' }]}>
+                    <Text style={{ color: '#9CA3AF', fontSize: 14 }}>What's your name? (built-in, always first)</Text>
+                  </View>
+                </View>
 
                 {callAssistantConfig.customQuestions.map((q, index) => (
                   <View key={index}>
                     <View style={styles.questionRow}>
                       <View style={styles.questionNumberBadge}>
-                        <Text style={styles.questionNumber}>{index + 1}</Text>
+                        <Text style={styles.questionNumber}>{index + 2}</Text>
                       </View>
                       <TextInput
                         style={[styles.configInput, styles.questionInput, q.length >= 120 ? styles.inputError : undefined]}
@@ -3860,6 +3883,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4B5563',
     marginBottom: 4,
+  },
+  aiCallRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginBottom: 4,
+    flexWrap: 'wrap' as const,
+  },
+  aiCallBadge: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  aiCallBadgeText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: '#2563EB',
+  },
+  aiCallSummary: {
+    fontSize: 13,
+    color: '#374151',
+    flex: 1,
+    flexShrink: 1,
   },
   clientAddress: {
     fontSize: 14,
