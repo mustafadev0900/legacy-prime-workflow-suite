@@ -1581,16 +1581,22 @@ export default function CRMScreen() {
                     })()}
                   </View>
                   {client.address && (
-                    client.address.startsWith('[AI Call]') ? (
-                      <View style={styles.aiCallRow}>
-                        <View style={styles.aiCallBadge}>
-                          <Text style={styles.aiCallBadgeText}>AI Call</Text>
+                    client.address.startsWith('[AI Call]') ? (() => {
+                      const lines = client.address.replace(/^\[AI Call\]\n?/, '').split('\n').filter(Boolean);
+                      return (
+                        <View style={styles.aiCallBlock}>
+                          <View style={styles.aiCallRow}>
+                            <View style={styles.aiCallBadge}>
+                              <Text style={styles.aiCallBadgeText}>AI Call</Text>
+                            </View>
+                            <Text style={styles.aiCallSummary} numberOfLines={1}>{lines[0] || ''}</Text>
+                          </View>
+                          {lines.slice(1).map((line, i) => (
+                            <Text key={i} style={styles.aiCallLine} numberOfLines={1}>{line}</Text>
+                          ))}
                         </View>
-                        <Text style={styles.aiCallSummary} numberOfLines={2}>
-                          {client.address.replace(/^\[AI Call\]\s*/, '')}
-                        </Text>
-                      </View>
-                    ) : (
+                      );
+                    })() : (
                       <Text style={styles.clientAddress}>{client.address}</Text>
                     )
                   )}
@@ -3902,12 +3908,19 @@ const styles = StyleSheet.create({
     color: '#4B5563',
     marginBottom: 4,
   },
+  aiCallBlock: {
+    marginBottom: 4,
+    gap: 2,
+  },
   aiCallRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 6,
-    marginBottom: 4,
-    flexWrap: 'wrap' as const,
+  },
+  aiCallLine: {
+    fontSize: 13,
+    color: '#374151',
+    marginLeft: 2,
   },
   aiCallBadge: {
     backgroundColor: '#EFF6FF',

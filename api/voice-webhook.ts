@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import OpenAI from 'openai';
 
 const supabase = createClient(
   process.env.EXPO_PUBLIC_SUPABASE_URL!,
@@ -25,6 +26,47 @@ const DEFAULT_QUESTIONS = [
   'What type of project do you need help with?',
   'What is your budget for this project?',
 ];
+
+async function formatCallSummary(
+  questions: string[],
+  answers: string[]
+): Promise<string> {
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    const pairs = questions
+      .map((q, i) => `Q: ${q}\nA: ${answers[i] || '(no answer)'}`)
+      .join('\n\n');
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 120,
+      temperature: 0,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You format phone call notes for a construction CRM into a compact one-line summary. ' +
+            'Rules:\n' +
+            '- First Q is always project type → extract 2-4 word label (e.g. "Kitchen Remodel")\n' +
+            '- Second Q is always budget → extract dollar amount (e.g. "$30,000" or "$30k"). If unclear write the cleaned answer.\n' +
+            '- Additional Qs → derive a short label from the question (e.g. "Start", "Address", "Timeline") and clean the answer to 3-6 words.\n' +
+            '- Format: "ProjectType - Budget: $X\\nLabel: Value\\nLabel: Value"\n' +
+            '- Use \\n to separate lines. No bullet points. No markdown. Return ONLY the formatted string.',
+        },
+        {
+          role: 'user',
+          content: pairs,
+        },
+      ],
+    });
+
+    return completion.choices[0]?.message?.content?.trim() || answers.join(' · ');
+  } catch (e: any) {
+    console.warn('[Voice Webhook] OpenAI format failed, using raw answers:', e.message);
+    return answers.join(' · ');
+  }
+}
 
 function escapeXml(str: string): string {
   return str
@@ -184,12 +226,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (companyId && assistantConfig.autoAddToCRM) {
       try {
-        // Build compact one-line summary for CRM card display
-        // Always compact: first answer = project, second = budget
-        const project = state.answers[0] || '';
-        const budget = state.answers[1] || '';
-        let notes = `[AI Call] ${project}`.trim();
-        if (budget) notes += ` - Budget: ${budget}`;
+        // Use OpenAI to clean + format all Q&A into a compact summary
+        const summary = await formatCallSummary(assistantConfig.customQuestions, state.answers);
+        const notes = `[AI Call]\n${summary}`;
 
         const { data: newClient, error: clientError } = await supabase
           .from('clients')
@@ -243,7 +282,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const encodedState = Buffer.from(JSON.stringify(state)).toString('base64');
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Gather input="speech" action="${webhookUrl}?conversationState=${encodeURIComponent(encodedState)}" method="POST" speechTimeout="auto">
+  <Gather input="speech" action="${webhookUrl}?conversationState=${encodeURIComponent(encodedState)}" method="POST" speechTimeout="3">
     <Say voice="alice">${escapeXml(question)}</Say>
   </Gather>
 </Response>`;
