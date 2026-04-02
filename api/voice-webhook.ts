@@ -52,14 +52,15 @@ async function formatCallSummary(
             'You format phone call transcripts for a construction CRM. Output a clean multi-line summary.',
             '',
             'Rules:',
-            '- Q1 is always the project type. Strip filler like "I need help with", "I want", "so I need". Keep 2-5 words. Example: "Kitchen Remodel".',
-            '- Q2 is always the budget. Extract the dollar amount from speech. Examples: "my budget is ten thousand dollars" → "$10,000". "around thirty k" → "$30k". "10,000 dollars" → "$10,000". Numbers with commas like 10,000 mean ten thousand. If no number found, write the cleaned answer.',
-            '- Q3+ : derive a short label from the question text (e.g. "Start", "Address", "Timeline", "Permits"). Clean the answer to 3-6 words.',
+            '- Q1 is always the budget. Extract the dollar amount from speech. Examples: "my budget is ten thousand dollars" → "$10,000". "around thirty k" → "$30k". "10,000 dollars" → "$10,000". If no number found, write the cleaned answer.',
+            '- Q2+ : derive a short label from the question text (e.g. "Start", "Address", "Timeline", "Permits", "Phone"). Clean the answer to 3-6 words.',
+            '- Include EVERY question and answer — do not skip or omit any, even if the answer seems redundant (e.g. phone number, address).',
             '',
-            'Output format — one item per line, exactly like this:',
+            'Output format — first line combines project + budget, then one item per line:',
             'Kitchen Remodel - Budget: $10,000',
             'Start: Next month',
             'Address: 123 Main Street Los Angeles',
+            'Phone: 845-319-7137',
             '',
             'Do NOT write \\n literally. Use actual line breaks. No bullet points. No markdown. Return ONLY the formatted lines.',
           ].join('\n'),
@@ -247,9 +248,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('[Voice Webhook] Name captured:', state.name);
   }
 
-  // ── Step 2+: custom question answers ────────────────────────────────────
-  if (state.step >= 2 && SpeechResult && state.name) {
-    // Only add answer if we're past name step and there's an outstanding question
+  // ── Step 2+: custom question answers (else if prevents name answer bleeding in) ──
+  else if (state.step >= 2 && SpeechResult && state.name) {
     if (state.answers.length < assistantConfig.customQuestions.length) {
       state.answers = [...state.answers, SpeechResult.trim()];
       console.log(`[Voice Webhook] Answer ${state.answers.length}/${assistantConfig.customQuestions.length}:`, SpeechResult);
