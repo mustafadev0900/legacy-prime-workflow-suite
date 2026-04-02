@@ -375,7 +375,17 @@ export default function CRMScreen() {
     seriousLeadCriteria: 'Budget over $10,000 and ready to start within 3 months',
   });
   const [newQuestionText, setNewQuestionText] = useState('');
+  const [newQuestionError, setNewQuestionError] = useState('');
   const [isLoadingAssistantConfig, setIsLoadingAssistantConfig] = useState(false);
+
+  const validateQuestion = (q: string): string | null => {
+    const trimmed = q.trim();
+    if (!trimmed) return 'Question cannot be empty.';
+    if (trimmed.length < 10) return 'Question is too short (min 10 characters).';
+    const letterCount = (trimmed.match(/[a-zA-Z]/g) || []).length;
+    if (letterCount < 5) return 'Question must contain real words.';
+    return null;
+  };
   const [isSavingAssistantConfig, setIsSavingAssistantConfig] = useState(false);
 
   const loadCallAssistantConfig = async () => {
@@ -414,6 +424,20 @@ export default function CRMScreen() {
 
   const saveCallAssistantConfig = async () => {
     if (!company?.id) return;
+
+    // Validate questions before saving
+    if (callAssistantConfig.customQuestions.length === 0) {
+      Alert.alert('Validation Error', 'Please add at least 1 question before saving.');
+      return;
+    }
+    for (let i = 0; i < callAssistantConfig.customQuestions.length; i++) {
+      const err = validateQuestion(callAssistantConfig.customQuestions[i]);
+      if (err) {
+        Alert.alert('Validation Error', `Question ${i + 1}: ${err}`);
+        return;
+      }
+    }
+
     setIsSavingAssistantConfig(true);
     try {
       const { error } = await supabase
@@ -2764,9 +2788,12 @@ export default function CRMScreen() {
 
                 <View style={styles.addQuestionRow}>
                   <TextInput
-                    style={[styles.configInput, styles.addQuestionInput]}
+                    style={[styles.configInput, styles.addQuestionInput, newQuestionError ? styles.inputError : undefined]}
                     value={newQuestionText}
-                    onChangeText={setNewQuestionText}
+                    onChangeText={(text) => {
+                      setNewQuestionText(text);
+                      if (newQuestionError) setNewQuestionError('');
+                    }}
                     placeholder="Type a new question..."
                     placeholderTextColor="#9CA3AF"
                   />
@@ -2774,17 +2801,25 @@ export default function CRMScreen() {
                     style={[styles.addQuestionBtn, !newQuestionText.trim() && styles.addQuestionBtnDisabled]}
                     disabled={!newQuestionText.trim()}
                     onPress={() => {
-                      if (!newQuestionText.trim()) return;
+                      const err = validateQuestion(newQuestionText);
+                      if (err) {
+                        setNewQuestionError(err);
+                        return;
+                      }
                       setCallAssistantConfig(prev => ({
                         ...prev,
                         customQuestions: [...prev.customQuestions, newQuestionText.trim()],
                       }));
                       setNewQuestionText('');
+                      setNewQuestionError('');
                     }}
                   >
                     <Plus size={20} color="#FFFFFF" />
                   </TouchableOpacity>
                 </View>
+                {newQuestionError ? (
+                  <Text style={styles.questionErrorText}>{newQuestionError}</Text>
+                ) : null}
               </View>
 
               <View style={styles.configSection}>
@@ -4609,6 +4644,16 @@ const styles = StyleSheet.create({
   },
   addQuestionBtnDisabled: {
     backgroundColor: '#9CA3AF',
+  },
+  inputError: {
+    borderColor: '#EF4444',
+    borderWidth: 1,
+  },
+  questionErrorText: {
+    fontSize: 12,
+    color: '#EF4444',
+    marginTop: 4,
+    marginLeft: 2,
   },
   callAssistantButton: {
     flexDirection: 'row',
