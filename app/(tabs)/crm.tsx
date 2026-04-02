@@ -2767,48 +2767,65 @@ export default function CRMScreen() {
                 </Text>
 
                 {callAssistantConfig.customQuestions.map((q, index) => (
-                  <View key={index} style={styles.questionRow}>
-                    <View style={styles.questionNumberBadge}>
-                      <Text style={styles.questionNumber}>{index + 1}</Text>
-                    </View>
-                    <TextInput
-                      style={[styles.configInput, styles.questionInput]}
-                      value={q}
-                      maxLength={120}
-                      onChangeText={(text) => {
-                        const updated = [...callAssistantConfig.customQuestions];
-                        updated[index] = text;
-                        setCallAssistantConfig(prev => ({ ...prev, customQuestions: updated }));
-                      }}
-                      placeholder={`Question ${index + 1}`}
-                      placeholderTextColor="#9CA3AF"
-                    />
-                    {callAssistantConfig.customQuestions.length > 1 && (
-                      <TouchableOpacity
-                        style={styles.removeQuestionBtn}
-                        onPress={() => {
-                          const updated = callAssistantConfig.customQuestions.filter((_, i) => i !== index);
+                  <View key={index}>
+                    <View style={styles.questionRow}>
+                      <View style={styles.questionNumberBadge}>
+                        <Text style={styles.questionNumber}>{index + 1}</Text>
+                      </View>
+                      <TextInput
+                        style={[styles.configInput, styles.questionInput, q.length >= 120 ? styles.inputError : undefined]}
+                        value={q}
+                        maxLength={120}
+                        onChangeText={(text) => {
+                          const updated = [...callAssistantConfig.customQuestions];
+                          updated[index] = text;
                           setCallAssistantConfig(prev => ({ ...prev, customQuestions: updated }));
                         }}
-                      >
-                        <Trash2 size={18} color="#EF4444" />
-                      </TouchableOpacity>
+                        placeholder={`Question ${index + 1}`}
+                        placeholderTextColor="#9CA3AF"
+                      />
+                      {callAssistantConfig.customQuestions.length > 1 && (
+                        <TouchableOpacity
+                          style={styles.removeQuestionBtn}
+                          onPress={() => {
+                            const updated = callAssistantConfig.customQuestions.filter((_, i) => i !== index);
+                            setCallAssistantConfig(prev => ({ ...prev, customQuestions: updated }));
+                          }}
+                        >
+                          <Trash2 size={18} color="#EF4444" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    {q.length >= 90 && (
+                      <Text style={[styles.charCounter, q.length >= 120 && styles.charCounterMax]}>
+                        {q.length}/120
+                      </Text>
                     )}
                   </View>
                 ))}
 
                 <View style={styles.addQuestionRow}>
-                  <TextInput
-                    style={[styles.configInput, styles.addQuestionInput, newQuestionError ? styles.inputError : undefined]}
-                    value={newQuestionText}
-                    maxLength={120}
-                    onChangeText={(text) => {
-                      setNewQuestionText(text);
-                      if (newQuestionError) setNewQuestionError('');
-                    }}
-                    placeholder="Type a new question..."
-                    placeholderTextColor="#9CA3AF"
-                  />
+                  <View style={{ flex: 1 }}>
+                    <TextInput
+                      style={[styles.configInput, styles.addQuestionInput, newQuestionError ? styles.inputError : newQuestionText.length >= 120 ? styles.inputError : undefined]}
+                      value={newQuestionText}
+                      maxLength={120}
+                      onChangeText={(text) => {
+                        setNewQuestionText(text);
+                        if (newQuestionError) setNewQuestionError('');
+                      }}
+                      placeholder="Type a new question..."
+                      placeholderTextColor="#9CA3AF"
+                    />
+                    {newQuestionText.length >= 90 && (
+                      <Text style={[styles.charCounter, newQuestionText.length >= 120 && styles.charCounterMax]}>
+                        {newQuestionText.length}/120
+                      </Text>
+                    )}
+                    {newQuestionError ? (
+                      <Text style={styles.questionErrorText}>{newQuestionError}</Text>
+                    ) : null}
+                  </View>
                   <TouchableOpacity
                     style={[styles.addQuestionBtn, !newQuestionText.trim() && styles.addQuestionBtnDisabled]}
                     disabled={!newQuestionText.trim()}
@@ -2829,9 +2846,6 @@ export default function CRMScreen() {
                     <Plus size={20} color="#FFFFFF" />
                   </TouchableOpacity>
                 </View>
-                {newQuestionError ? (
-                  <Text style={styles.questionErrorText}>{newQuestionError}</Text>
-                ) : null}
               </View>
 
               <View style={styles.configSection}>
@@ -4666,6 +4680,16 @@ const styles = StyleSheet.create({
     color: '#EF4444',
     marginTop: 4,
     marginLeft: 2,
+  },
+  charCounter: {
+    fontSize: 11,
+    color: '#F59E0B',
+    textAlign: 'right' as const,
+    marginTop: 2,
+    marginRight: 2,
+  },
+  charCounterMax: {
+    color: '#EF4444',
   },
   callAssistantButton: {
     flexDirection: 'row',
