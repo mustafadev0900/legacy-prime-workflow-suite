@@ -414,10 +414,19 @@ export default function CRMScreen() {
             : [
                 data.budget_question || 'What is your budget for this project?',
               ];
-        const companyGreeting = `Thank you for calling ${company?.name || 'us'}. How can I help you today?`;
-        const loadedGreeting = !data.greeting || data.greeting === 'Thank you for calling us. How can I help you today?'
-          ? companyGreeting
-          : data.greeting;
+        const companyName = company?.name || 'us';
+        const companyGreeting = `Thank you for calling ${companyName}. How can I help you today?`;
+        // Apply same replacements as the webhook: fix "calling us" and {company_name} placeholder
+        const rawGreeting = data.greeting || '';
+        const replaced = rawGreeting
+          .replace(/calling us\b/i, `calling ${companyName}`)
+          .replace(/\{company_name\}/gi, companyName)
+          .trim();
+        // Must contain both the company name AND a question mark (proper greeting)
+        // Otherwise it's an old/broken saved value — use the dynamic default
+        const loadedGreeting = replaced && replaced.includes(companyName) && replaced.includes('?')
+          ? replaced
+          : companyGreeting;
         setCallAssistantConfig(prev => ({
           ...prev,
           enabled: data.enabled ?? true,
