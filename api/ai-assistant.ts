@@ -6175,7 +6175,7 @@ Based on the store and items, intelligently categorize this expense:
         actionData: {
           projectId: project.id,
           projectName: project.name,
-          date: logDate,
+          logDate: logDate,
           weather: args.weather || '',
           temperature: args.temperature || '',
           workPerformed: args.workPerformed,
@@ -6204,7 +6204,7 @@ Based on the store and items, intelligently categorize this expense:
 
       // Find existing log
       const existingLog = dailyLogs.find((log: any) =>
-        log.projectId === project.id && log.date === logDate
+        log.projectId === project.id && log.logDate === logDate
       );
 
       if (!existingLog) {
