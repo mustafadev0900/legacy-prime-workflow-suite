@@ -71,63 +71,38 @@ export default function CrewScheduleScreen() {
   // ── Load employees ─────────────────────────────────────────────────────────
   useEffect(() => {
     const companyId = company?.id;
-    console.log('[CrewSchedule] company?.id =', companyId, '| user?.role =', user?.role);
-    if (!companyId) {
-      console.warn('[CrewSchedule] No companyId — skipping employee fetch');
-      return;
-    }
+    if (!companyId) return;
     fetch(`${API_BASE}/api/get-users?companyId=${companyId}`)
       .then(r => r.json())
       .then(data => {
-        const allUsers = data.users ?? [];
-        console.log('[CrewSchedule] get-users total:', allUsers.length, '| roles:', allUsers.map((u: any) => u.role));
-        if (Array.isArray(allUsers)) {
-          const filtered = (allUsers as User[]).filter(
-            u => u.role === 'employee' || u.role === 'field-employee' || u.role === 'salesperson'
+        if (Array.isArray(data.users)) {
+          setEmployees(
+            (data.users as User[]).filter(
+              u => u.role === 'employee' || u.role === 'field-employee' || u.role === 'salesperson'
+            )
           );
-          console.log('[CrewSchedule] employees after role filter:', filtered.length);
-          setEmployees(filtered);
         }
       })
       .catch(err => console.error('[CrewSchedule] get-users fetch error:', err));
   }, [company?.id]);
 
-  // ── Load tasks for ALL active projects ─────────────────────────────────────
-  // Edge case: scheduledTasks in AppContext loads one project at a time.
-  // Crew schedule needs all projects, so we fetch independently here.
+  // ── Load ALL tasks for the company in one shot ─────────────────────────────
+  // Using companyId param avoids per-project fetching and project status issues.
+  // get-scheduled-tasks supports ?companyId= and scheduled_tasks has company_id column.
   useEffect(() => {
-    const activeProjects = projects.filter(p => p.status === 'active');
-    console.log('[CrewSchedule] projects total:', projects.length, '| active:', activeProjects.length, activeProjects.map(p => p.id));
-    if (activeProjects.length === 0) {
-      console.warn('[CrewSchedule] No active projects — nothing to load');
-      setLoadingTasks(false);
-      return;
-    }
+    const companyId = company?.id;
+    if (!companyId) return;
     setLoadingTasks(true);
-    Promise.all(
-      activeProjects.map(p =>
-        fetch(`${API_BASE}/api/get-scheduled-tasks?projectId=${p.id}`)
-          .then(r => {
-            console.log(`[CrewSchedule] tasks HTTP status for ${p.id}:`, r.status);
-            return r.json();
-          })
-          .then(data => {
-            console.log(`[CrewSchedule] tasks raw for ${p.id}:`, JSON.stringify(data).slice(0, 400));
-            return (data.scheduledTasks ?? []) as ScheduledTask[];
-          })
-          .catch(err => {
-            console.error(`[CrewSchedule] fetch error for project ${p.id}:`, err);
-            return [] as ScheduledTask[];
-          })
-      )
-    )
-      .then(results => {
-        const all = results.flat();
+    fetch(`${API_BASE}/api/get-scheduled-tasks?companyId=${companyId}`)
+      .then(r => r.json())
+      .then(data => {
+        const all = (data.scheduledTasks ?? []) as ScheduledTask[];
         console.log('[CrewSchedule] total tasks loaded:', all.length, '| with assignedEmployeeIds:', all.filter(t => t.assignedEmployeeIds?.length).length);
         setTasks(all);
       })
+      .catch(err => console.error('[CrewSchedule] tasks fetch error:', err))
       .finally(() => setLoadingTasks(false));
-  }, [projects]);
+  }, [company?.id]);
 
   // ── Week navigation ────────────────────────────────────────────────────────
   const weekDates = useMemo<Date[]>(
@@ -191,7 +166,6 @@ export default function CrewScheduleScreen() {
     } else {
       result = tasks.filter(t => (t.assignedEmployeeIds?.length ?? 0) > 0);
     }
-    console.log('[CrewSchedule] displayTasks:', result.length, '| isAdmin:', isAdmin, '| filter:', selectedEmployeeFilter);
     return result;
   }, [isAdmin, tasks, selectedEmployeeFilter, user?.id]);
 
