@@ -407,7 +407,10 @@ export default function ScheduleScreen() {
       const notesChars = task.notes ? Math.min(task.notes.length, 40) : 0;
       const line2 = notesChars * (CHAR_W * 0.85) + 24; // smaller font + padding
 
-      const needed = Math.ceil(Math.max(line1, line2) * zoomLevel);
+      const hasExtra = avatarCount > 0 || notesChars > 0;
+      // Ensure pill clears the isNarrow threshold (2.2 * dayWidth) when extra content exists
+      const minWidth = hasExtra ? Math.round(2.3 * dayWidth) : dayWidth;
+      const needed = Math.max(Math.ceil(Math.max(line1, line2) * zoomLevel), minWidth);
       widths[idx] = Math.max(widths[idx], needed);
     });
     return widths;
@@ -1814,7 +1817,8 @@ ${pdfDates.length > 0 ? `
                                 const scaledIcon = Math.max(11, Math.round(12 * zoomLevel));
                                 const scaledFont = Math.max(10, Math.round(11 * zoomLevel));
                                 const scaledSmall = Math.max(9, Math.round(10 * zoomLevel));
-                                const isNarrow = pos.width < Math.round(2.2 * dayWidth);
+                                const hasExtraContent = !!(task.notes || (task.assignedEmployeeIds ?? []).length > 0);
+                                const isNarrow = !hasExtraContent && pos.width < Math.round(2.2 * dayWidth);
 
                                 // Avatar helpers used in both layouts
                                 const assignedEmps = (task.assignedEmployeeIds ?? [])
