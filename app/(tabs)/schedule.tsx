@@ -169,7 +169,9 @@ export default function ScheduleScreen() {
   const [showDatePicker, setShowDatePicker] = useState<boolean>(false);
   const [showCompletionDatePicker, setShowCompletionDatePicker] = useState<boolean>(false);
   
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    () => new Set(CONSTRUCTION_CATEGORIES.map((_, idx) => `main-${idx}`))
+  );
   const [customSubPhases, setCustomSubPhases] = useState<PhaseStructure[]>([]);
   const [showContextMenu, setShowContextMenu] = useState<{ categoryId: string; categoryName: string; x: number; y: number } | null>(null);
   const [showAddSubPhaseModal, setShowAddSubPhaseModal] = useState<string | null>(null);
@@ -1799,16 +1801,16 @@ ${pdfDates.length > 0 ? `
                               {(() => {
                                 const IconComp = phase?.icon;
                                 const workLabel = task.workType === 'subcontractor' ? 'Sub' : 'In-House';
-                                const scaledIcon = Math.max(10, Math.round(11 * zoomLevel));
-                                const scaledFont = Math.max(7, Math.round(8 * zoomLevel));
-                                const scaledSmall = Math.max(6, Math.round(7 * zoomLevel));
+                                const scaledIcon = Math.max(11, Math.round(12 * zoomLevel));
+                                const scaledFont = Math.max(10, Math.round(11 * zoomLevel));
+                                const scaledSmall = Math.max(9, Math.round(10 * zoomLevel));
                                 const isNarrow = pos.width < Math.round(2.2 * dayWidth);
 
                                 // Avatar helpers used in both layouts
                                 const assignedEmps = (task.assignedEmployeeIds ?? [])
                                   .map(id => companyEmployees.find(e => e.id === id))
                                   .filter(Boolean);
-                                const avatarSize = Math.max(12, Math.round(14 * zoomLevel));
+                                const avatarSize = Math.max(16, Math.round(18 * zoomLevel));
 
                                 if (isNarrow) {
                                   return (
