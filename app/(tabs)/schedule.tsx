@@ -1392,6 +1392,9 @@ ${pdfDates.length > 0 ? `
             <TouchableOpacity style={styles.historyBtn} onPress={() => setShowHistoryModal(true)}>
               <History size={14} color="#059669" />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.crewBtn} onPress={() => router.push('/crew-schedule')}>
+              <Users size={14} color="#D97706" />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.exportPdfBtn} onPress={handleExportPDF} disabled={isExportingPdf}>
               <Printer size={14} color="#1E3A5F" />
             </TouchableOpacity>
@@ -3510,6 +3513,11 @@ const styles = StyleSheet.create({
     padding: 5,
     borderRadius: 6,
     backgroundColor: '#ECFDF5',
+  },
+  crewBtn: {
+    padding: 5,
+    borderRadius: 6,
+    backgroundColor: '#FFFBEB',
   },
   projectSelector: {
     backgroundColor: '#FFFFFF',
