@@ -65,6 +65,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       visibleToClient: row.visible_to_client,
       completed: row.completed,
       completedAt: row.completed_at,
+      assignedEmployeeIds: row.assigned_employee_ids ?? [],
+      assignedSubcontractorIds: row.assigned_subcontractor_ids ?? [],
     }));
 
     return res.status(200).json({

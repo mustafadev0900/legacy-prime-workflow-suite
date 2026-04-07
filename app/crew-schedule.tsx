@@ -54,7 +54,7 @@ function hexToRgba(hex: string, alpha: number): string {
 export default function CrewScheduleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, projects } = useApp();
+  const { user, projects, company } = useApp();
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super-admin';
 
@@ -70,8 +70,9 @@ export default function CrewScheduleScreen() {
 
   // ── Load employees ─────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!user?.companyId) return;
-    fetch(`${API_BASE}/api/get-users?companyId=${user.companyId}`)
+    const companyId = company?.id;
+    if (!companyId) return;
+    fetch(`${API_BASE}/api/get-users?companyId=${companyId}`)
       .then(r => r.json())
       .then(data => {
         if (Array.isArray(data.users)) {
@@ -83,7 +84,7 @@ export default function CrewScheduleScreen() {
         }
       })
       .catch(() => {});
-  }, [user?.companyId]);
+  }, [company?.id]);
 
   // ── Load tasks for ALL active projects ─────────────────────────────────────
   // Edge case: scheduledTasks in AppContext loads one project at a time.
