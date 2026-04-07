@@ -40,6 +40,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (updates.visibleToClient !== undefined) updateData.visible_to_client = updates.visibleToClient;
     if (updates.completed !== undefined) updateData.completed = updates.completed;
     if (updates.completedAt !== undefined) updateData.completed_at = updates.completedAt;
+    if (updates.assignedEmployeeIds !== undefined) updateData.assigned_employee_ids = updates.assignedEmployeeIds;
+    if (updates.assignedSubcontractorIds !== undefined) updateData.assigned_subcontractor_ids = updates.assignedSubcontractorIds;
 
     // Update in database
     const { data, error } = await supabase
@@ -78,6 +80,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         visibleToClient: data.visible_to_client,
         completed: data.completed,
         completedAt: data.completed_at,
+        assignedEmployeeIds: data.assigned_employee_ids ?? [],
+        assignedSubcontractorIds: data.assigned_subcontractor_ids ?? [],
       },
     });
   } catch (error: any) {

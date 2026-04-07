@@ -490,6 +490,8 @@ export interface ScheduledTask {
   completedAt?: string;
   createdAt?: string;
   updatedAt?: string;
+  assignedEmployeeIds?: string[];       // IDs of employees assigned to this task
+  assignedSubcontractorIds?: string[];  // IDs of subcontractors assigned to this task
 }
 
 /**

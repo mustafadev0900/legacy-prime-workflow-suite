@@ -10,8 +10,9 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { X, Trash2, Check } from 'lucide-react-native';
+import { X, Trash2, Check, CheckSquare, Square } from 'lucide-react-native';
 import { GanttTask, ScheduleViewMode } from '@/types';
+import { useAppContext } from '@/contexts/AppContext';
 import { useGanttResponsive } from '../hooks/useGanttResponsive';
 import TaskFormFields from './TaskFormFields';
 
@@ -40,6 +41,7 @@ export default function TaskDetailModal({
   onMarkCompleted,
 }: TaskDetailModalProps) {
   const responsive = useGanttResponsive();
+  const { subcontractors } = useAppContext();
 
   const [category, setCategory] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -51,6 +53,7 @@ export default function TaskDetailModal({
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isMarkingComplete, setIsMarkingComplete] = useState(false);
+  const [assignedSubIds, setAssignedSubIds] = useState<string[]>([]);
 
   const isReadOnly = viewMode === 'client';
 
@@ -63,8 +66,27 @@ export default function TaskDetailModal({
       setWorkType(task.workType || 'in-house');
       setNotes(task.notes || '');
       setVisibleToClient(task.visibleToClient ?? true);
+      setAssignedSubIds(task.assignedSubcontractorIds ?? []);
     }
   }, [task]);
+
+  const toggleSubcontractorAssignment = (subId: string) => {
+    setAssignedSubIds(prev => {
+      if (prev.includes(subId)) {
+        return prev.filter(id => id !== subId);
+      }
+      // Deduplicate on add
+      return [...new Set([...prev, subId])];
+    });
+  };
+
+  const handleWorkTypeChange = (value: 'in-house' | 'subcontractor') => {
+    setWorkType(value);
+    // Clear subcontractor assignments when switching to in-house
+    if (value === 'in-house') {
+      setAssignedSubIds([]);
+    }
+  };
 
   const computedDuration = (): number => {
     if (!startDate || !endDate) return 0;
@@ -91,6 +113,7 @@ export default function TaskDetailModal({
     setShowEndDatePicker(false);
     setIsSubmitting(false);
     setIsMarkingComplete(false);
+    setAssignedSubIds([]);
   };
 
   const handleSave = async () => {
@@ -119,6 +142,7 @@ export default function TaskDetailModal({
         workType,
         notes: notes.trim(),
         visibleToClient,
+        assignedSubcontractorIds: assignedSubIds,
       });
       resetForm();
       onClose();
@@ -232,7 +256,7 @@ export default function TaskDetailModal({
               onCategoryChange={setCategory}
               onStartDateChange={setStartDate}
               onEndDateChange={setEndDate}
-              onWorkTypeChange={setWorkType}
+              onWorkTypeChange={handleWorkTypeChange}
               onNotesChange={setNotes}
               onVisibleToClientChange={setVisibleToClient}
               showStartDatePicker={showStartDatePicker}
@@ -243,6 +267,43 @@ export default function TaskDetailModal({
               hideWorkType={isReadOnly}
               hideNotes={isReadOnly}
             />
+
+            {/* Subcontractor Assignment — only visible when workType is subcontractor and not read-only or completed */}
+            {workType === 'subcontractor' && !isReadOnly && !isAlreadyCompleted && (
+              <View style={styles.subSection}>
+                <Text style={styles.subSectionHeader}>ASSIGN SUBCONTRACTORS</Text>
+                {subcontractors.length === 0 ? (
+                  <View style={styles.emptySubBox}>
+                    <Text style={styles.emptySubText}>
+                      No subcontractors found. Add them in the Subcontractors section.
+                    </Text>
+                  </View>
+                ) : (
+                  subcontractors.map(sub => {
+                    const isSelected = assignedSubIds.includes(sub.id);
+                    return (
+                      <TouchableOpacity
+                        key={sub.id}
+                        style={[styles.subRow, isSelected && styles.subRowSelected]}
+                        onPress={() => toggleSubcontractorAssignment(sub.id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.subRowLeft}>
+                          <Text style={styles.subName}>{sub.name}</Text>
+                          {sub.trade ? (
+                            <Text style={styles.subTrade}>{sub.trade}</Text>
+                          ) : null}
+                        </View>
+                        {isSelected
+                          ? <CheckSquare size={18} color="#2563EB" strokeWidth={2} />
+                          : <Square size={18} color="#9CA3AF" strokeWidth={2} />
+                        }
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+              </View>
+            )}
           </ScrollView>
 
           {/* Footer */}
@@ -456,5 +517,58 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  subSection: {
+    marginTop: 16,
+  },
+  subSectionHeader: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  subRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 6,
+  },
+  subRowSelected: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  subRowLeft: {
+    flex: 1,
+    marginRight: 8,
+  },
+  subName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#1F2937',
+  },
+  subTrade: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  emptySubBox: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+    borderRadius: 6,
+    padding: 10,
+    marginHorizontal: 12,
+  },
+  emptySubText: {
+    fontSize: 12,
+    color: '#2563EB',
   },
 });

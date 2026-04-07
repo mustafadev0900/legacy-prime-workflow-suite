@@ -26,6 +26,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       visibleToClient,
       completed,
       completedAt,
+      assignedEmployeeIds,
+      assignedSubcontractorIds,
     } = req.body;
 
     // Validate required fields (color is optional — defaults to gray)
@@ -79,6 +81,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         visible_to_client: visibleToClient !== undefined ? visibleToClient : true,
         completed: completed !== undefined ? completed : false,
         completed_at: completedAt || null,
+        assigned_employee_ids: assignedEmployeeIds || [],
+        assigned_subcontractor_ids: assignedSubcontractorIds || [],
       })
       .select()
       .single();
@@ -112,6 +116,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         visibleToClient: data.visible_to_client,
         completed: data.completed,
         completedAt: data.completed_at,
+        assignedEmployeeIds: data.assigned_employee_ids ?? [],
+        assignedSubcontractorIds: data.assigned_subcontractor_ids ?? [],
       },
     });
   } catch (error: any) {
