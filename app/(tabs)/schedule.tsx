@@ -399,8 +399,10 @@ export default function ScheduleScreen() {
       });
       if (idx === -1) return;
 
-      // Line 1: category + work badge + avatars
-      const avatarCount = Math.min((task.assignedEmployeeIds ?? []).length, 4);
+      // Line 1: category + work badge + avatars (employees + subcontractors)
+      const empCount = Math.min((task.assignedEmployeeIds ?? []).length, 4);
+      const subCount = Math.min((task.assignedSubcontractorIds ?? []).length, 4);
+      const avatarCount = empCount + subCount;
       const line1 = task.category.length * CHAR_W + OVERHEAD + avatarCount * AVATAR_W;
 
       // Line 2: notes (if present) — notes text sets the minimum if wider than line 1
@@ -1817,14 +1819,15 @@ ${pdfDates.length > 0 ? `
                                 const scaledIcon = Math.max(11, Math.round(12 * zoomLevel));
                                 const scaledFont = Math.max(10, Math.round(11 * zoomLevel));
                                 const scaledSmall = Math.max(9, Math.round(10 * zoomLevel));
-                                const hasExtraContent = !!(task.notes || (task.assignedEmployeeIds ?? []).length > 0);
-                                const isNarrow = !hasExtraContent && pos.width < Math.round(2.2 * dayWidth);
-
-                                // Avatar helpers used in both layouts
                                 const assignedEmps = (task.assignedEmployeeIds ?? [])
                                   .map(id => companyEmployees.find(e => e.id === id))
                                   .filter(Boolean);
+                                const assignedSubs = (task.assignedSubcontractorIds ?? [])
+                                  .map(id => subcontractors.find(s => s.id === id))
+                                  .filter(Boolean);
                                 const avatarSize = Math.max(16, Math.round(18 * zoomLevel));
+                                const hasExtraContent = !!(task.notes || assignedEmps.length > 0 || assignedSubs.length > 0);
+                                const isNarrow = !hasExtraContent && pos.width < Math.round(2.2 * dayWidth);
 
                                 if (isNarrow) {
                                   return (
@@ -1883,6 +1886,17 @@ ${pdfDates.length > 0 ? `
                                       {assignedEmps.length > 4 && (
                                         <View style={{ width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' }}>
                                           <Text style={{ fontSize: Math.max(5, avatarSize * 0.4), fontWeight: '700', color: '#475569' }}>+{assignedEmps.length - 4}</Text>
+                                        </View>
+                                      )}
+                                      {/* Subcontractor initials inline */}
+                                      {assignedSubs.slice(0, 4).map((sub: any) => (
+                                        <View key={sub.id} style={{ width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FFFFFF' }}>
+                                          <Text style={{ fontSize: Math.max(5, avatarSize * 0.45), fontWeight: '700', color: '#FFF' }}>{sub.name?.charAt(0)?.toUpperCase()}</Text>
+                                        </View>
+                                      ))}
+                                      {assignedSubs.length > 4 && (
+                                        <View style={{ width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, backgroundColor: '#FDE68A', alignItems: 'center', justifyContent: 'center' }}>
+                                          <Text style={{ fontSize: Math.max(5, avatarSize * 0.4), fontWeight: '700', color: '#92400E' }}>+{assignedSubs.length - 4}</Text>
                                         </View>
                                       )}
                                     </View>
