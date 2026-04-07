@@ -71,19 +71,26 @@ export default function CrewScheduleScreen() {
   // ── Load employees ─────────────────────────────────────────────────────────
   useEffect(() => {
     const companyId = company?.id;
-    if (!companyId) return;
+    console.log('[CrewSchedule] company?.id =', companyId, '| user?.role =', user?.role);
+    if (!companyId) {
+      console.warn('[CrewSchedule] No companyId — skipping employee fetch');
+      return;
+    }
     fetch(`${API_BASE}/api/get-users?companyId=${companyId}`)
       .then(r => r.json())
       .then(data => {
+        console.log('[CrewSchedule] get-users raw response:', JSON.stringify(data).slice(0, 300));
         if (Array.isArray(data.users)) {
-          setEmployees(
-            (data.users as User[]).filter(
-              u => u.role === 'employee' || u.role === 'field-employee' || u.role === 'salesperson'
-            )
+          const filtered = (data.users as User[]).filter(
+            u => u.role === 'employee' || u.role === 'field-employee' || u.role === 'salesperson'
           );
+          console.log('[CrewSchedule] employees after role filter:', filtered.length, filtered.map(e => `${e.name}(${e.role})`));
+          setEmployees(filtered);
+        } else {
+          console.warn('[CrewSchedule] get-users returned no users array:', data);
         }
       })
-      .catch(() => {});
+      .catch(err => console.error('[CrewSchedule] get-users fetch error:', err));
   }, [company?.id]);
 
   // ── Load tasks for ALL active projects ─────────────────────────────────────
@@ -91,7 +98,9 @@ export default function CrewScheduleScreen() {
   // Crew schedule needs all projects, so we fetch independently here.
   useEffect(() => {
     const activeProjects = projects.filter(p => p.status === 'active');
+    console.log('[CrewSchedule] projects total:', projects.length, '| active:', activeProjects.length, activeProjects.map(p => p.id));
     if (activeProjects.length === 0) {
+      console.warn('[CrewSchedule] No active projects — nothing to load');
       setLoadingTasks(false);
       return;
     }
@@ -100,11 +109,21 @@ export default function CrewScheduleScreen() {
       activeProjects.map(p =>
         fetch(`${API_BASE}/api/get-scheduled-tasks?projectId=${p.id}`)
           .then(r => r.json())
-          .then(data => (data.scheduledTasks ?? []) as ScheduledTask[])
-          .catch(() => [] as ScheduledTask[])
+          .then(data => {
+            console.log(`[CrewSchedule] tasks for project ${p.id}:`, data.scheduledTasks?.length ?? 0, '| first task assignedEmployeeIds:', data.scheduledTasks?.[0]?.assignedEmployeeIds);
+            return (data.scheduledTasks ?? []) as ScheduledTask[];
+          })
+          .catch(err => {
+            console.error(`[CrewSchedule] fetch error for project ${p.id}:`, err);
+            return [] as ScheduledTask[];
+          })
       )
     )
-      .then(results => setTasks(results.flat()))
+      .then(results => {
+        const all = results.flat();
+        console.log('[CrewSchedule] total tasks loaded:', all.length, '| with assignedEmployeeIds:', all.filter(t => t.assignedEmployeeIds?.length).length);
+        setTasks(all);
+      })
       .finally(() => setLoadingTasks(false));
   }, [projects]);
 
@@ -162,13 +181,16 @@ export default function CrewScheduleScreen() {
   );
 
   const displayTasks = useMemo(() => {
+    let result: ScheduledTask[];
     if (!isAdmin) {
-      return tasks.filter(t => t.assignedEmployeeIds?.includes(user?.id ?? ''));
+      result = tasks.filter(t => t.assignedEmployeeIds?.includes(user?.id ?? ''));
+    } else if (selectedEmployeeFilter) {
+      result = tasks.filter(t => t.assignedEmployeeIds?.includes(selectedEmployeeFilter));
+    } else {
+      result = tasks.filter(t => (t.assignedEmployeeIds?.length ?? 0) > 0);
     }
-    if (selectedEmployeeFilter) {
-      return tasks.filter(t => t.assignedEmployeeIds?.includes(selectedEmployeeFilter));
-    }
-    return tasks.filter(t => (t.assignedEmployeeIds?.length ?? 0) > 0);
+    console.log('[CrewSchedule] displayTasks:', result.length, '| isAdmin:', isAdmin, '| filter:', selectedEmployeeFilter);
+    return result;
   }, [isAdmin, tasks, selectedEmployeeFilter, user?.id]);
 
   const getTasksForDate = useCallback(
