@@ -1804,6 +1804,12 @@ ${pdfDates.length > 0 ? `
                                 const scaledSmall = Math.max(6, Math.round(7 * zoomLevel));
                                 const isNarrow = pos.width < Math.round(2.2 * dayWidth);
 
+                                // Avatar helpers used in both layouts
+                                const assignedEmps = (task.assignedEmployeeIds ?? [])
+                                  .map(id => companyEmployees.find(e => e.id === id))
+                                  .filter(Boolean);
+                                const avatarSize = Math.max(12, Math.round(14 * zoomLevel));
+
                                 if (isNarrow) {
                                   return (
                                     <View style={styles.taskBarContentNarrow}>
@@ -1849,6 +1855,19 @@ ${pdfDates.length > 0 ? `
                                       )}
                                       {!isCompleted && task.duration > 1 && (
                                         <Text style={[styles.taskBarDuration, { fontSize: scaledSmall, color: '#374151' }]}>{task.duration}d</Text>
+                                      )}
+                                      {/* Employee avatars inline */}
+                                      {assignedEmps.slice(0, 4).map((emp: any) => (
+                                        emp.avatar
+                                          ? <Image key={emp.id} source={{ uri: emp.avatar }} style={{ width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, borderWidth: 1, borderColor: '#FFFFFF' }} />
+                                          : <View key={emp.id} style={{ width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, backgroundColor: '#94A3B8', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FFFFFF' }}>
+                                              <Text style={{ fontSize: Math.max(5, avatarSize * 0.45), fontWeight: '700', color: '#FFF' }}>{emp.name?.charAt(0)?.toUpperCase()}</Text>
+                                            </View>
+                                      ))}
+                                      {assignedEmps.length > 4 && (
+                                        <View style={{ width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, backgroundColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' }}>
+                                          <Text style={{ fontSize: Math.max(5, avatarSize * 0.4), fontWeight: '700', color: '#475569' }}>+{assignedEmps.length - 4}</Text>
+                                        </View>
                                       )}
                                     </View>
                                     {task.notes ? (
