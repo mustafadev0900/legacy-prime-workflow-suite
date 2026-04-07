@@ -382,10 +382,11 @@ export default function ScheduleScreen() {
   const GRID_WIDTH = dates.length * dayWidth;
 
   // Per-column dynamic widths: expand a column if it has a 1-day task whose
-  // label is wider than the default dayWidth so content never gets truncated.
+  // content is wider than the default dayWidth so nothing gets truncated.
   const colWidths = useMemo(() => {
-    const CHAR_W = 5.5;   // avg px per char at zoom=1.0
-    const OVERHEAD = 76;  // handles (18+18) + badge (~28) + padding (~12) at zoom=1.0
+    const CHAR_W = 5.5;    // avg px per char at zoom=1.0
+    const OVERHEAD = 76;   // handles (18+18) + badge (~28) + padding (~12) at zoom=1.0
+    const AVATAR_W = 20;   // avatar circle + gap at zoom=1.0
     const widths = dates.map(() => dayWidth);
     projectTasks.forEach(task => {
       if (task.duration !== 1) return;
@@ -397,7 +398,16 @@ export default function ScheduleScreen() {
         return dd.getTime() === taskStart.getTime();
       });
       if (idx === -1) return;
-      const needed = Math.ceil((task.category.length * CHAR_W + OVERHEAD) * zoomLevel);
+
+      // Line 1: category + work badge + avatars
+      const avatarCount = Math.min((task.assignedEmployeeIds ?? []).length, 4);
+      const line1 = task.category.length * CHAR_W + OVERHEAD + avatarCount * AVATAR_W;
+
+      // Line 2: notes (if present) — notes text sets the minimum if wider than line 1
+      const notesChars = task.notes ? Math.min(task.notes.length, 40) : 0;
+      const line2 = notesChars * (CHAR_W * 0.85) + 24; // smaller font + padding
+
+      const needed = Math.ceil(Math.max(line1, line2) * zoomLevel);
       widths[idx] = Math.max(widths[idx], needed);
     });
     return widths;
