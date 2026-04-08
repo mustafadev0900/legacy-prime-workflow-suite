@@ -218,6 +218,15 @@ export default function ScheduleScreen() {
   const [editAssignedSubIds, setEditAssignedSubIds] = useState<string[]>([]);
   const [editAssignedEmpIds, setEditAssignedEmpIds] = useState<string[]>([]);
   const [companyEmployees, setCompanyEmployees] = useState<any[]>([]);
+  const [notifBanner, setNotifBanner] = useState<{ message: string; color: string } | null>(null);
+  const notifBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const showBanner = useCallback((message: string, color: string, duration = 3000) => {
+    if (notifBannerTimer.current) clearTimeout(notifBannerTimer.current);
+    setNotifBanner({ message, color });
+    notifBannerTimer.current = setTimeout(() => setNotifBanner(null), duration);
+  }, []);
+
 
   const [showDailyLogsModal, setShowDailyLogsModal] = useState<boolean>(false);
   const [equipmentExpanded, setEquipmentExpanded] = useState<boolean>(false);
@@ -917,17 +926,17 @@ export default function ScheduleScreen() {
       }
       if (smsPromises.length > 0) {
         console.log('[Schedule] SMS queued for', smsPromises.length, 'newly assigned sub(s)');
+        showBanner(`📱 Sending SMS to ${smsPromises.length} subcontractor(s)...`, '#D97706');
         Promise.all(smsPromises).then(results => {
           const sent = results.filter(r => r.success);
           const failed = results.filter(r => !r.success);
-          const title = failed.length === 0 ? 'SMS Sent' : 'SMS Status';
-          const successMsg = sent.length > 0 ? `✓ Notified: ${sent.map(r => r.subName).join(', ')}` : '';
-          const failMsg = failed.length > 0 ? `✗ Failed: ${failed.map(r => r.subName).join(', ')}` : '';
-          const message = [successMsg, failMsg].filter(Boolean).join('\n');
-          if (Platform.OS === 'web') {
-            (window as any).alert(`${title}\n${message}`);
+          if (failed.length === 0) {
+            showBanner(`📱 SMS sent to ${sent.map(r => r.subName).join(', ')}`, '#16A34A');
           } else {
-            Alert.alert(title, message);
+            const successMsg = sent.length > 0 ? `✓ ${sent.map(r => r.subName).join(', ')}` : '';
+            const failMsg = `✗ Failed: ${failed.map(r => r.subName).join(', ')}`;
+            const message = [successMsg, failMsg].filter(Boolean).join(' | ');
+            showBanner(`📱 SMS: ${message}`, '#DC2626');
           }
         });
       }
@@ -937,6 +946,7 @@ export default function ScheduleScreen() {
       for (const subId of newlyAdded) {
         const sub = subcontractors.find(s => s.id === subId);
         if (sub?.email?.trim()) {
+          showBanner(`📧 Opening email for ${sub.name.split(' ')[0]}...`, '#2563EB', 2000);
           await sendSubAssignmentEmail(sub.email, sub.name, editingTask.category, editingTask.startDate, companyName);
         }
       }
@@ -1493,6 +1503,11 @@ ${pdfDates.length > 0 ? `
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
+      {notifBanner && (
+        <View style={[styles.notifBanner, { backgroundColor: notifBanner.color }]}>
+          <Text style={styles.notifBannerText}>{notifBanner.message}</Text>
+        </View>
+      )}
       <View style={styles.header}>
         <Text style={styles.title}>Schedule</Text>
         {selectedProject && (
@@ -3614,6 +3629,21 @@ const styles = StyleSheet.create({
     padding: 5,
     borderRadius: 6,
     backgroundColor: '#FFFBEB',
+  },
+  notifBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  notifBannerText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
   },
   projectSelector: {
     backgroundColor: '#FFFFFF',
