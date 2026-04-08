@@ -1,4 +1,4 @@
-import { Alert, Image, Keyboard, KeyboardAvoidingView, Linking, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Keyboard, KeyboardAvoidingView, Linking, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import * as MailComposer from 'expo-mail-composer';
 import CustomDatePicker from '@/components/DailyTasks/CustomDatePicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ async function sendSubAssignmentSMS(
   taskName: string,
   startDate: string,
   companyId?: string,
+  companyName?: string,
 ): Promise<{ success: boolean; subName: string }> {
   if (!phone?.trim()) {
     console.log('[Schedule SMS] Skipped — no phone for', subName);
@@ -28,7 +29,8 @@ async function sendSubAssignmentSMS(
   const e164 = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith('1') ? `+${digits}` : phone;
   const firstName = subName?.split(' ')[0] || '';
   const dateStr = new Date(startDate.split('T')[0] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const body = `Hi ${firstName}, you've been assigned to: ${taskName} on ${dateStr}. - Legacy Prime`;
+  const sender = companyName || 'Legacy Prime';
+  const body = `Hi ${firstName}, you've been assigned to: ${taskName} on ${dateStr}. - ${sender}`;
   console.log('[Schedule SMS] Sending to:', subName, '| Phone:', phone, '→ E.164:', e164);
   console.log('[Schedule SMS] Message:', body);
   console.log('[Schedule SMS] API URL:', `${SMS_API_BASE}/api/twilio-send-sms`);
@@ -218,13 +220,15 @@ export default function ScheduleScreen() {
   const [editAssignedSubIds, setEditAssignedSubIds] = useState<string[]>([]);
   const [editAssignedEmpIds, setEditAssignedEmpIds] = useState<string[]>([]);
   const [companyEmployees, setCompanyEmployees] = useState<any[]>([]);
-  const [notifBanner, setNotifBanner] = useState<{ message: string; color: string } | null>(null);
-  const notifBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [notifModal, setNotifModal] = useState<{ message: string; loading: boolean } | null>(null);
+  const notifModalTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showBanner = useCallback((message: string, color: string, duration = 3000) => {
-    if (notifBannerTimer.current) clearTimeout(notifBannerTimer.current);
-    setNotifBanner({ message, color });
-    notifBannerTimer.current = setTimeout(() => setNotifBanner(null), duration);
+  const showNotif = useCallback((message: string, loading: boolean, autoDismiss = 0) => {
+    if (notifModalTimer.current) clearTimeout(notifModalTimer.current);
+    setNotifModal({ message, loading });
+    if (autoDismiss > 0) {
+      notifModalTimer.current = setTimeout(() => setNotifModal(null), autoDismiss);
+    }
   }, []);
 
 
@@ -913,41 +917,40 @@ export default function ScheduleScreen() {
 
     console.log('[Schedule] Updated task:', editingTask.category, `duration: ${newDuration}d`, editCompleted ? '(completed)' : '');
 
-    // SMS newly assigned subcontractors — collect results and show UI feedback
+    // SMS + Email newly assigned subcontractors
     if (editWorkType === 'subcontractor' && editAssignedSubIds.length > 0) {
       const originalSubIds = editingTask.assignedSubcontractorIds ?? [];
       const newlyAdded = editAssignedSubIds.filter(id => !originalSubIds.includes(id));
+      const companyName = company?.name || 'Legacy Prime';
+
       const smsPromises: Promise<{ success: boolean; subName: string }>[] = [];
       for (const subId of newlyAdded) {
         const sub = subcontractors.find(s => s.id === subId);
         if (sub?.phone?.trim()) {
-          smsPromises.push(sendSubAssignmentSMS(sub.phone, sub.name, editingTask.category, editingTask.startDate, company?.id));
+          smsPromises.push(sendSubAssignmentSMS(sub.phone, sub.name, editingTask.category, editingTask.startDate, company?.id, companyName));
         }
       }
       if (smsPromises.length > 0) {
-        console.log('[Schedule] SMS queued for', smsPromises.length, 'newly assigned sub(s)');
-        showBanner(`📱 Sending SMS to ${smsPromises.length} subcontractor(s)...`, '#D97706');
+        showNotif(`📱 Sending SMS to ${newlyAdded.length} subcontractor(s)...`, true);
         Promise.all(smsPromises).then(results => {
           const sent = results.filter(r => r.success);
           const failed = results.filter(r => !r.success);
           if (failed.length === 0) {
-            showBanner(`📱 SMS sent to ${sent.map(r => r.subName).join(', ')}`, '#16A34A');
+            showNotif(`📱 SMS sent to ${sent.map(r => r.subName).join(', ')} ✓`, false, 3000);
           } else {
-            const successMsg = sent.length > 0 ? `✓ ${sent.map(r => r.subName).join(', ')}` : '';
             const failMsg = `✗ Failed: ${failed.map(r => r.subName).join(', ')}`;
-            const message = [successMsg, failMsg].filter(Boolean).join(' | ');
-            showBanner(`📱 SMS: ${message}`, '#DC2626');
+            showNotif(`📱 SMS: ${failMsg}`, false, 4000);
           }
         });
       }
 
-      // Email newly assigned subcontractors — open mail composer for each one with an email
-      const companyName = company?.name || 'Legacy Prime';
+      // Email — open mail composer, show status after composer closes
       for (const subId of newlyAdded) {
         const sub = subcontractors.find(s => s.id === subId);
         if (sub?.email?.trim()) {
-          showBanner(`📧 Opening email for ${sub.name.split(' ')[0]}...`, '#2563EB', 2000);
+          showNotif(`📧 Opening email for ${sub.name.split(' ')[0]}...`, true);
           await sendSubAssignmentEmail(sub.email, sub.name, editingTask.category, editingTask.startDate, companyName);
+          showNotif(`📧 Email composed for ${sub.name.split(' ')[0]} ✓`, false, 3000);
         }
       }
     }
@@ -1503,11 +1506,14 @@ ${pdfDates.length > 0 ? `
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {notifBanner && (
-        <View style={[styles.notifBanner, { backgroundColor: notifBanner.color }]}>
-          <Text style={styles.notifBannerText}>{notifBanner.message}</Text>
+      <Modal visible={!!notifModal} transparent animationType="fade" onRequestClose={() => setNotifModal(null)}>
+        <View style={styles.notifOverlay}>
+          <View style={styles.notifCard}>
+            {notifModal?.loading && <ActivityIndicator size="small" color="#2563EB" style={{ marginBottom: 8 }} />}
+            <Text style={styles.notifCardText}>{notifModal?.message}</Text>
+          </View>
         </View>
-      )}
+      </Modal>
       <View style={styles.header}>
         <Text style={styles.title}>Schedule</Text>
         {selectedProject && (
@@ -3630,20 +3636,30 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#FFFBEB',
   },
-  notifBanner: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 999,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+  notifOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  notifBannerText: {
-    color: '#FFFFFF',
-    fontSize: 13,
+  notifCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 20,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    minWidth: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  notifCardText: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#1E293B',
+    textAlign: 'center',
   },
   projectSelector: {
     backgroundColor: '#FFFFFF',
