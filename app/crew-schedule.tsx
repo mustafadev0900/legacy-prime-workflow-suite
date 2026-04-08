@@ -416,22 +416,24 @@ export default function CrewScheduleScreen() {
 
                               {isAdmin && (task.assignedEmployeeIds?.length ?? 0) > 0 && (
                                 <View style={styles.crewRow}>
-                                  {(task.assignedEmployeeIds ?? []).slice(0, 3).map((empId, i) => {
-                                    const emp = employeeMap.get(empId);
+                                  {(task.assignedEmployeeIds ?? [])
+                                    .filter(id => employeeMap.has(id))
+                                    .slice(0, 3).map((empId, i) => {
+                                    const emp = employeeMap.get(empId)!;
                                     return (
                                       <View
                                         key={empId}
                                         style={[styles.miniAvatar, i > 0 && styles.miniAvatarOverlap]}
                                       >
                                         <Text style={styles.miniAvatarText}>
-                                          {getInitials(emp?.name ?? '?')}
+                                          {getInitials(emp.name)}
                                         </Text>
                                       </View>
                                     );
                                   })}
-                                  {(task.assignedEmployeeIds?.length ?? 0) > 3 && (
+                                  {(task.assignedEmployeeIds ?? []).filter(id => employeeMap.has(id)).length > 3 && (
                                     <Text style={styles.crewMore}>
-                                      +{(task.assignedEmployeeIds?.length ?? 0) - 3}
+                                      +{(task.assignedEmployeeIds ?? []).filter(id => employeeMap.has(id)).length - 3}
                                     </Text>
                                   )}
                                 </View>
