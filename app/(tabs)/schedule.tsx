@@ -2182,92 +2182,37 @@ ${pdfDates.length > 0 ? `
                   numberOfLines={3}
                 />
 
-                <View style={styles.clientVisibleRow}>
-                  <View style={styles.clientVisibleLeft}>
-                    {editClientVisibleNote ? (
-                      <Eye size={16} color="#059669" />
-                    ) : (
-                      <EyeOff size={16} color="#9CA3AF" />
-                    )}
-                    <View>
-                      <Text style={styles.clientVisibleLabel}>Visible to Client</Text>
-                      <Text style={styles.clientVisibleHint}>
-                        {editClientVisibleNote ? 'Phase visible on shared client link' : 'Phase hidden from shared client link'}
-                      </Text>
-                    </View>
-                  </View>
-                  <Switch
-                    value={editClientVisibleNote}
-                    onValueChange={setEditClientVisibleNote}
-                    trackColor={{ false: '#D1D5DB', true: '#A7F3D0' }}
-                    thumbColor={editClientVisibleNote ? '#059669' : '#F3F4F6'}
-                  />
-                </View>
-
-                <View style={styles.completionSection}>
+                <View style={styles.chipToggleRow}>
                   <TouchableOpacity
-                    style={[styles.completionToggle, editCompleted && styles.completionToggleActive]}
+                    style={[styles.chipToggle, !editClientVisibleNote && styles.chipToggleActive]}
+                    onPress={() => setEditClientVisibleNote(!editClientVisibleNote)}
+                    activeOpacity={0.7}
+                  >
+                    <EyeOff size={14} color={!editClientVisibleNote ? '#475569' : '#9CA3AF'} />
+                    <Text style={[styles.chipToggleText, !editClientVisibleNote && styles.chipToggleTextActive]}>
+                      {editClientVisibleNote ? 'Visible' : 'Hidden'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.chipToggle, editCompleted && styles.chipToggleDone]}
                     onPress={() => {
                       const newVal = !editCompleted;
                       setEditCompleted(newVal);
                       if (newVal && !editCompletedDate) {
                         const today = new Date().toISOString().split('T')[0];
                         const startDay = editingTask?.startDate.split('T')[0] ?? today;
-                        // Completion date cannot be before task start — default to start if today is earlier
                         setEditCompletedDate(today >= startDay ? today : startDay);
                       }
                     }}
                     activeOpacity={0.7}
                   >
-                    <View style={[styles.completionCheckbox, editCompleted && styles.completionCheckboxActive]}>
-                      {editCompleted && <Check size={14} color="#FFFFFF" />}
+                    <View style={[styles.chipToggleCircle, editCompleted && styles.chipToggleCircleDone]}>
+                      {editCompleted && <Check size={8} color="#FFFFFF" />}
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.completionLabel, editCompleted && styles.completionLabelActive]}>
-                        {editCompleted ? 'Phase Completed' : 'Mark as Completed'}
-                      </Text>
-                      {editCompleted && editCompletedDate && (
-                        <Text style={styles.completionDateDisplay}>
-                          Completed: {new Date(editCompletedDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </Text>
-                      )}
-                    </View>
+                    <Text style={[styles.chipToggleText, editCompleted && styles.chipToggleTextDone]}>
+                      {editCompleted ? 'Done' : 'Mark done'}
+                    </Text>
                   </TouchableOpacity>
-                  {editCompleted && (
-                    <View style={styles.completionDateRow}>
-                      <Text style={styles.completionDateLabel}>Completion Date</Text>
-                      {Platform.OS === 'web' ? (
-                        <input
-                          type="date"
-                          value={editCompletedDate}
-                          min={editingTask?.startDate.split('T')[0]}
-                          onChange={(e: any) => setEditCompletedDate(e.target.value)}
-                          style={{ border: '1px solid #D1D5DB', borderRadius: 8, padding: '8px 12px', fontSize: 14, color: '#111827', background: '#fff', outline: 'none' } as any}
-                        />
-                      ) : (
-                        <>
-                          <TouchableOpacity
-                            onPress={() => setShowCompletionDatePicker(p => !p)}
-                            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#F3F4F6', borderRadius: 8, borderWidth: 1, borderColor: '#E5E7EB' }}
-                          >
-                            <Calendar size={14} color="#6B7280" />
-                            <Text style={{ fontSize: 13, color: '#374151', fontWeight: '500' }}>
-                              {editCompletedDate
-                                ? new Date(editCompletedDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                                : 'Select date'}
-                            </Text>
-                          </TouchableOpacity>
-                          {showCompletionDatePicker && (
-                            <CustomDatePicker
-                              value={editCompletedDate}
-                              onChange={(date) => { setEditCompletedDate(date); setShowCompletionDatePicker(false); }}
-                              minimumDate={editingTask ? new Date(editingTask.startDate.split('T')[0] + 'T00:00:00') : undefined}
-                            />
-                          )}
-                        </>
-                      )}
-                    </View>
-                  )}
                 </View>
               </ScrollView>
             )}
@@ -4890,33 +4835,54 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: '#E2E8F0',
   },
-  clientVisibleRow: {
+  chipToggleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: 8,
     marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    marginBottom: 4,
   },
-  clientVisibleLeft: {
+  chipToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    flex: 1,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
   },
-  clientVisibleLabel: {
+  chipToggleActive: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#94A3B8',
+  },
+  chipToggleDone: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  chipToggleText: {
     fontSize: 13,
-    fontWeight: '600' as const,
-    color: '#334155',
+    fontWeight: '500' as const,
+    color: '#9CA3AF',
   },
-  clientVisibleHint: {
-    fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 1,
+  chipToggleTextActive: {
+    color: '#475569',
+  },
+  chipToggleTextDone: {
+    color: '#15803D',
+  },
+  chipToggleCircle: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  chipToggleCircleDone: {
+    backgroundColor: '#16A34A',
+    borderColor: '#16A34A',
   },
   shareModalContent: {
     backgroundColor: '#FFFFFF',
@@ -5191,66 +5157,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700' as const,
     color: '#FFFFFF',
-  },
-  completionSection: {
-    marginTop: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    overflow: 'hidden' as const,
-  },
-  completionToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: '#F8FAFC',
-  },
-  completionToggleActive: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#BBF7D0',
-  },
-  completionCheckbox: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#CBD5E1',
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    backgroundColor: '#FFFFFF',
-  },
-  completionCheckboxActive: {
-    backgroundColor: '#16A34A',
-    borderColor: '#16A34A',
-  },
-  completionLabel: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#475569',
-  },
-  completionLabelActive: {
-    color: '#15803D',
-  },
-  completionDateDisplay: {
-    fontSize: 11,
-    color: '#16A34A',
-    marginTop: 2,
-    fontWeight: '500' as const,
-  },
-  completionDateRow: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    backgroundColor: '#FAFFFE',
-  },
-  completionDateLabel: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: '#475569',
-    marginBottom: 6,
   },
   completionDateInput: {
     backgroundColor: '#FFFFFF',
