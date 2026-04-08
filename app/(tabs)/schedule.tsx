@@ -19,20 +19,31 @@ async function sendSubAssignmentSMS(
   startDate: string,
   companyId?: string,
 ): Promise<void> {
-  if (!phone?.trim()) return;
+  if (!phone?.trim()) {
+    console.log('[Schedule SMS] Skipped — no phone for', subName);
+    return;
+  }
   const digits = phone.replace(/\D/g, '');
   const e164 = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith('1') ? `+${digits}` : phone;
   const firstName = subName?.split(' ')[0] || '';
   const dateStr = new Date(startDate.split('T')[0] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const body = `Hi ${firstName}, you've been assigned to: ${taskName} on ${dateStr}. - Legacy Prime`;
+  console.log('[Schedule SMS] Sending to:', subName, '| Phone:', phone, '→ E.164:', e164);
+  console.log('[Schedule SMS] Message:', body);
+  console.log('[Schedule SMS] API URL:', `${SMS_API_BASE}/api/twilio-send-sms`);
   try {
-    await fetch(`${SMS_API_BASE}/api/twilio-send-sms`, {
+    const res = await fetch(`${SMS_API_BASE}/api/twilio-send-sms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ to: e164, body, companyId }),
     });
+    const result = await res.json();
+    console.log('[Schedule SMS] Response status:', res.status, '| Body:', JSON.stringify(result));
+    if (!res.ok) {
+      console.error('[Schedule SMS] API error:', result.error || result);
+    }
   } catch (err) {
-    console.warn('[Schedule] SMS failed for', subName, err);
+    console.error('[Schedule SMS] Fetch failed for', subName, err);
   }
 }
 
