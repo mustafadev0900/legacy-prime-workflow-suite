@@ -11,17 +11,17 @@ import { useRouter } from 'expo-router';
 
 const SMS_API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 
-/** Send SMS silently (no Alert) to a subcontractor on task assignment. */
+/** Send SMS to a subcontractor on task assignment. Returns { success, subName }. */
 async function sendSubAssignmentSMS(
   phone: string,
   subName: string,
   taskName: string,
   startDate: string,
   companyId?: string,
-): Promise<void> {
+): Promise<{ success: boolean; subName: string }> {
   if (!phone?.trim()) {
     console.log('[Schedule SMS] Skipped — no phone for', subName);
-    return;
+    return { success: false, subName };
   }
   const digits = phone.replace(/\D/g, '');
   const e164 = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith('1') ? `+${digits}` : phone;
@@ -41,9 +41,12 @@ async function sendSubAssignmentSMS(
     console.log('[Schedule SMS] Response status:', res.status, '| Body:', JSON.stringify(result));
     if (!res.ok) {
       console.error('[Schedule SMS] API error:', result.error || result);
+      return { success: false, subName };
     }
+    return { success: true, subName };
   } catch (err) {
     console.error('[Schedule SMS] Fetch failed for', subName, err);
+    return { success: false, subName };
   }
 }
 
@@ -864,18 +867,32 @@ export default function ScheduleScreen() {
 
     console.log('[Schedule] Updated task:', editingTask.category, `duration: ${newDuration}d`, editCompleted ? '(completed)' : '');
 
-    // SMS newly assigned subcontractors (fire-and-forget, don't block save)
+    // SMS newly assigned subcontractors — collect results and show UI feedback
     if (editWorkType === 'subcontractor' && editAssignedSubIds.length > 0) {
       const originalSubIds = editingTask.assignedSubcontractorIds ?? [];
       const newlyAdded = editAssignedSubIds.filter(id => !originalSubIds.includes(id));
+      const smsPromises: Promise<{ success: boolean; subName: string }>[] = [];
       for (const subId of newlyAdded) {
         const sub = subcontractors.find(s => s.id === subId);
         if (sub?.phone?.trim()) {
-          sendSubAssignmentSMS(sub.phone, sub.name, editingTask.category, editingTask.startDate, company?.id);
+          smsPromises.push(sendSubAssignmentSMS(sub.phone, sub.name, editingTask.category, editingTask.startDate, company?.id));
         }
       }
-      if (newlyAdded.length > 0) {
-        console.log('[Schedule] SMS queued for', newlyAdded.length, 'newly assigned sub(s)');
+      if (smsPromises.length > 0) {
+        console.log('[Schedule] SMS queued for', smsPromises.length, 'newly assigned sub(s)');
+        Promise.all(smsPromises).then(results => {
+          const sent = results.filter(r => r.success);
+          const failed = results.filter(r => !r.success);
+          const title = failed.length === 0 ? 'SMS Sent' : 'SMS Status';
+          const successMsg = sent.length > 0 ? `✓ Notified: ${sent.map(r => r.subName).join(', ')}` : '';
+          const failMsg = failed.length > 0 ? `✗ Failed: ${failed.map(r => r.subName).join(', ')}` : '';
+          const message = [successMsg, failMsg].filter(Boolean).join('\n');
+          if (Platform.OS === 'web') {
+            (window as any).alert(`${title}\n${message}`);
+          } else {
+            Alert.alert(title, message);
+          }
+        });
       }
     }
   }, [editingTask, editNoteText, editWorkType, editDuration, editClientVisibleNote, editCompleted, editCompletedDate, editAssignedSubIds, editAssignedEmpIds, updateScheduledTasks, subcontractors, company]);
