@@ -2128,45 +2128,77 @@ ${pdfDates.length > 0 ? `
                 {editWorkType === 'subcontractor' && (
                   <View style={{ marginTop: 4 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                      <Text style={styles.editLabel}>ASSIGN SUBCONTRACTORS</Text>
+                      <Users size={16} color="#D97706" />
+                      <Text style={[styles.editLabel, { color: '#D97706' }]}>ASSIGN SUBCONTRACTORS</Text>
                       {editAssignedSubIds.length > 0 && (
-                        <View style={{ backgroundColor: '#2563EB', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 }}>
+                        <View style={{ backgroundColor: '#F59E0B', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 }}>
                           <Text style={{ fontSize: 11, fontWeight: '700', color: '#FFF' }}>{editAssignedSubIds.length}</Text>
                         </View>
                       )}
                     </View>
+                    {/* Selected sub chips */}
+                    {editAssignedSubIds.length > 0 && (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                        {editAssignedSubIds.map(subId => {
+                          const sub = subcontractors.find(s => s.id === subId);
+                          if (!sub) return null;
+                          return (
+                            <TouchableOpacity
+                              key={subId}
+                              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFF7ED', borderRadius: 20, paddingVertical: 4, paddingHorizontal: 8, borderWidth: 1, borderColor: '#FDBA74' }}
+                              onPress={() => setEditAssignedSubIds(prev => prev.filter(id => id !== subId))}
+                              activeOpacity={0.7}
+                            >
+                              <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#D97706', alignItems: 'center', justifyContent: 'center' }}>
+                                <Text style={{ fontSize: 9, fontWeight: '700', color: '#FFF' }}>{sub.name?.charAt(0)?.toUpperCase()}</Text>
+                              </View>
+                              <Text style={{ fontSize: 12, fontWeight: '600', color: '#B45309' }}>{sub.name?.split(' ')[0]}</Text>
+                              <X size={11} color="#92400E" strokeWidth={2.5} />
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                    {/* Avatar cards */}
                     {subcontractors.length === 0 ? (
-                      <View style={{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE', borderWidth: 1, borderRadius: 8, padding: 10 }}>
-                        <Text style={{ fontSize: 12, color: '#2563EB' }}>No subcontractors found. Add them in the Subcontractors section.</Text>
+                      <View style={{ backgroundColor: '#FFF7ED', borderColor: '#FDBA74', borderWidth: 1, borderRadius: 8, padding: 10 }}>
+                        <Text style={{ fontSize: 12, color: '#D97706' }}>No subcontractors found. Add them in the Subcontractors section.</Text>
                       </View>
                     ) : (
-                      subcontractors.map(sub => {
-                        const isSelected = editAssignedSubIds.includes(sub.id);
-                        return (
-                          <TouchableOpacity
-                            key={sub.id}
-                            style={{
-                              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                              backgroundColor: isSelected ? '#EFF6FF' : '#F8FAFC',
-                              borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginTop: 6,
-                              borderWidth: isSelected ? 1 : 0, borderColor: '#BFDBFE',
-                            }}
-                            onPress={() => setEditAssignedSubIds(prev =>
-                              prev.includes(sub.id) ? prev.filter(id => id !== sub.id) : [...new Set([...prev, sub.id])]
-                            )}
-                            activeOpacity={0.7}
-                          >
-                            <View style={{ flex: 1, marginRight: 8 }}>
-                              <Text style={{ fontSize: 14, fontWeight: '500', color: '#1F2937' }}>{sub.name}</Text>
-                              {sub.trade ? <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>{sub.trade}</Text> : null}
-                            </View>
-                            {isSelected
-                              ? <CheckSquare size={18} color="#2563EB" strokeWidth={2} />
-                              : <View style={{ width: 18, height: 18, borderWidth: 1.5, borderColor: '#9CA3AF', borderRadius: 3 }} />
-                            }
-                          </TouchableOpacity>
-                        );
-                      })
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                        {subcontractors.map(sub => {
+                          const isSelected = editAssignedSubIds.includes(sub.id);
+                          return (
+                            <TouchableOpacity
+                              key={sub.id}
+                              style={{
+                                alignItems: 'center', justifyContent: 'center',
+                                width: 100, paddingVertical: 10, paddingHorizontal: 6,
+                                borderRadius: 12, borderWidth: 2,
+                                borderColor: isSelected ? '#D97706' : '#E5E7EB',
+                                backgroundColor: isSelected ? '#FFF7ED' : '#F9FAFB',
+                              }}
+                              onPress={() => setEditAssignedSubIds(prev =>
+                                prev.includes(sub.id) ? prev.filter(id => id !== sub.id) : [...new Set([...prev, sub.id])]
+                              )}
+                              activeOpacity={0.7}
+                            >
+                              <View style={{ position: 'relative' }}>
+                                <View style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: isSelected ? '#D97706' : '#9CA3AF', alignItems: 'center', justifyContent: 'center' }}>
+                                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#FFF' }}>{sub.name?.charAt(0)?.toUpperCase()}</Text>
+                                </View>
+                                {isSelected && (
+                                  <View style={{ position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: '#D97706', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: '#FFF' }}>
+                                    <Check size={9} color="#FFF" strokeWidth={3} />
+                                  </View>
+                                )}
+                              </View>
+                              <Text style={{ fontSize: 11, fontWeight: '600', color: isSelected ? '#B45309' : '#374151', marginTop: 6, textAlign: 'center' }} numberOfLines={1}>{sub.name}</Text>
+                              {sub.trade ? <Text style={{ fontSize: 9, color: '#9CA3AF', textAlign: 'center' }} numberOfLines={1}>{sub.trade}</Text> : null}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
                     )}
                   </View>
                 )}
@@ -2188,7 +2220,10 @@ ${pdfDates.length > 0 ? `
                     onPress={() => setEditClientVisibleNote(!editClientVisibleNote)}
                     activeOpacity={0.7}
                   >
-                    <EyeOff size={14} color={!editClientVisibleNote ? '#475569' : '#9CA3AF'} />
+                    {editClientVisibleNote
+                      ? <Eye size={14} color="#9CA3AF" />
+                      : <EyeOff size={14} color="#475569" />
+                    }
                     <Text style={[styles.chipToggleText, !editClientVisibleNote && styles.chipToggleTextActive]}>
                       {editClientVisibleNote ? 'Visible' : 'Hidden'}
                     </Text>
