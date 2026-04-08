@@ -9,6 +9,33 @@ import * as Clipboard from 'expo-clipboard';
 import { Gesture, GestureDetector, ScrollView as GHScrollView } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
 
+const SMS_API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+
+/** Send SMS silently (no Alert) to a subcontractor on task assignment. */
+async function sendSubAssignmentSMS(
+  phone: string,
+  subName: string,
+  taskName: string,
+  startDate: string,
+  companyId?: string,
+): Promise<void> {
+  if (!phone?.trim()) return;
+  const digits = phone.replace(/\D/g, '');
+  const e164 = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith('1') ? `+${digits}` : phone;
+  const firstName = subName?.split(' ')[0] || '';
+  const dateStr = new Date(startDate.split('T')[0] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const body = `Hi ${firstName}, you've been assigned to: ${taskName} on ${dateStr}. - Legacy Prime`;
+  try {
+    await fetch(`${SMS_API_BASE}/api/twilio-send-sms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: e164, body, companyId }),
+    });
+  } catch (err) {
+    console.warn('[Schedule] SMS failed for', subName, err);
+  }
+}
+
 interface PhaseStructure {
   id: string;
   name: string;
@@ -825,7 +852,22 @@ export default function ScheduleScreen() {
     updateScheduledTasks(updatedAll);
 
     console.log('[Schedule] Updated task:', editingTask.category, `duration: ${newDuration}d`, editCompleted ? '(completed)' : '');
-  }, [editingTask, editNoteText, editWorkType, editDuration, editClientVisibleNote, editCompleted, editCompletedDate, editAssignedSubIds, editAssignedEmpIds, updateScheduledTasks]);
+
+    // SMS newly assigned subcontractors (fire-and-forget, don't block save)
+    if (editWorkType === 'subcontractor' && editAssignedSubIds.length > 0) {
+      const originalSubIds = editingTask.assignedSubcontractorIds ?? [];
+      const newlyAdded = editAssignedSubIds.filter(id => !originalSubIds.includes(id));
+      for (const subId of newlyAdded) {
+        const sub = subcontractors.find(s => s.id === subId);
+        if (sub?.phone?.trim()) {
+          sendSubAssignmentSMS(sub.phone, sub.name, editingTask.category, editingTask.startDate, company?.id);
+        }
+      }
+      if (newlyAdded.length > 0) {
+        console.log('[Schedule] SMS queued for', newlyAdded.length, 'newly assigned sub(s)');
+      }
+    }
+  }, [editingTask, editNoteText, editWorkType, editDuration, editClientVisibleNote, editCompleted, editCompletedDate, editAssignedSubIds, editAssignedEmpIds, updateScheduledTasks, subcontractors, company]);
 
   const handleOpenDailyLogs = () => {
     setShowDailyLogsModal(true);
