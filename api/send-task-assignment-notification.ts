@@ -8,18 +8,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { employeeId, companyId, taskName, startDate, companyName } = req.body;
+  console.log('[TaskNotif] Request body:', { employeeId, companyId, taskName, startDate, companyName });
 
   if (!employeeId || !companyId || !taskName || !startDate) {
+    console.error('[TaskNotif] Missing required fields:', { employeeId, companyId, taskName, startDate });
     return res.status(400).json({ error: 'employeeId, companyId, taskName, and startDate are required' });
   }
 
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  console.log('[TaskNotif] Firebase env check — PROJECT_ID:', !!process.env.FIREBASE_PROJECT_ID, '| CLIENT_EMAIL:', !!process.env.FIREBASE_CLIENT_EMAIL, '| PRIVATE_KEY:', !!process.env.FIREBASE_PRIVATE_KEY);
+
   if (!supabaseUrl || !supabaseKey) {
     return res.status(500).json({ error: 'Server configuration error' });
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
+
+  // Check if employee has any push tokens
+  const { data: tokens } = await supabase
+    .from('push_tokens')
+    .select('token, platform, token_source, is_active')
+    .eq('user_id', employeeId);
+  console.log('[TaskNotif] Push tokens for employee', employeeId, ':', JSON.stringify(tokens));
 
   const dateStr = new Date(startDate.split('T')[0] + 'T00:00:00').toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
@@ -36,10 +47,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       data: { taskName, startDate },
     });
 
-    console.log('[API] Task assignment notification sent to employee:', employeeId, '| notifId:', notifId);
+    console.log('[TaskNotif] Done — notifId:', notifId);
     return res.status(200).json({ success: true, notifId });
   } catch (error: any) {
-    console.error('[API] send-task-assignment-notification error:', error);
+    console.error('[TaskNotif] sendNotification error:', error.message, error.stack);
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
 }
