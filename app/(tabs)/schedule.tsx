@@ -334,6 +334,30 @@ export default function ScheduleScreen() {
   const rowHeight = useMemo(() => Math.round(ROW_HEIGHT * zoomLevel), [zoomLevel]);
   const barHeight = useMemo(() => Math.round(BAR_HEIGHT * zoomLevel), [zoomLevel]);
 
+  // Column header drag-to-resize (web: mouse events)
+  const colResizeDragRef = useRef<{ startX: number; startZoom: number } | null>(null);
+  const handleColResizeMouseDown = useCallback((e: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    colResizeDragRef.current = { startX: e.clientX, startZoom: zoomLevel };
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!colResizeDragRef.current) return;
+      const delta = ev.clientX - colResizeDragRef.current.startX;
+      const newDayWidth = Math.round(DAY_WIDTH * colResizeDragRef.current.startZoom) + delta;
+      const newZoom = parseFloat(
+        Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newDayWidth / DAY_WIDTH)).toFixed(2)
+      );
+      setZoomLevel(newZoom);
+    };
+    const onMouseUp = () => {
+      colResizeDragRef.current = null;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [zoomLevel]);
+
   // Pinch-to-zoom (iPad / Android)
   const zoomLevelRef = useRef(zoomLevel);
   useEffect(() => { zoomLevelRef.current = zoomLevel; }, [zoomLevel]);
@@ -1683,6 +1707,16 @@ ${pdfDates.length > 0 ? `
                       <Text style={[styles.dateCellDay, isToday(date) && styles.dateCellDayToday]}>
                         {date.toLocaleDateString('en-US', { weekday: 'short' })}
                       </Text>
+                      {Platform.OS === 'web' && (
+                        <View
+                          style={styles.colResizeHandle}
+                          // @ts-ignore web only
+                          onMouseDown={handleColResizeMouseDown}
+                        >
+                          <View style={styles.colResizeLine} />
+                          <View style={styles.colResizeLine} />
+                        </View>
+                      )}
                     </View>
                   ))}
                 </View>
@@ -3836,6 +3870,27 @@ const styles = StyleSheet.create({
   },
   dateCellToday: {
     backgroundColor: '#DBEAFE',
+  },
+  colResizeHandle: {
+    position: 'absolute',
+    right: -5,
+    top: 4,
+    bottom: 4,
+    width: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 2,
+    zIndex: 30,
+    backgroundColor: '#CBD5E1',
+    borderRadius: 3,
+    cursor: 'col-resize',
+  },
+  colResizeLine: {
+    width: 2,
+    height: 10,
+    backgroundColor: '#475569',
+    borderRadius: 1,
   },
   dateCellText: {
     fontSize: 10,
