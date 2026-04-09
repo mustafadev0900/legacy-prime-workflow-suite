@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, PanResponder } from 'react-native';
+import { View, Text, StyleSheet, PanResponder, Platform } from 'react-native';
 import { ZoomLevel } from '@/types';
 
 interface TimelineHeaderProps {
@@ -15,7 +15,8 @@ interface TimelineHeaderProps {
 
 /**
  * Drag handle on the right edge of each date column.
- * Uses PanResponder with capture so it wins over the parent ScrollView.
+ * - Web: uses onMouseDown + document mouse events (works inside ScrollView)
+ * - Native: uses PanResponder with capture
  */
 function ColumnResizeHandle({
   onResizeStart,
@@ -28,6 +29,7 @@ function ColumnResizeHandle({
 }) {
   const startXRef = useRef<number | null>(null);
 
+  // Keep callbacks in refs so PanResponder (created once) never goes stale
   const onResizeStartRef = useRef(onResizeStart);
   const onResizeDeltaRef = useRef(onResizeDelta);
   const onResizeEndRef   = useRef(onResizeEnd);
@@ -35,15 +37,15 @@ function ColumnResizeHandle({
   useEffect(() => { onResizeDeltaRef.current = onResizeDelta; }, [onResizeDelta]);
   useEffect(() => { onResizeEndRef.current   = onResizeEnd;   }, [onResizeEnd]);
 
+  // ── Native: PanResponder ────────────────────────────────────────────────────
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder:        () => true,
       onStartShouldSetPanResponderCapture: () => true,
       onMoveShouldSetPanResponder:        () => true,
       onMoveShouldSetPanResponderCapture: () => true,
-
       onPanResponderGrant: (e) => {
-        console.log('[ColResize] grant pageX:', e.nativeEvent.pageX);
+        console.log('[ColResize] grant native pageX:', e.nativeEvent.pageX);
         startXRef.current = e.nativeEvent.pageX;
         onResizeStartRef.current?.();
       },
@@ -51,11 +53,9 @@ function ColumnResizeHandle({
         if (startXRef.current === null) return;
         const delta = e.nativeEvent.pageX - startXRef.current;
         startXRef.current = e.nativeEvent.pageX;
-        console.log('[ColResize] move delta:', delta);
         onResizeDeltaRef.current?.(delta);
       },
       onPanResponderRelease: () => {
-        console.log('[ColResize] release');
         startXRef.current = null;
         onResizeEndRef.current?.();
       },
@@ -66,8 +66,44 @@ function ColumnResizeHandle({
     })
   ).current;
 
+  // ── Web: mouse events on document (works inside overflow scroll containers) ──
+  const handleMouseDown = (e: any) => {
+    e.preventDefault();
+    e.stopPropagation();
+    startXRef.current = e.clientX;
+    console.log('[ColResize] mousedown clientX:', e.clientX);
+    onResizeStartRef.current?.();
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (startXRef.current === null) return;
+      const delta = ev.clientX - startXRef.current;
+      startXRef.current = ev.clientX;
+      console.log('[ColResize] mousemove delta:', delta);
+      onResizeDeltaRef.current?.(delta);
+    };
+
+    const onMouseUp = () => {
+      console.log('[ColResize] mouseup');
+      startXRef.current = null;
+      onResizeEndRef.current?.();
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
+  const webProps = Platform.OS === 'web'
+    ? { onMouseDown: handleMouseDown }
+    : {};
+
   return (
-    <View style={styles.resizeHandle} {...panResponder.panHandlers}>
+    <View
+      style={styles.resizeHandle}
+      {...(Platform.OS !== 'web' ? panResponder.panHandlers : {})}
+      {...webProps}
+    >
       <View style={styles.resizeLine} />
       <View style={styles.resizeLine} />
     </View>
@@ -134,24 +170,24 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#374151',
   },
-  // Positioned slightly inside the right edge so it's visible, not hidden behind the border
   resizeHandle: {
     position: 'absolute',
-    right: -6,
-    top: 4,
-    bottom: 4,
-    width: 12,
+    right: -5,
+    top: 6,
+    bottom: 6,
+    width: 10,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 2,
     zIndex: 30,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#D1D5DB',
     borderRadius: 3,
+    cursor: 'col-resize',
   },
   resizeLine: {
     width: 2,
-    height: 12,
+    height: 10,
     backgroundColor: '#6B7280',
     borderRadius: 1,
   },
