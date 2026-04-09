@@ -78,6 +78,7 @@ class FcmMessaging {
 
     if (!response.ok) {
       const errBody = await response.json().catch(() => ({})) as any;
+      console.error('[fcm] Full error response:', JSON.stringify(errBody));
       // Extract FCM v1 error code (e.g. "UNREGISTERED", "INVALID_ARGUMENT")
       const fcmCode: string =
         errBody?.error?.details?.find((d: any) =>
