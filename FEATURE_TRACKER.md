@@ -30,8 +30,8 @@
 | 2 | Hide subcontractor names on client shared schedule link | ❌ Not Implemented |
 | 3 | Show only visibleToClient tasks on shared view | ❌ Not Implemented |
 | 4 | Show clientVisibleNote instead of internal notes on shared view | ❌ Not Implemented |
-| 5 | Expandable single-day task cards (tap to show full notes) | ❌ Not Implemented |
-| 6 | Chevron icon (expand/collapse indicator) on task cards | ❌ Not Implemented |
+| 5 | Drag date column headers to resize width (Excel-like, web) | ✅ Implemented |
+| 6 | Pill resize handle — drag right edge to extend task duration | ✅ Implemented (pre-existing) |
 
 ---
 
@@ -82,8 +82,8 @@
 | Module | Total Tasks | Implemented | Remaining |
 |---|---|---|---|
 | 1 — Schedule Assignment | 10 | 9 | 1 in progress |
-| 2 — Client View & Cards | 6 | 0 | 6 |
+| 2 — Client View & Cards | 6 | 2 | 4 |
 | 3 — Business Expenses | 6 | 0 | 6 |
 | 4 — CRM Lead Management | 8 | 0 | 8 |
 | 5 — Appointment Calendar | 7 | 0 | 7 |
-| **TOTAL** | **37** | **8** | **29** |
+| **TOTAL** | **37** | **10** | **27** |

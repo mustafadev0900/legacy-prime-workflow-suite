@@ -330,33 +330,39 @@ export default function ScheduleScreen() {
     }
   }, [contextScheduledTasks, selectedProject]);
 
-  // colWidthExtra: pixels added/removed by dragging the date header — ONLY affects
-  // column width, NOT row height / font size / bar height (those stay on zoomLevel).
-  const [colWidthExtra, setColWidthExtra] = useState(0);
-  const colWidthExtraRef = useRef(0);
-  useEffect(() => { colWidthExtraRef.current = colWidthExtra; }, [colWidthExtra]);
+  // Per-column width overrides: extra pixels added to column i by drag-resize.
+  // Stored as delta from the zoom-based base so zooming still scales all columns.
+  const [colWidthOverrides, setColWidthOverrides] = useState<Record<number, number>>({});
+  const colWidthOverridesRef = useRef<Record<number, number>>({});
+  useEffect(() => { colWidthOverridesRef.current = colWidthOverrides; }, [colWidthOverrides]);
+
+  // Clear per-column overrides when project or date range changes so stale
+  // index-based widths don't bleed onto a completely different column set.
+  useEffect(() => { setColWidthOverrides({}); }, [selectedProject, ganttStartOverride]);
 
   const dayWidth = useMemo(
-    () => Math.max(30, Math.round(DAY_WIDTH * zoomLevel) + colWidthExtra),
-    [zoomLevel, colWidthExtra]
+    () => Math.round(DAY_WIDTH * zoomLevel),
+    [zoomLevel]
   );
   const rowHeight = useMemo(() => Math.round(ROW_HEIGHT * zoomLevel), [zoomLevel]);
   const barHeight = useMemo(() => Math.round(BAR_HEIGHT * zoomLevel), [zoomLevel]);
 
-  // Column header drag-to-resize (web only — only widens/narrows columns)
-  const colResizeDragRef = useRef<{ startX: number; startExtra: number } | null>(null);
-  const handleColResizeMouseDown = useCallback((e: any) => {
+  // Column header drag-to-resize (web only — only widens/narrows the dragged column)
+  const colResizeDragRef = useRef<{ startX: number; colIndex: number; startExtra: number } | null>(null);
+  const handleColResizeMouseDown = useCallback((e: any, colIndex: number) => {
     e.preventDefault();
     e.stopPropagation();
-    colResizeDragRef.current = { startX: e.clientX, startExtra: colWidthExtraRef.current };
+    const startExtra = colWidthOverridesRef.current[colIndex] ?? 0;
+    colResizeDragRef.current = { startX: e.clientX, colIndex, startExtra };
     const onMouseMove = (ev: MouseEvent) => {
       if (!colResizeDragRef.current) return;
       const delta = ev.clientX - colResizeDragRef.current.startX;
       const base = Math.round(DAY_WIDTH * zoomLevelRef.current);
       const newExtra = colResizeDragRef.current.startExtra + delta;
-      // clamp total dayWidth between 30px and 400px
+      // clamp total column width between 30px and 400px
       const clamped = Math.min(400, Math.max(30, base + newExtra)) - base;
-      setColWidthExtra(clamped);
+      const idx = colResizeDragRef.current.colIndex;
+      setColWidthOverrides(prev => ({ ...prev, [idx]: clamped }));
     };
     const onMouseUp = () => {
       colResizeDragRef.current = null;
@@ -511,7 +517,7 @@ export default function ScheduleScreen() {
     const CHAR_W = 5.5;    // avg px per char at zoom=1.0
     const OVERHEAD = 76;   // handles (18+18) + badge (~28) + padding (~12) at zoom=1.0
     const AVATAR_W = 20;   // avatar circle + gap at zoom=1.0
-    const widths = dates.map(() => dayWidth);
+    const widths = dates.map((_, i) => Math.max(30, dayWidth + (colWidthOverrides[i] ?? 0)));
     projectTasks.forEach(task => {
       if (task.duration !== 1) return;
       const taskStart = new Date(task.startDate);
@@ -540,7 +546,7 @@ export default function ScheduleScreen() {
       widths[idx] = Math.max(widths[idx], needed);
     });
     return widths;
-  }, [dates, dayWidth, projectTasks, zoomLevel]);
+  }, [dates, dayWidth, projectTasks, zoomLevel, colWidthOverrides]);
 
   // colXOffsets[i] = left edge (px) of column i; last entry = total grid width
   const colXOffsets = useMemo(() => {
@@ -1720,7 +1726,17 @@ ${pdfDates.length > 0 ? `
                         <View
                           style={styles.colResizeHandle}
                           // @ts-ignore web only
-                          onMouseDown={handleColResizeMouseDown}
+                          onMouseDown={(e) => handleColResizeMouseDown(e, i)}
+                          // @ts-ignore web only — double-click resets this column to default width
+                          onDoubleClick={(e: any) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setColWidthOverrides(prev => {
+                              const next = { ...prev };
+                              delete next[i];
+                              return next;
+                            });
+                          }}
                         >
                           <View style={styles.colResizeLine} />
                           <View style={styles.colResizeLine} />
