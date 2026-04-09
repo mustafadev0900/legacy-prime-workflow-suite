@@ -330,24 +330,33 @@ export default function ScheduleScreen() {
     }
   }, [contextScheduledTasks, selectedProject]);
 
-  const dayWidth = useMemo(() => Math.round(DAY_WIDTH * zoomLevel), [zoomLevel]);
+  // colWidthExtra: pixels added/removed by dragging the date header — ONLY affects
+  // column width, NOT row height / font size / bar height (those stay on zoomLevel).
+  const [colWidthExtra, setColWidthExtra] = useState(0);
+  const colWidthExtraRef = useRef(0);
+  useEffect(() => { colWidthExtraRef.current = colWidthExtra; }, [colWidthExtra]);
+
+  const dayWidth = useMemo(
+    () => Math.max(30, Math.round(DAY_WIDTH * zoomLevel) + colWidthExtra),
+    [zoomLevel, colWidthExtra]
+  );
   const rowHeight = useMemo(() => Math.round(ROW_HEIGHT * zoomLevel), [zoomLevel]);
   const barHeight = useMemo(() => Math.round(BAR_HEIGHT * zoomLevel), [zoomLevel]);
 
-  // Column header drag-to-resize (web: mouse events)
-  const colResizeDragRef = useRef<{ startX: number; startZoom: number } | null>(null);
+  // Column header drag-to-resize (web only — only widens/narrows columns)
+  const colResizeDragRef = useRef<{ startX: number; startExtra: number } | null>(null);
   const handleColResizeMouseDown = useCallback((e: any) => {
     e.preventDefault();
     e.stopPropagation();
-    colResizeDragRef.current = { startX: e.clientX, startZoom: zoomLevel };
+    colResizeDragRef.current = { startX: e.clientX, startExtra: colWidthExtraRef.current };
     const onMouseMove = (ev: MouseEvent) => {
       if (!colResizeDragRef.current) return;
       const delta = ev.clientX - colResizeDragRef.current.startX;
-      const newDayWidth = Math.round(DAY_WIDTH * colResizeDragRef.current.startZoom) + delta;
-      const newZoom = parseFloat(
-        Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, newDayWidth / DAY_WIDTH)).toFixed(2)
-      );
-      setZoomLevel(newZoom);
+      const base = Math.round(DAY_WIDTH * zoomLevelRef.current);
+      const newExtra = colResizeDragRef.current.startExtra + delta;
+      // clamp total dayWidth between 30px and 400px
+      const clamped = Math.min(400, Math.max(30, base + newExtra)) - base;
+      setColWidthExtra(clamped);
     };
     const onMouseUp = () => {
       colResizeDragRef.current = null;
@@ -356,7 +365,7 @@ export default function ScheduleScreen() {
     };
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
-  }, [zoomLevel]);
+  }, []);
 
   // Pinch-to-zoom (iPad / Android)
   const zoomLevelRef = useRef(zoomLevel);
