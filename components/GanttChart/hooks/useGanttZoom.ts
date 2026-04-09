@@ -7,6 +7,7 @@ interface UseGanttZoomReturn {
   zoomIn: () => void;
   zoomOut: () => void;
   setZoomLevel: (level: ZoomLevel) => void;
+  resizeCellWidth: (delta: number) => void;
 }
 
 /**
@@ -45,11 +46,16 @@ export function useGanttZoom(
     }
   }, [defaultCellWidth, maxCellWidth]);
 
+  const resizeCellWidth = useCallback((delta: number) => {
+    setCellWidth(prev => Math.min(maxCellWidth, Math.max(minCellWidth, Math.round(prev + delta))));
+  }, [minCellWidth, maxCellWidth]);
+
   return {
     cellWidth,
     zoomLevel,
     zoomIn,
     zoomOut,
     setZoomLevel: handleSetZoomLevel,
+    resizeCellWidth,
   };
 }

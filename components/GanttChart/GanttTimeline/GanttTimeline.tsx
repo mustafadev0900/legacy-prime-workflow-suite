@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect, useState } from 'react';
 import { View, StyleSheet, ScrollView, PanResponder, GestureResponderEvent } from 'react-native';
 import { GanttTask, ZoomLevel, SchedulePhase } from '@/types';
 import TimelineHeader from './TimelineHeader';
@@ -37,6 +37,8 @@ interface GanttTimelineProps {
   readOnly?: boolean;
   // Scroll position callback so parent can track x for pan buttons
   onScrollX?: (x: number) => void;
+  // Column width resize via dragging date header border
+  onColumnResize?: (delta: number) => void;
 }
 
 /**
@@ -70,7 +72,9 @@ export default function GanttTimeline({
   onCellPress,
   readOnly = false,
   onScrollX,
+  onColumnResize,
 }: GanttTimelineProps) {
+  const [isColumnResizing, setIsColumnResizing] = useState(false);
   // ── Refs for PanResponder (avoid stale closures) ────────────────────────────
   const draggedIdRef = useRef(draggedTaskId);
   const resizingRef = useRef(resizingTask);
@@ -178,7 +182,7 @@ export default function GanttTimeline({
         style={styles.scrollView}
         horizontal
         showsHorizontalScrollIndicator
-        scrollEnabled={!draggedTaskId && !resizingTask}
+        scrollEnabled={!draggedTaskId && !resizingTask && !isColumnResizing}
         bounces={false}
         onScroll={onScrollX ? (e) => onScrollX(e.nativeEvent.contentOffset.x) : undefined}
         scrollEventThrottle={16}
@@ -191,6 +195,9 @@ export default function GanttTimeline({
             height={headerHeight}
             zoomLevel={zoomLevel}
             fontSize={fontSize}
+            onColumnResizeStart={() => setIsColumnResizing(true)}
+            onColumnResizeDelta={onColumnResize}
+            onColumnResizeEnd={() => setIsColumnResizing(false)}
           />
 
           {/* Task area */}

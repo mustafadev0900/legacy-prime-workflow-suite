@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useRef } from 'react';
+import { View, Text, StyleSheet, GestureResponderEvent } from 'react-native';
 import { ZoomLevel } from '@/types';
 
 interface TimelineHeaderProps {
@@ -8,6 +8,9 @@ interface TimelineHeaderProps {
   height: number;
   zoomLevel: ZoomLevel;
   fontSize: number;
+  onColumnResizeStart?: () => void;
+  onColumnResizeDelta?: (delta: number) => void;
+  onColumnResizeEnd?: () => void;
 }
 
 /**
@@ -19,7 +22,29 @@ export default function TimelineHeader({
   height,
   zoomLevel,
   fontSize,
+  onColumnResizeStart,
+  onColumnResizeDelta,
+  onColumnResizeEnd,
 }: TimelineHeaderProps) {
+  const dragRef = useRef<{ startX: number } | null>(null);
+
+  const handleResizeTouchStart = (e: GestureResponderEvent) => {
+    dragRef.current = { startX: e.nativeEvent.pageX };
+    onColumnResizeStart?.();
+  };
+
+  const handleResizeTouchMove = (e: GestureResponderEvent) => {
+    if (!dragRef.current || !onColumnResizeDelta) return;
+    const delta = e.nativeEvent.pageX - dragRef.current.startX;
+    dragRef.current.startX = e.nativeEvent.pageX;
+    onColumnResizeDelta(delta);
+  };
+
+  const handleResizeTouchEnd = () => {
+    dragRef.current = null;
+    onColumnResizeEnd?.();
+  };
+
   const formatDate = (date: Date, level: ZoomLevel): string => {
     switch (level) {
       case 'day':
@@ -43,6 +68,16 @@ export default function TimelineHeader({
           <Text style={[styles.dateText, { fontSize }]} numberOfLines={1}>
             {formatDate(date, zoomLevel)}
           </Text>
+          {onColumnResizeDelta && (
+            <View
+              style={styles.columnResizeHandle}
+              onTouchStart={handleResizeTouchStart}
+              onTouchMove={handleResizeTouchMove}
+              onTouchEnd={handleResizeTouchEnd}
+            >
+              <View style={styles.columnResizeIndicator} />
+            </View>
+          )}
         </View>
       ))}
     </View>
@@ -65,5 +100,22 @@ const styles = StyleSheet.create({
   dateText: {
     fontWeight: '600',
     color: '#374151',
+  },
+  columnResizeHandle: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+    cursor: 'col-resize',
+  },
+  columnResizeIndicator: {
+    width: 3,
+    height: 16,
+    backgroundColor: '#D1D5DB',
+    borderRadius: 2,
   },
 });

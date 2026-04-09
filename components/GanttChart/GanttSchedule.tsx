@@ -56,7 +56,7 @@ export default function GanttSchedule({
   const responsive = useGanttResponsive();
 
   // ── Zoom ────────────────────────────────────────────────────────────────────
-  const { cellWidth, zoomLevel, zoomIn, zoomOut, setZoomLevel } = useGanttZoom(
+  const { cellWidth, zoomLevel, zoomIn, zoomOut, setZoomLevel, resizeCellWidth } = useGanttZoom(
     responsive.defaultCellWidth,
     responsive.minCellWidth,
     responsive.maxCellWidth
@@ -355,6 +355,7 @@ export default function GanttSchedule({
           onCellPress={effectiveViewMode === 'internal' ? handleCellPress : undefined}
           readOnly={effectiveViewMode === 'client'}
           onScrollX={(x) => { scrollXRef.current = x; }}
+          onColumnResize={resizeCellWidth}
         />
       </View>
 
