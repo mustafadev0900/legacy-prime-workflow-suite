@@ -28,7 +28,9 @@ async function sendSubAssignmentSMS(
   const digits = phone.replace(/\D/g, '');
   const e164 = digits.length === 10 ? `+1${digits}` : digits.length === 11 && digits.startsWith('1') ? `+${digits}` : phone;
   const firstName = subName?.split(' ')[0] || '';
-  const dateStr = new Date(startDate.split('T')[0] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const smsDatePart = startDate.split('T')[0].split(' ')[0];
+  const [smsYr, smsMo, smsDy] = smsDatePart.split('-').map(Number);
+  const dateStr = new Date(smsYr, smsMo - 1, smsDy).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const sender = companyName || 'Legacy Prime';
   const body = `Hi ${firstName}, you've been assigned to: ${taskName} on ${dateStr}. - ${sender}`;
   console.log('[Schedule SMS] Sending to:', subName, '| Phone:', phone, '→ E.164:', e164);
@@ -65,8 +67,10 @@ async function sendSubAssignmentEmail(
     console.log('[Schedule Email] Skipped — no email for', subName);
     return;
   }
-  const firstName = subName?.split(' ')[0] || '';
-  const dateStr = new Date(startDate.split('T')[0] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const firstName = subName?.trim() || ''; // caller pre-computes correct greeting name(s)
+  const datePart = startDate.split('T')[0].split(' ')[0]; // 'YYYY-MM-DD' — handles both ISO 'T' and space separators
+  const [yr, mo, dy] = datePart.split('-').map(Number);
+  const dateStr = new Date(yr, mo - 1, dy).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const subject = `Job Assignment — ${taskName}`;
   const body = `Hi ${firstName},\n\n${companyName} has assigned you to: ${taskName} on ${dateStr}.\n\n— ${companyName}`;
 
@@ -1053,17 +1057,18 @@ export default function ScheduleScreen() {
         .map(id => subcontractors.find(s => s.id === id))
         .filter((s): s is typeof subcontractors[0] => !!s?.email?.trim());
       if (emailSubs.length > 0) {
-        const names = emailSubs.map(s => s.name.split(' ')[0]).join(', ');
-        showNotif(`📧 Opening email for ${names}...`, true);
-        // Pass first sub's name for greeting; sendSubAssignmentEmail accepts multiple emails via comma
+        const firstNames = emailSubs.map(s => s.name.split(' ')[0]);
+        const greetingName = firstNames.join(' & '); // "Blake" or "Blake & James"
+        const displayNames = firstNames.join(', ');
+        showNotif(`📧 Opening email for ${displayNames}...`, true);
         await sendSubAssignmentEmail(
           emailSubs.map(s => s.email).join(','),
-          emailSubs.length === 1 ? emailSubs[0].name : names,
+          greetingName,
           editingTask.category,
           editingTask.startDate,
           companyName,
         );
-        showNotif(`📧 Email opened for ${names} ✓`, false, 3000);
+        showNotif(`📧 Email opened for ${displayNames} ✓`, false, 3000);
       }
     }
 
