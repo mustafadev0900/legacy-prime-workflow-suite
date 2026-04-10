@@ -1068,6 +1068,11 @@ export default function ScheduleScreen() {
 
       if (newlyAddedEmps.length > 0) {
         showNotif(`🔔 Notifying ${newlyAddedEmps.length} employee(s)...`, true);
+        const rawStart = editingTask.startDate;
+        const sentStart = rawStart.split('T')[0].split(' ')[0];
+        console.log('[TaskNotif] raw startDate from task:', rawStart);
+        console.log('[TaskNotif] sent startDate to API:', sentStart);
+        console.log('[TaskNotif] task category:', editingTask.category);
         Promise.all(
           newlyAddedEmps.map(empId =>
             fetch(`${SMS_API_BASE}/api/send-task-assignment-notification`, {
@@ -1077,10 +1082,10 @@ export default function ScheduleScreen() {
                 employeeId: empId,
                 companyId: company?.id,
                 taskName: editingTask.category,
-                startDate: editingTask.startDate.split('T')[0].split(' ')[0],
+                startDate: sentStart,
                 companyName,
               }),
-            }).then(r => r.json()).then(r => ({ success: r.success, empId }))
+            }).then(r => r.json()).then(r => { console.log('[TaskNotif] API response:', JSON.stringify(r)); return { success: r.success, empId }; })
               .catch(() => ({ success: false, empId }))
           )
         ).then(results => {
