@@ -153,8 +153,12 @@ export default function ScheduleViewScreen() {
           const tasksRes = await fetch(`${base}/api/get-scheduled-tasks?projectId=${link.projectId}`);
           if (tasksRes.ok) {
             const tasksData = await tasksRes.json();
-            // Show all tasks — visibleToClient only controls whether notes are shown
-            setProjectTasks(tasksData.scheduledTasks ?? []);
+            // Only show tasks explicitly marked visible to client (undefined treated as visible)
+            setProjectTasks(
+              (tasksData.scheduledTasks ?? []).filter(
+                (t: ScheduledTask) => t.visibleToClient !== false
+              )
+            );
           }
         }
       } catch (e) {
@@ -634,10 +638,9 @@ export default function ScheduleViewScreen() {
               return formatDate(d);
             })()} · {hoveredTask.duration}d
           </Text>
-          <Text style={{ fontSize: 11, color: '#6B7280' }}>
-            {hoveredTask.workType === 'subcontractor' ? '👷 Subcontractor' : '🏠 In-House'}
-            {hoveredTask.completed ? '  ✓ Completed' : ''}
-          </Text>
+          {hoveredTask.completed && (
+            <Text style={{ fontSize: 11, color: '#16A34A' }}>✓ Completed</Text>
+          )}
           {hoveredTask.notes && hoveredTask.visibleToClient !== false ? (
             <Text
               style={{

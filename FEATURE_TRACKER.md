@@ -26,9 +26,9 @@
 
 | # | Task | Status |
 |---|---|---|
-| 1 | Hide employee avatars on client shared schedule link | ❌ Not Implemented |
-| 2 | Hide subcontractor names on client shared schedule link | ❌ Not Implemented |
-| 3 | Show only visibleToClient tasks on shared view | ❌ Not Implemented |
+| 1 | Hide employee avatars on client shared schedule link | ✅ Implemented |
+| 2 | Hide subcontractor names on client shared schedule link | ✅ Implemented |
+| 3 | Show only visibleToClient tasks on shared view | ✅ Implemented |
 | 4 | Show clientVisibleNote instead of internal notes on shared view | ❌ Not Implemented |
 | 5 | Drag date column headers to resize width (Excel-like, web) | ✅ Implemented |
 | 6 | Pill resize handle — drag right edge to extend task duration | ✅ Implemented (pre-existing) |
