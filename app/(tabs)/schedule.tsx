@@ -1807,16 +1807,36 @@ ${pdfDates.length > 0 ? `
                       <Text style={[styles.dateCellDay, isToday(date) && styles.dateCellDayToday]}>
                         {date.toLocaleDateString('en-US', { weekday: 'short' })}
                       </Text>
-                      {Platform.OS === 'web' && (
-                        <View
-                          style={styles.colResizeHandle}
-                          // @ts-ignore web only
-                          onMouseDown={(e) => handleColResizeMouseDown(e, i)}
-                        >
-                          <View style={styles.colResizeLine} />
-                          <View style={styles.colResizeLine} />
-                        </View>
-                      )}
+                      <View
+                        style={[styles.colResizeHandle, Platform.OS !== 'web' && styles.colResizeHandleNative]}
+                        // @ts-ignore web only
+                        onMouseDown={Platform.OS === 'web' ? (e: any) => handleColResizeMouseDown(e, i) : undefined}
+                        onStartShouldSetResponder={Platform.OS !== 'web' ? () => true : undefined}
+                        onResponderGrant={Platform.OS !== 'web' ? (e: any) => {
+                          const now = Date.now();
+                          const last = colResizeLastClickRef.current[i] ?? 0;
+                          if (last !== 0 && now - last < 400) {
+                            colResizeLastClickRef.current[i] = 0;
+                            setColWidthOverrides(prev => { const n = { ...prev }; delete n[i]; return n; });
+                            colResizeDragRef.current = null;
+                            return;
+                          }
+                          colResizeLastClickRef.current[i] = now;
+                          colResizeDragRef.current = { startX: e.nativeEvent.pageX, colIndex: i, startExtra: colWidthOverridesRef.current[i] ?? 0 };
+                        } : undefined}
+                        onResponderMove={Platform.OS !== 'web' ? (e: any) => {
+                          const drag = colResizeDragRef.current;
+                          if (!drag) return;
+                          const delta = e.nativeEvent.pageX - drag.startX;
+                          const base = Math.round(DAY_WIDTH * zoomLevelRef.current);
+                          const clamped = Math.min(400, Math.max(30, base + drag.startExtra + delta)) - base;
+                          setColWidthOverrides(prev => ({ ...prev, [drag.colIndex]: clamped }));
+                        } : undefined}
+                        onResponderRelease={Platform.OS !== 'web' ? () => { colResizeDragRef.current = null; } : undefined}
+                      >
+                        <View style={styles.colResizeLine} />
+                        <View style={styles.colResizeLine} />
+                      </View>
                     </View>
                   ))}
                 </View>
@@ -1937,13 +1957,33 @@ ${pdfDates.length > 0 ? `
                             </TouchableOpacity>
                           )}
                         </TouchableOpacity>
-                        {Platform.OS === 'web' && (
-                          <View
-                            style={styles.rowResizeHandle}
-                            // @ts-ignore web only
-                            onMouseDown={(e: any) => handleRowResizeMouseDown(e, phase.id)}
-                          />
-                        )}
+                        <View
+                          style={[styles.rowResizeHandle, Platform.OS !== 'web' && styles.rowResizeHandleNative]}
+                          // @ts-ignore web only
+                          onMouseDown={Platform.OS === 'web' ? (e: any) => handleRowResizeMouseDown(e, phase.id) : undefined}
+                          onStartShouldSetResponder={Platform.OS !== 'web' ? () => true : undefined}
+                          onResponderGrant={Platform.OS !== 'web' ? (e: any) => {
+                            const now = Date.now();
+                            const last = rowResizeLastClickRef.current[phase.id] ?? 0;
+                            if (last !== 0 && now - last < 400) {
+                              rowResizeLastClickRef.current[phase.id] = 0;
+                              setRowHeightOverrides(prev => { const n = { ...prev }; delete n[phase.id]; return n; });
+                              rowResizeDragRef.current = null;
+                              return;
+                            }
+                            rowResizeLastClickRef.current[phase.id] = now;
+                            rowResizeDragRef.current = { startY: e.nativeEvent.pageY, phaseId: phase.id, startExtra: rowHeightOverridesRef.current[phase.id] ?? 0 };
+                          } : undefined}
+                          onResponderMove={Platform.OS !== 'web' ? (e: any) => {
+                            const drag = rowResizeDragRef.current;
+                            if (!drag) return;
+                            const delta = e.nativeEvent.pageY - drag.startY;
+                            const base = Math.round(ROW_HEIGHT * zoomLevelRef.current);
+                            const clamped = Math.min(400, Math.max(20, base + drag.startExtra + delta)) - base;
+                            setRowHeightOverrides(prev => ({ ...prev, [drag.phaseId]: clamped }));
+                          } : undefined}
+                          onResponderRelease={Platform.OS !== 'web' ? () => { rowResizeDragRef.current = null; } : undefined}
+                        />
                       </View>
                     );
                   })}
@@ -4001,6 +4041,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#475569',
     borderRadius: 1,
   },
+  colResizeHandleNative: {
+    width: 20,
+    right: -10,
+    backgroundColor: '#94A3B8',
+  },
   rowResizeHandle: {
     position: 'absolute',
     bottom: 0,
@@ -4010,6 +4055,12 @@ const styles = StyleSheet.create({
     zIndex: 30,
     cursor: 'row-resize',
     backgroundColor: 'transparent',
+  },
+  rowResizeHandleNative: {
+    height: 18,
+    backgroundColor: 'rgba(148, 163, 184, 0.35)',
+    borderBottomLeftRadius: 3,
+    borderBottomRightRadius: 3,
   },
   dateCellText: {
     fontSize: 10,
