@@ -198,6 +198,9 @@ export default function ScheduleScreen() {
   });
   const [resizingTask, setResizingTask] = useState<{ id: string; type: 'left' | 'right' } | null>(null);
   const resizingTaskRef = useRef<{ id: string; type: 'left' | 'right' } | null>(null);
+  // Stable refs for resize drag — survive React re-renders caused by setScheduledTasks in onMove
+  const resizeInitDurRef = useRef(0);
+  const resizeInitStartRef = useRef<Date>(new Date());
   const setResizingTaskSync = useCallback((val: { id: string; type: 'left' | 'right' } | null) => {
     resizingTaskRef.current = val;
     setResizingTask(val);
@@ -1451,12 +1454,8 @@ ${pdfDates.length > 0 ? `
   }, [dates, dayWidth, rowHeight, barHeight, phaseRowTops, phaseRowHeights, allPhases, taskLanes, colXOffsets, colWidths]);
 
   const createResizePanResponder = (task: ScheduledTask, type: 'left' | 'right') => {
-    let initialDuration = task.duration;
-    let initialStartDate = new Date(task.startDate);
-
     return PanResponder.create({
       onStartShouldSetPanResponderCapture: () => {
-        // Set ref immediately (sync) so scrollEnabled flips before any move event
         resizingTaskRef.current = { id: task.id, type };
         return true;
       },
@@ -1465,24 +1464,28 @@ ${pdfDates.length > 0 ? `
       onMoveShouldSetPanResponderCapture: () => true,
       onShouldBlockNativeResponder: () => true,
       onPanResponderGrant: () => {
+        // Capture into component-level refs — these survive React re-renders caused
+        // by setScheduledTasks inside onMove, so initialDuration never drifts.
+        resizeInitDurRef.current = task.duration;
+        resizeInitStartRef.current = new Date(task.startDate);
         setResizingTaskSync({ id: task.id, type });
         setTouchingHandle({ id: task.id, type });
-        initialDuration = task.duration;
-        initialStartDate = new Date(task.startDate);
       },
       onPanResponderMove: (_, gs) => {
+        const initDur = resizeInitDurRef.current;
+        const initStart = resizeInitStartRef.current;
         const daysDelta = Math.round(gs.dx / dayWidth);
         if (type === 'right') {
-          const newDuration = Math.max(1, initialDuration + daysDelta);
-          const newEndDate = new Date(task.startDate);
-          newEndDate.setDate(newEndDate.getDate() + newDuration);
+          const newDuration = Math.max(1, initDur + daysDelta);
+          const newEndDate = new Date(initStart);
+          newEndDate.setDate(initStart.getDate() + newDuration);
           setScheduledTasks(prev => prev.map(t =>
             t.id === task.id ? { ...t, duration: newDuration, endDate: newEndDate.toISOString() } : t
           ));
         } else {
-          const newDuration = Math.max(1, initialDuration - daysDelta);
-          const newStartDate = new Date(initialStartDate);
-          newStartDate.setDate(initialStartDate.getDate() + daysDelta);
+          const newDuration = Math.max(1, initDur - daysDelta);
+          const newStartDate = new Date(initStart);
+          newStartDate.setDate(initStart.getDate() + daysDelta);
           const newEndDate = new Date(newStartDate);
           newEndDate.setDate(newStartDate.getDate() + newDuration);
           setScheduledTasks(prev => prev.map(t =>
