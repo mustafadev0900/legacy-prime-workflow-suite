@@ -7,6 +7,7 @@ import {
   Modal,
   Platform,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -49,12 +50,23 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+/** Parse a YYYY-MM-DD (or TIMESTAMPTZ) date string into a local Date without UTC offset shift. */
+function parseLocalDate(dateStr: string): Date {
+  const datePart = dateStr.split('T')[0].split(' ')[0];
+  const [yr, mo, dy] = datePart.split('-').map(Number);
+  return new Date(yr, mo - 1, dy);
+}
+
+function formatTaskDate(dateStr: string): string {
+  return parseLocalDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CrewScheduleScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, projects, company } = useApp();
+  const { user, projects, company, scheduledTasks: contextTasks } = useApp();
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super-admin';
 
@@ -62,6 +74,7 @@ export default function CrewScheduleScreen() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const [employees, setEmployees] = useState<User[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [currentWeekStart, setCurrentWeekStart] = useState<Date>(() => getMonday(new Date()));
   const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null);
@@ -92,22 +105,53 @@ export default function CrewScheduleScreen() {
   const companyIdRef = useRef(company?.id);
   companyIdRef.current = company?.id;
 
+  const fetchTasks = useCallback((opts?: { silent?: boolean }) => {
+    const companyId = companyIdRef.current;
+    if (!companyId) return Promise.resolve();
+    if (!opts?.silent) setLoadingTasks(true);
+    return fetch(`${API_BASE}/api/get-scheduled-tasks?companyId=${companyId}`)
+      .then(r => r.json())
+      .then(data => {
+        const all = (data.scheduledTasks ?? []) as ScheduledTask[];
+        console.log('[CrewSchedule] tasks loaded:', all.length, '| unassigned:', all.filter(t => !t.assignedEmployeeIds?.length).length);
+        setTasks(all);
+      })
+      .catch(err => console.error('[CrewSchedule] tasks fetch error:', err))
+      .finally(() => { setLoadingTasks(false); setRefreshing(false); });
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchTasks({ silent: true });
+  }, [fetchTasks]);
+
   useFocusEffect(
     useCallback(() => {
-      const companyId = companyIdRef.current;
-      if (!companyId) return;
-      setLoadingTasks(true);
-      fetch(`${API_BASE}/api/get-scheduled-tasks?companyId=${companyId}`)
-        .then(r => r.json())
-        .then(data => {
-          const all = (data.scheduledTasks ?? []) as ScheduledTask[];
-          console.log('[CrewSchedule] tasks loaded:', all.length, '| unassigned:', all.filter(t => !t.assignedEmployeeIds?.length).length);
-          setTasks(all);
-        })
-        .catch(err => console.error('[CrewSchedule] tasks fetch error:', err))
-        .finally(() => setLoadingTasks(false));
-    }, [])
+      fetchTasks();
+    }, [fetchTasks])
   );
+
+  // ── Merge context tasks so newly created tasks appear instantly ────────────
+  // AppContext.scheduledTasks is updated optimistically (before the API save
+  // completes). Merging here means a task created in schedule.tsx is visible
+  // the moment the user lands on this screen, without waiting for the DB fetch.
+  const companyProjectIds = useMemo(
+    () => new Set(projects.map(p => p.id)),
+    [projects]
+  );
+
+  useEffect(() => {
+    const local = contextTasks.filter(t => companyProjectIds.has(t.projectId));
+    if (local.length === 0) return;
+    setTasks(prev => {
+      const prevMap = new Map(prev.map(t => [t.id, t]));
+      let changed = false;
+      local.forEach(t => {
+        if (!prevMap.has(t.id)) { prevMap.set(t.id, t); changed = true; }
+      });
+      return changed ? Array.from(prevMap.values()) : prev;
+    });
+  }, [contextTasks, companyProjectIds]);
 
   // ── Week navigation ────────────────────────────────────────────────────────
   const weekDates = useMemo<Date[]>(
@@ -176,10 +220,10 @@ export default function CrewScheduleScreen() {
 
   const getTasksForDate = useCallback(
     (date: Date, taskList: ScheduledTask[]): ScheduledTask[] => {
-      const time = new Date(date).setHours(0, 0, 0, 0);
+      const time = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
       return taskList.filter(t => {
-        const start = new Date(t.startDate).setHours(0, 0, 0, 0);
-        const end = new Date(t.endDate).setHours(0, 0, 0, 0);
+        const start = parseLocalDate(t.startDate).getTime();
+        const end   = parseLocalDate(t.endDate).getTime();
         // endDate is exclusive (matches Gantt duration logic)
         return time >= start && time < end;
       });
@@ -338,7 +382,13 @@ export default function CrewScheduleScreen() {
           <Text style={styles.loadingText}>Loading schedule…</Text>
         </View>
       ) : (
-        <ScrollView style={styles.body} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          style={styles.body}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#1E3A5F" />
+          }
+        >
 
           {/* WEEKLY GRID */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -485,9 +535,9 @@ export default function CrewScheduleScreen() {
                       {projectMap.get(task.projectId) ?? '—'}
                     </Text>
                     <Text style={styles.unassignedDates}>
-                      {new Date(task.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {formatTaskDate(task.startDate)}
                       {' – '}
-                      {new Date(task.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {formatTaskDate(task.endDate)}
                     </Text>
                     <View style={styles.unassignedBtn}>
                       <UserPlus size={11} color="#2563EB" />
@@ -537,9 +587,9 @@ export default function CrewScheduleScreen() {
                     <Text style={styles.modalSubtitle}>
                       {projectMap.get(selectedTask.projectId) ?? '—'}
                       {' · '}
-                      {new Date(selectedTask.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {formatTaskDate(selectedTask.startDate)}
                       {' – '}
-                      {new Date(selectedTask.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {formatTaskDate(selectedTask.endDate)}
                     </Text>
                   </View>
                   <TouchableOpacity onPress={closeAssignModal} hitSlop={8}>
