@@ -37,7 +37,10 @@
       },
       "usesIcloudStorage": true,
       "accessesContactNotes": true,
-      "buildNumber": "2"
+      "buildNumber": "2",
+      "entitlements": {
+        "aps-environment": "production"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -133,7 +136,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
+        "projectId": "fe5b6952-88a7-4df1-9377-521962ec7732"
       }
     },
     "experiments": {
