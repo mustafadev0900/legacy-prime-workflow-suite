@@ -26,6 +26,28 @@ function generateOCRFingerprint(store: string, amount: number, date: string | Da
   return `${normalizedStore}_${formattedAmount}_${dateStr}`;
 }
 
+// Store name normalisation + Dice-coefficient similarity (0–1 score)
+function normalizeStoreName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function storeSimilarity(a: string, b: string): number {
+  const na = normalizeStoreName(a);
+  const nb = normalizeStoreName(b);
+  if (na === nb) return 1;
+  if (na.includes(nb) || nb.includes(na)) return 0.9;
+  if (na.length < 2 || nb.length < 2) return 0;
+  const bigrams = (s: string): Set<string> => {
+    const set = new Set<string>();
+    for (let i = 0; i < s.length - 1; i++) set.add(s.slice(i, i + 2));
+    return set;
+  };
+  const ba = bigrams(na);
+  const bb = bigrams(nb);
+  const intersection = [...ba].filter(x => bb.has(x)).length;
+  return (2 * intersection) / (ba.size + bb.size);
+}
+
 export const config = {
   maxDuration: 30,
 };
@@ -53,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { companyId, projectId, imageBase64, ocrData, userId } = req.body;
+    const { companyId, projectId, imageBase64, ocrData, userId, expenseType, expenseSubcategory } = req.body;
 
     console.log('[CheckDuplicate] Checking for duplicates in project:', projectId);
 
@@ -188,6 +210,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           canOverride: true,
           message: `A similar receipt was found (${similarMatch.store}, $${Number(similarMatch.amount).toFixed(2)} on ${similarMatch.date}). This might be a duplicate.`,
         } as DuplicateCheckResult);
+      }
+
+      // Check 3: Fuzzy store match — same date, amount within ±1%, store name similarity ≥ 0.7
+      // Catches partial/cropped photos of the same receipt where OCR produces slightly different text
+      console.log('[CheckDuplicate] Checking fuzzy store match...');
+      const ocrDateStr = new Date(ocrData.date).toISOString().split('T')[0];
+      const amountLow = (ocrData.amount * 0.99).toFixed(2);
+      const amountHigh = (ocrData.amount * 1.01).toFixed(2);
+
+      const { data: fuzzyCandidates } = await supabase
+        .from('expenses')
+        .select('id, store, amount, date, created_at')
+        .eq('project_id', projectId)
+        .eq('date', ocrDateStr)
+        .gte('amount', amountLow)
+        .lte('amount', amountHigh)
+        .limit(20);
+
+      const fuzzyMatch = fuzzyCandidates?.find(e => storeSimilarity(e.store, ocrData.store) >= 0.7);
+      if (fuzzyMatch) {
+        console.log('[CheckDuplicate] Found fuzzy store match:', fuzzyMatch.id, 'similarity score met');
+        logDetection({ detectionType: 'similar', userDecision: 'warned', matchedExpenseId: fuzzyMatch.id, imageHash, ocrFingerprint });
+        return res.status(200).json({
+          isDuplicate: true,
+          duplicateType: 'similar',
+          matchedExpense: {
+            id: fuzzyMatch.id,
+            store: fuzzyMatch.store,
+            amount: Number(fuzzyMatch.amount),
+            date: fuzzyMatch.date,
+            createdAt: fuzzyMatch.created_at,
+          },
+          canOverride: true,
+          message: `A similar receipt was found (${fuzzyMatch.store}, $${Number(fuzzyMatch.amount).toFixed(2)} on ${fuzzyMatch.date}). This might be a duplicate.`,
+        } as DuplicateCheckResult);
+      }
+
+      // Check 4: Same-day same-store heuristic — any amount, store similarity ≥ 0.7
+      // Fuel exempted: crews regularly fill multiple vehicles at same station same day
+      const isFuel = expenseType === 'fuel' || expenseSubcategory === 'fuel';
+      if (!isFuel) {
+        console.log('[CheckDuplicate] Checking same-day same-store...');
+        const { data: sameDayCandidates } = await supabase
+          .from('expenses')
+          .select('id, store, amount, date, created_at')
+          .eq('project_id', projectId)
+          .eq('date', ocrDateStr)
+          .limit(50);
+
+        const sameDayMatch = sameDayCandidates?.find(e => storeSimilarity(e.store, ocrData.store) >= 0.7);
+        if (sameDayMatch) {
+          console.log('[CheckDuplicate] Found same-day same-store match:', sameDayMatch.id);
+          logDetection({ detectionType: 'similar', userDecision: 'warned', matchedExpenseId: sameDayMatch.id, imageHash, ocrFingerprint });
+          return res.status(200).json({
+            isDuplicate: true,
+            duplicateType: 'similar',
+            matchedExpense: {
+              id: sameDayMatch.id,
+              store: sameDayMatch.store,
+              amount: Number(sameDayMatch.amount),
+              date: sameDayMatch.date,
+              createdAt: sameDayMatch.created_at,
+            },
+            canOverride: true,
+            message: `A receipt from ${sameDayMatch.store} was already added today. This might be a duplicate.`,
+          } as DuplicateCheckResult);
+        }
       }
     } else {
       console.log('[CheckDuplicate] Insufficient OCR data for similarity check');
