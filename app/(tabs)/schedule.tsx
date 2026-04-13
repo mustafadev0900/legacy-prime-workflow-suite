@@ -1826,7 +1826,6 @@ ${pdfDates.length > 0 ? `
                           if (last !== 0 && now - last < 400) {
                             colResizeLastClickRef.current[i] = 0;
                             setColWidthOverrides(prev => { const n = { ...prev }; delete n[i]; return n; });
-                            setColResizePreview(null);
                             setColResizingIndex(null);
                             colResizeDragRef.current = null;
                             return;
