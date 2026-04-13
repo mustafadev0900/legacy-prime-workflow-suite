@@ -395,8 +395,9 @@ export default function ScheduleScreen() {
   // Row drag-to-resize (web only — only resizes the dragged phase row)
   const rowResizeDragRef = useRef<{ startY: number; phaseId: string; startExtra: number } | null>(null);
   const rowResizeLastClickRef = useRef<Record<string, number>>({});
+  const rowResizeLastUpdateRef = useRef(0); // throttle timestamp
+  const rowResizeCurrentExtraRef = useRef(0); // always-current extra for release handler
   const [rowResizingPhaseId, setRowResizingPhaseId] = useState<string | null>(null);
-  const [rowResizePreview, setRowResizePreview] = useState<{ phaseId: string; extra: number } | null>(null);
   const handleRowResizeMouseDown = useCallback((e: any, phaseId: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1891,7 +1892,7 @@ ${pdfDates.length > 0 ? `
                         <TouchableOpacity
                           style={[
                             styles.sidebarItem,
-                            { height: (phaseLaneCounts.get(phase.name) ?? 1) * (rowResizePreview?.phaseId === phase.id ? Math.max(20, Math.min(400, Math.round(ROW_HEIGHT * zoomLevelRef.current) + rowResizePreview.extra)) : (phaseRowHeights.get(phase.id) ?? rowHeight)) },
+                            { height: (phaseLaneCounts.get(phase.name) ?? 1) * (phaseRowHeights.get(phase.id) ?? rowHeight) },
                             selectedPhase === phase.name && styles.sidebarItemActive,
                             i % 2 === 0 ? styles.sidebarItemEven : styles.sidebarItemOdd,
                             phase.isSubPhase && styles.sidebarItemIndented,
@@ -1990,12 +1991,12 @@ ${pdfDates.length > 0 ? `
                             if (last !== 0 && now - last < 400) {
                               rowResizeLastClickRef.current[phase.id] = 0;
                               setRowHeightOverrides(prev => { const n = { ...prev }; delete n[phase.id]; return n; });
-                              setRowResizePreview(null);
                               setRowResizingPhaseId(null);
                               rowResizeDragRef.current = null;
                               return;
                             }
                             rowResizeLastClickRef.current[phase.id] = now;
+                            rowResizeCurrentExtraRef.current = rowHeightOverridesRef.current[phase.id] ?? 0;
                             rowResizeDragRef.current = { startY: e.nativeEvent.pageY, phaseId: phase.id, startExtra: rowHeightOverridesRef.current[phase.id] ?? 0 };
                             setRowResizingPhaseId(phase.id);
                           } : undefined}
@@ -2005,15 +2006,20 @@ ${pdfDates.length > 0 ? `
                             const delta = e.nativeEvent.pageY - drag.startY;
                             const base = Math.round(ROW_HEIGHT * zoomLevelRef.current);
                             const clamped = Math.min(400, Math.max(20, base + drag.startExtra + delta)) - base;
-                            setRowResizePreview({ phaseId: drag.phaseId, extra: clamped });
+                            rowResizeCurrentExtraRef.current = clamped;
+                            // Throttle to ~30fps to reduce re-render cost while keeping pill in sync
+                            const now = Date.now();
+                            if (now - rowResizeLastUpdateRef.current < 33) return;
+                            rowResizeLastUpdateRef.current = now;
+                            setRowHeightOverrides(prev => ({ ...prev, [drag.phaseId]: clamped }));
                           } : undefined}
                           onResponderRelease={Platform.OS !== 'web' ? () => {
                             const drag = rowResizeDragRef.current;
-                            if (drag && rowResizePreview) {
-                              setRowHeightOverrides(prev => ({ ...prev, [drag.phaseId]: rowResizePreview.extra }));
+                            if (drag) {
+                              // Use ref — always has the latest value regardless of closure staleness
+                              setRowHeightOverrides(prev => ({ ...prev, [drag.phaseId]: rowResizeCurrentExtraRef.current }));
                             }
                             rowResizeDragRef.current = null;
-                            setRowResizePreview(null);
                             setRowResizingPhaseId(null);
                           } : undefined}
                         />
@@ -4050,13 +4056,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   rowResizeHandleNative: {
-    height: 22,
-    backgroundColor: 'rgba(148, 163, 184, 0.5)',
-    borderBottomLeftRadius: 4,
-    borderBottomRightRadius: 4,
+    height: 6,
+    backgroundColor: 'rgba(148, 163, 184, 0.4)',
+    borderBottomLeftRadius: 3,
+    borderBottomRightRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowResizeHandleActive: {
-    backgroundColor: 'rgba(59, 130, 246, 0.6)',
+    backgroundColor: 'rgba(59, 130, 246, 0.7)',
   },
   dateCellText: {
     fontSize: 10,
