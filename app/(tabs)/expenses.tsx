@@ -1,7 +1,7 @@
 import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 // priceListCategories now comes from AppContext
 import * as ImagePicker from 'expo-image-picker';
@@ -81,10 +81,13 @@ export default function ExpensesScreen() {
     [projects]
   );
 
-  const filteredExpenses = useMemo(() =>
-    expenses.filter(e => e.projectId === selectedProjectId),
-    [expenses, selectedProjectId]
-  );
+  const { filter } = useLocalSearchParams<{ filter?: string }>();
+  const isBusinessFilter = filter === 'business';
+
+  const filteredExpenses = useMemo(() => {
+    if (isBusinessFilter) return expenses.filter(e => e.isCompanyCost);
+    return expenses.filter(e => e.projectId === selectedProjectId);
+  }, [expenses, selectedProjectId, isBusinessFilter]);
 
   const projectExpenseTotal = useMemo(() => 
     filteredExpenses.reduce((sum, e) => sum + e.amount, 0),
@@ -802,7 +805,7 @@ export default function ExpensesScreen() {
         </View>
 
         <View style={styles.expensesList}>
-          <Text style={styles.sectionTitle}>Recent Expenses</Text>
+          <Text style={styles.sectionTitle}>{isBusinessFilter ? 'Business & Overhead Expenses' : 'Recent Expenses'}</Text>
           {(isLoading || isCompanyReloading) && expenses.length === 0 ? (
             <View>
               {[0, 1, 2, 3].map(i => (
@@ -818,7 +821,7 @@ export default function ExpensesScreen() {
             </View>
           ) : filteredExpenses.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>No expenses recorded for this project</Text>
+              <Text style={styles.emptyStateText}>{isBusinessFilter ? 'No business expenses recorded yet' : 'No expenses recorded for this project'}</Text>
             </View>
           ) : (
             filteredExpenses.map((expense) => (
