@@ -38,6 +38,8 @@ const PUBLIC_ROUTES = [
   '/forgot-password',
   '/phone-login',
   '/auth/callback',
+  '/terms',
+  '/privacy',
 ];
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
@@ -204,6 +206,8 @@ function RootLayoutNav() {
         }}
       />
       <Stack.Screen name="admin/employee-management" options={{ title: 'Employee Management' }} />
+      <Stack.Screen name="terms" options={{ headerShown: false }} />
+      <Stack.Screen name="privacy" options={{ headerShown: false }} />
       <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
       <Stack.Screen name="stripe-test" options={{ headerShown: false }} />
       <Stack.Screen name="+not-found" />
