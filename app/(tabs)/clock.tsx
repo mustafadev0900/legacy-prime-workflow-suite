@@ -24,7 +24,20 @@ export default function ClockScreen() {
   const { projects, user, setUser, isLoading, isCompanyReloading, clockEntries } = useApp();
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedOfficeRole, setSelectedOfficeRole] = useState<string | null>(null);
+  const [showSelectionOverride, setShowSelectionOverride] = useState(false);
   const params = useLocalSearchParams();
+
+  const handleSelectProject = (id: string) => {
+    setShowSelectionOverride(false);
+    setSelectedProjectId(id);
+    setSelectedOfficeRole(null);
+  };
+
+  const handleSelectOfficeRole = (role: string) => {
+    setShowSelectionOverride(false);
+    setSelectedOfficeRole(role);
+    setSelectedProjectId(null);
+  };
 
   // Re-sync hourlyRate from DB every time this tab is opened
   useFocusEffect(
@@ -59,9 +72,10 @@ export default function ClockScreen() {
   const activeEntry = clockEntries.find(e => e.employeeId === user?.id && !e.clockOut);
 
   // If user is already clocked in and hasn't manually selected something,
-  // auto-route them to the clock-out screen for their active entry
-  const autoProjectId = !selectedProjectId && !selectedOfficeRole && activeEntry?.projectId ? activeEntry.projectId : null;
-  const autoOfficeRole = !selectedProjectId && !selectedOfficeRole && activeEntry?.officeRole ? activeEntry.officeRole : null;
+  // auto-route them to the clock-out screen for their active entry.
+  // showSelectionOverride suppresses auto-routing when user explicitly presses back.
+  const autoProjectId = !selectedProjectId && !selectedOfficeRole && !showSelectionOverride && activeEntry?.projectId ? activeEntry.projectId : null;
+  const autoOfficeRole = !selectedProjectId && !selectedOfficeRole && !showSelectionOverride && activeEntry?.officeRole ? activeEntry.officeRole : null;
 
   const effectiveProjectId = selectedProjectId || autoProjectId;
   const effectiveOfficeRole = selectedOfficeRole || autoOfficeRole;
@@ -92,7 +106,7 @@ export default function ClockScreen() {
               <TouchableOpacity
                 key={project.id}
                 style={styles.projectItem}
-                onPress={() => setSelectedProjectId(project.id)}
+                onPress={() => handleSelectProject(project.id)}
               >
                 <View style={styles.projectInfo}>
                   <Text style={styles.projectName}>{project.name}</Text>
@@ -122,7 +136,7 @@ export default function ClockScreen() {
             <TouchableOpacity
               key={role}
               style={styles.projectItem}
-              onPress={() => setSelectedOfficeRole(role)}
+              onPress={() => handleSelectOfficeRole(role)}
             >
               <View style={styles.projectInfo}>
                 <Text style={styles.projectName}>{role}</Text>
@@ -156,7 +170,7 @@ export default function ClockScreen() {
               <TouchableOpacity
                 key={project.id}
                 style={[styles.projectItem, styles.projectItemWeb]}
-                onPress={() => setSelectedProjectId(project.id)}
+                onPress={() => handleSelectProject(project.id)}
               >
                 <Text style={styles.projectName}>{project.name}</Text>
                 <View style={{ transform: [{ rotate: '-90deg' }] }}>
@@ -180,7 +194,7 @@ export default function ClockScreen() {
               <TouchableOpacity
                 key={role}
                 style={[styles.projectItem, styles.projectItemWeb]}
-                onPress={() => setSelectedOfficeRole(role)}
+                onPress={() => handleSelectOfficeRole(role)}
               >
                 <Text style={styles.projectName}>{role}</Text>
                 <View style={{ transform: [{ rotate: '-90deg' }] }}>
@@ -220,6 +234,7 @@ export default function ClockScreen() {
   const onChangeSelection = () => {
     setSelectedProjectId(null);
     setSelectedOfficeRole(null);
+    setShowSelectionOverride(true);
   };
 
   return (
@@ -275,9 +290,9 @@ export default function ClockScreen() {
           ) : (
             <View style={styles.clockContent}>
               <ClockInOutComponent
-                projectId={selectedProject?.id}
-                projectName={selectedProject?.name}
-                officeRole={selectedOfficeRole ?? undefined}
+                projectId={effectiveProject?.id}
+                projectName={effectiveProject?.name}
+                officeRole={effectiveOfficeRole ?? undefined}
               />
             </View>
           )}
