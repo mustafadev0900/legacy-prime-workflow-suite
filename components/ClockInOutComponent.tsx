@@ -30,13 +30,26 @@ const WORK_CATEGORIES = [
   'Other',
 ];
 
+const OFFICE_CATEGORIES = [
+  'Admin Work',
+  'Client Meeting',
+  'Bookkeeping',
+  'Sales Call',
+  'Planning',
+  'Correspondence',
+  'HR / Payroll',
+  'Other',
+];
+
 interface ClockInOutComponentProps {
-  projectId: string;
-  projectName: string;
+  projectId?: string;
+  projectName?: string;
+  officeRole?: string;
   compact?: boolean;
 }
 
-export default function ClockInOutComponent({ projectId, projectName, compact = false }: ClockInOutComponentProps) {
+export default function ClockInOutComponent({ projectId, projectName, officeRole, compact = false }: ClockInOutComponentProps) {
+  const isOfficeMode = !!officeRole;
   const { clockEntries, addClockEntry, updateClockEntry, user, updateProject, addExpense, expenses } = useApp();
   const router = useRouter();
   const [currentEntry, setCurrentEntry] = useState<ClockEntry | null>(null);
@@ -62,9 +75,11 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
 
   // Check for active entry whenever clockEntries changes or component mounts
   useEffect(() => {
-    const activeEntry = clockEntries.find(
-      (entry) => entry.projectId === projectId && entry.employeeId === user?.id && !entry.clockOut
-    );
+    const activeEntry = clockEntries.find((entry) => {
+      if (entry.employeeId !== user?.id || entry.clockOut) return false;
+      if (isOfficeMode) return entry.officeRole === officeRole;
+      return entry.projectId === projectId;
+    });
     if (activeEntry) {
       console.log('[Clock] Found active entry:', activeEntry.id);
       setCurrentEntry(activeEntry);
@@ -140,7 +155,8 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
     const entry: ClockEntry = {
       id: Date.now().toString(),
       employeeId: user.id,
-      projectId,
+      projectId: isOfficeMode ? undefined : projectId,
+      officeRole: isOfficeMode ? officeRole : undefined,
       clockIn: new Date().toISOString(),
       location: location || { latitude: 0, longitude: 0 },
       category: clockInCategory,
@@ -202,9 +218,9 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
       lunchBreaks: currentEntry.lunchBreaks,
     });
 
-    updateProject(projectId, {
-      hoursWorked: hoursWorked,
-    });
+    if (!isOfficeMode && projectId) {
+      updateProject(projectId, { hoursWorked: hoursWorked });
+    }
 
     console.log(`[Clock Out] ${user?.name} clocked out from ${projectName}`);
     console.log(`[Clock Out] Hours worked (excluding lunch): ${hoursWorked.toFixed(2)}h`);
@@ -216,7 +232,7 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
     // expense reflects the correct wage even if the rate changed since then.
     const effectiveRate = currentEntry.hourlyRate ?? user?.hourlyRate ?? 0;
     let laborCostMessage = '';
-    if (effectiveRate > 0 && hoursWorked > 0 && projectId) {
+    if (effectiveRate > 0 && hoursWorked > 0 && projectId && !isOfficeMode) {
       // Check if labor expense already exists for this clock entry
       const existingExpense = expenses.find(exp =>
         exp.clockEntryId === currentEntry.id && exp.type === 'Labor'
@@ -806,9 +822,9 @@ export default function ClockInOutComponent({ projectId, projectName, compact = 
             <Text style={styles.modalTitle}>Clock In</Text>
 
             <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>Work Category *</Text>
+              <Text style={styles.formLabel}>{isOfficeMode ? 'Task Category *' : 'Work Category *'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
-                {WORK_CATEGORIES.map((category) => (
+                {(isOfficeMode ? OFFICE_CATEGORIES : WORK_CATEGORIES).map((category) => (
                   <TouchableOpacity
                     key={category}
                     style={[styles.categoryChip, clockInCategory === category && styles.categoryChipActive]}

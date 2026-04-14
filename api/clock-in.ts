@@ -16,14 +16,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { companyId, employeeId, projectId, location, workPerformed, category } = req.body;
+    const { companyId, employeeId, projectId, officeRole, location, workPerformed, category } = req.body;
 
-    console.log('[ClockIn] Clocking in employee:', employeeId, 'for project:', projectId);
+    console.log('[ClockIn] Clocking in employee:', employeeId, 'for project:', projectId, 'officeRole:', officeRole);
 
-    // Validate required fields
-    if (!companyId || !employeeId || !projectId) {
+    // Validate required fields — must have either projectId or officeRole, not both null
+    if (!companyId || !employeeId) {
       console.log('[ClockIn] Missing required fields');
-      return res.status(400).json({ error: 'Missing required fields: companyId, employeeId, projectId' });
+      return res.status(400).json({ error: 'Missing required fields: companyId, employeeId' });
+    }
+    if (!projectId && !officeRole) {
+      console.log('[ClockIn] Missing projectId and officeRole — must have one');
+      return res.status(400).json({ error: 'Must provide either projectId or officeRole' });
     }
 
     // Initialize Supabase client
@@ -54,7 +58,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .insert({
         company_id: companyId,
         employee_id: employeeId,
-        project_id: projectId,
+        project_id: projectId || null,
+        office_role: officeRole || null,
         clock_in: new Date().toISOString(),
         location: location || { latitude: 0, longitude: 0 },
         work_performed: workPerformed || null,
@@ -78,18 +83,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Notify admins — must complete BEFORE responding because Vercel freezes
     // the process the moment res.json() is called (fire-and-forget is unsafe here).
     try {
-      const [name, projectRes] = await Promise.all([
-        getActorName(supabase, employeeId),
-        supabase.from('projects').select('name').eq('id', projectId).single(),
-      ]);
-      const projectName = projectRes.data?.name ?? 'a project';
+      const name = await getActorName(supabase, employeeId);
+      let notifyMessage = '';
+      if (officeRole) {
+        notifyMessage = `${name} clocked in for office: ${officeRole}`;
+      } else {
+        const projectRes = await supabase.from('projects').select('name').eq('id', projectId).single();
+        notifyMessage = `${name} clocked in on ${projectRes.data?.name ?? 'a project'}`;
+      }
       await notifyCompanyAdmins(supabase, {
         companyId,
         actorId: employeeId,
         type: 'general',
         title: 'Employee Clocked In',
-        message: `${name} clocked in on ${projectName}`,
-        data: { projectId, clockEntryId: data.id },
+        message: notifyMessage,
+        data: { projectId: projectId || null, officeRole: officeRole || null, clockEntryId: data.id },
       });
     } catch (e) {
       console.warn('[ClockIn] Admin notify failed (non-fatal):', e);
@@ -100,7 +108,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       clockEntry: {
         id: data.id,
         employeeId: data.employee_id,
-        projectId: data.project_id,
+        projectId: data.project_id || undefined,
+        officeRole: data.office_role || undefined,
         clockIn: data.clock_in,
         clockOut: data.clock_out || undefined,
         location: data.location,

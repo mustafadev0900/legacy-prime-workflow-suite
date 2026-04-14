@@ -1522,6 +1522,7 @@ export default function DashboardScreen() {
 
         <CompactBusinessCosts
           expenses={expenses}
+          clockEntries={clockEntries}
           hoursWorked={hoursWorkedThisMonth}
           onDetails={() => router.push('/(tabs)/expenses?filter=business' as any)}
         />

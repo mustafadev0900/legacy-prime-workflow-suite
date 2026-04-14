@@ -1,15 +1,20 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Briefcase } from 'lucide-react-native';
 import { useMemo } from 'react';
-import type { Expense } from '@/types';
+import type { ClockEntry, Expense } from '@/types';
 
 interface Props {
   expenses: Expense[];
+  clockEntries?: ClockEntry[];
   hoursWorked?: number;
   onDetails?: () => void;
 }
 
-export default function CompactBusinessCosts({ expenses, hoursWorked = 0, onDetails }: Props) {
+export default function CompactBusinessCosts({ expenses, clockEntries = [], hoursWorked = 0, onDetails }: Props) {
+  const inOfficeCount = useMemo(
+    () => clockEntries.filter(e => e.officeRole && !e.clockOut).length,
+    [clockEntries]
+  );
   const businessExpenses = useMemo(
     () => expenses.filter(e => e.isCompanyCost),
     [expenses]
@@ -65,6 +70,11 @@ export default function CompactBusinessCosts({ expenses, hoursWorked = 0, onDeta
           <Briefcase size={18} color="#FFFFFF" />
         </View>
         <Text style={styles.title}>Business Costs</Text>
+        {inOfficeCount > 0 && (
+          <View style={styles.inOfficeBadge}>
+            <Text style={styles.inOfficeText}>{inOfficeCount} in office</Text>
+          </View>
+        )}
         {onDetails && (
           <TouchableOpacity onPress={onDetails} style={styles.detailsBtn}>
             <Text style={styles.detailsText}>Details →</Text>
@@ -145,6 +155,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#2563EB',
     fontWeight: '500',
+  },
+  inOfficeBadge: {
+    backgroundColor: '#DCFCE7',
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginRight: 6,
+  },
+  inOfficeText: {
+    fontSize: 11,
+    color: '#166534',
+    fontWeight: '600',
   },
   grid: {
     flexDirection: 'row',

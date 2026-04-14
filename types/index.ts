@@ -183,7 +183,8 @@ export interface ClockEntry {
   id: string;
   employeeId: string;
   employeeName?: string;
-  projectId: string;
+  projectId?: string;
+  officeRole?: string;
   clockIn: string;
   clockOut?: string;
   location: {
