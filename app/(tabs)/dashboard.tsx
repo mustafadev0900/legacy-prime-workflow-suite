@@ -1359,12 +1359,6 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        <CompactBusinessCosts
-          expenses={expenses}
-          hoursWorked={hoursWorkedThisMonth}
-          onDetails={() => router.push('/(tabs)/expenses?filter=business' as any)}
-        />
-
         {displayProjects.length === 0 ? (
           <View style={styles.emptyState}>
             <Archive size={48} color="#9CA3AF" />
@@ -1525,6 +1519,12 @@ export default function DashboardScreen() {
             })}
           </ScrollView>
         )}
+
+        <CompactBusinessCosts
+          expenses={expenses}
+          hoursWorked={hoursWorkedThisMonth}
+          onDetails={() => router.push('/(tabs)/expenses?filter=business' as any)}
+        />
 
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
