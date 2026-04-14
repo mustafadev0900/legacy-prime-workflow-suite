@@ -94,6 +94,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       imageSizeBytes: expense.image_size_bytes || undefined,
       createdAt: expense.created_at,
       // 🎯 PHASE 3: Include uploader info from JOIN
+      isCompanyCost: expense.is_company_cost ?? false,
+      isOverhead: expense.is_overhead ?? false,
       uploadedBy: expense.uploaded_by || undefined,
       uploader: expense.uploader ? {
         id: expense.uploader.id,
