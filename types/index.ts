@@ -55,8 +55,10 @@ export interface Project {
 
 export interface Expense {
   id: string;
-  projectId: string;
+  projectId?: string;
   companyId?: string;
+  isCompanyCost?: boolean;
+  isOverhead?: boolean;
   type: string;
   subcategory: string;
   category?: string;

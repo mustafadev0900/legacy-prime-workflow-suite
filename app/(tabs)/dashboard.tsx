@@ -11,6 +11,7 @@ import { Project, Report, ProjectReportData } from '@/types';
 import DailyTaskCard from '@/components/DailyTasks/DailyTaskCard';
 import AddTaskModal from '@/components/DailyTasks/AddTaskModal';
 import DashboardSkeleton from '@/components/DashboardSkeleton';
+import CompactBusinessCosts from '@/components/CompactBusinessCosts';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImage } from '@/lib/upload-utils';
 import { supabase } from '@/lib/supabase';
@@ -99,6 +100,21 @@ export default function DashboardScreen() {
     projectFilter === 'delayed' ? filteredDelayedProjects :
     projectFilter === 'completed' ? filteredCompletedProjects :
     filteredArchivedProjects;
+
+  // Hours worked this month (for CompactBusinessCosts rec. rate)
+  const hoursWorkedThisMonth = useMemo(() => {
+    const now = new Date();
+    return clockEntries
+      .filter(e => {
+        if (!e.clockOut) return false;
+        const d = new Date(e.clockIn);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      })
+      .reduce((sum, e) => {
+        const ms = new Date(e.clockOut!).getTime() - new Date(e.clockIn).getTime();
+        return sum + ms / 3600000;
+      }, 0);
+  }, [clockEntries]);
 
   // Company users map for avatar display on project cards
   const [usersMap, setUsersMap] = useState<Map<string, { name: string; avatar?: string }>>(new Map());
@@ -1342,6 +1358,12 @@ export default function DashboardScreen() {
             </View>
           </View>
         )}
+
+        <CompactBusinessCosts
+          expenses={expenses}
+          hoursWorked={hoursWorkedThisMonth}
+          onDetails={() => router.push('/(tabs)/expenses')}
+        />
 
         {displayProjects.length === 0 ? (
           <View style={styles.emptyState}>

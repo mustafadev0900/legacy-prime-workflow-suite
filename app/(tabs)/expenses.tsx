@@ -51,6 +51,11 @@ export default function ExpensesScreen() {
   const [ocrData, setOcrData] = useState<any>(null);
   const [serverImageHash, setServerImageHash] = useState<string | null>(null);
   const [showDocumentScanner, setShowDocumentScanner] = useState<boolean>(false);
+  const [isCompanyExpense, setIsCompanyExpense] = useState<boolean>(false);
+  const [overheadCategory, setOverheadCategory] = useState<string>('');
+  const [showOverheadPicker, setShowOverheadPicker] = useState<boolean>(false);
+
+  const OVERHEAD_CATEGORIES = ['Rent', 'Utilities', 'Insurance', 'Permits & Licenses', 'Office Supplies', 'Tools & Equipment', 'Vehicle & Fuel', 'Accounting & Legal', 'Marketing', 'Miscellaneous'];
 
   // Reload expenses when component mounts
   useEffect(() => {
@@ -138,6 +143,10 @@ export default function ExpensesScreen() {
       missingFields.push('Category');
     }
 
+    if (isCompanyExpense && !overheadCategory) {
+      missingFields.push('Overhead Category');
+    }
+
     if (!amount || amount.trim() === '') {
       missingFields.push('Amount');
     } else if (isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
@@ -149,7 +158,7 @@ export default function ExpensesScreen() {
       missingFields.push('Store/Invoice');
     }
 
-    if (!selectedProjectId) {
+    if (!isCompanyExpense && !selectedProjectId) {
       missingFields.push('Project');
     }
 
@@ -224,9 +233,11 @@ export default function ExpensesScreen() {
 
       await addExpense({
         id: Date.now().toString(),
-        projectId: selectedProjectId,
+        projectId: isCompanyExpense ? undefined : selectedProjectId,
         type: expenseType,
-        subcategory: expenseType === 'Subcontractor' ? category : expenseType,
+        subcategory: isCompanyExpense ? overheadCategory : (expenseType === 'Subcontractor' ? category : expenseType),
+        isCompanyCost: isCompanyExpense,
+        isOverhead: isCompanyExpense,
         amount: parseFloat(amount),
         store,
         date: ocrDate,
@@ -243,6 +254,8 @@ export default function ExpensesScreen() {
       setStore('');
       setExpenseType('');
       setCategory('');
+      setIsCompanyExpense(false);
+      setOverheadCategory('');
       setReceiptImage(null);
       setReceiptType(null);
       setReceiptFileName(null);
@@ -633,18 +646,27 @@ export default function ExpensesScreen() {
           </View>
         </View>
 
-        <TouchableOpacity 
-          style={styles.projectSelector}
-          onPress={() => setShowProjectPicker(true)}
-        >
-          <View style={{ flex: 1, marginRight: 8 }}>
-            <Text style={styles.projectSelectorLabel}>Project</Text>
-            <Text style={styles.projectSelectorValue} numberOfLines={1}>
-              {selectedProject?.name || 'Select Project'}
-            </Text>
+        {!isCompanyExpense ? (
+          <TouchableOpacity
+            style={styles.projectSelector}
+            onPress={() => setShowProjectPicker(true)}
+          >
+            <View style={{ flex: 1, marginRight: 8 }}>
+              <Text style={styles.projectSelectorLabel}>Project</Text>
+              <Text style={styles.projectSelectorValue} numberOfLines={1}>
+                {selectedProject?.name || 'Select Project'}
+              </Text>
+            </View>
+            <ChevronDown size={20} color="#6B7280" />
+          </TouchableOpacity>
+        ) : (
+          <View style={[styles.projectSelector, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.projectSelectorLabel, { color: '#2563EB' }]}>Business / Company Expense</Text>
+              <Text style={[styles.projectSelectorValue, { color: '#1D4ED8', fontSize: 13 }]}>Not linked to any project</Text>
+            </View>
           </View>
-          <ChevronDown size={20} color="#6B7280" />
-        </TouchableOpacity>
+        )}
 
 
 
@@ -718,11 +740,24 @@ export default function ExpensesScreen() {
           {expenseType === 'Subcontractor' && (
             <>
               <Text style={styles.label}>Category</Text>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.categoryPicker}
                 onPress={() => setShowSubcategoryPicker(true)}
               >
                 <Text style={[styles.pickerText, !category && { color: '#9CA3AF' }]}>{category || 'Select category...'}</Text>
+                <ChevronDown size={16} color="#6B7280" />
+              </TouchableOpacity>
+            </>
+          )}
+
+          {isCompanyExpense && (
+            <>
+              <Text style={styles.label}>Overhead Category</Text>
+              <TouchableOpacity
+                style={styles.categoryPicker}
+                onPress={() => setShowOverheadPicker(true)}
+              >
+                <Text style={[styles.pickerText, !overheadCategory && { color: '#9CA3AF' }]}>{overheadCategory || 'Select overhead category...'}</Text>
                 <ChevronDown size={16} color="#6B7280" />
               </TouchableOpacity>
             </>
@@ -903,15 +938,18 @@ export default function ExpensesScreen() {
             <ScrollView style={styles.categoryList}
           keyboardDismissMode="on-drag"
         >
-              {['Subcontractor', 'Labor', 'Material', 'Office', 'Others'].map((type) => (
+              {['Subcontractor', 'Labor', 'Material', 'Office', 'Others', 'Business / Company'].map((type) => (
                 <TouchableOpacity
                   key={type}
                   style={[
                     styles.pickerOption,
                     expenseType === type && styles.pickerOptionSelected,
+                    type === 'Business / Company' && { borderTopWidth: 1, borderTopColor: '#E5E7EB', marginTop: 4 },
                   ]}
                   onPress={() => {
                     setExpenseType(type);
+                    setIsCompanyExpense(type === 'Business / Company');
+                    if (type !== 'Business / Company') setOverheadCategory('');
                     setShowExpenseTypePicker(false);
                   }}
                 >
@@ -1000,7 +1038,41 @@ export default function ExpensesScreen() {
         </TouchableOpacity>
       </Modal>
 
-
+      {/* Overhead Category Picker */}
+      <Modal
+        visible={showOverheadPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowOverheadPicker(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowOverheadPicker(false)}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Overhead Category</Text>
+              <TouchableOpacity onPress={() => setShowOverheadPicker(false)}>
+                <X size={24} color="#1F2937" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.categoryList} keyboardDismissMode="on-drag">
+              {OVERHEAD_CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.pickerOption, overheadCategory === cat && styles.pickerOptionSelected]}
+                  onPress={() => { setOverheadCategory(cat); setShowOverheadPicker(false); }}
+                >
+                  <Text style={[styles.pickerOptionText, overheadCategory === cat && styles.pickerOptionTextSelected]}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {isScanning && (
         <View style={styles.loadingOverlay}>

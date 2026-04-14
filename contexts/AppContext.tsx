@@ -80,6 +80,8 @@ const mapExpense = (row: any) => ({
   ocrFingerprint: row.ocr_fingerprint ?? row.ocrFingerprint,
   imageSizeBytes: row.image_size_bytes ?? row.imageSizeBytes,
   uploadedBy: row.uploaded_by ?? row.uploadedBy,
+  isCompanyCost: row.is_company_cost ?? row.isCompanyCost ?? false,
+  isOverhead: row.is_overhead ?? row.isOverhead ?? false,
   clockEntryId: row.clock_entry_id ?? row.clockEntryId,
   createdAt: row.created_at ?? row.createdAt,
   uploader: row.uploader ?? null,
@@ -1493,6 +1495,8 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
             ocrFingerprint: expense.ocrFingerprint,
             imageSizeBytes: expense.imageSizeBytes,
             clockEntryId: expense.clockEntryId,
+            isCompanyCost: expense.isCompanyCost,
+            isOverhead: expense.isOverhead,
           }),
         });
 

@@ -39,12 +39,12 @@
 
 | # | Task | Status |
 |---|---|---|
-| 1 | Business/Company Expense toggle on expense form | ❌ Not Implemented |
-| 2 | Hide project picker when business expense is toggled ON | ❌ Not Implemented |
-| 3 | Switch category list to OFFICE_OVERHEAD_CATEGORIES when toggled ON | ❌ Not Implemented |
-| 4 | Allow saving expense without a project ID | ❌ Not Implemented |
-| 5 | Save isCompanyCost + isOverhead flags to DB | ❌ Not Implemented |
-| 6 | Dashboard overhead total card display | ❌ Not Implemented |
+| 1 | Business/Company Expense toggle on expense form | ✅ Implemented |
+| 2 | Hide project picker when business expense is toggled ON | ✅ Implemented |
+| 3 | Switch category list to OFFICE_OVERHEAD_CATEGORIES when toggled ON | ✅ Implemented |
+| 4 | Allow saving expense without a project ID | ✅ Implemented |
+| 5 | Save isCompanyCost + isOverhead flags to DB | ✅ Implemented |
+| 6 | Dashboard overhead total card display | ✅ Implemented |
 
 ---
 

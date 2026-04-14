@@ -30,14 +30,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const { projectId, type, subcategory, amount, store, date, receiptUrl, imageHash, ocrFingerprint, imageSizeBytes, clockEntryId, wasWarned } = req.body;
+    const { projectId, type, subcategory, amount, store, date, receiptUrl, imageHash, ocrFingerprint, imageSizeBytes, clockEntryId, wasWarned, isCompanyCost, isOverhead } = req.body;
 
     console.log('[AddExpense] Adding expense:', amount, 'for project:', projectId, 'by user:', authUser.id);
 
     // Validate required fields
-    if (!projectId || !type || !subcategory || !amount || !store) {
+    if ((!projectId && !isCompanyCost) || !type || !subcategory || !amount || !store) {
       console.log('[AddExpense] Missing required fields');
-      return res.status(400).json({ error: 'Missing required fields: projectId, type, subcategory, amount, store' });
+      return res.status(400).json({ error: 'Missing required fields: projectId (or isCompanyCost), type, subcategory, amount, store' });
     }
 
     // 🎯 SECURITY: Use company ID from authenticated user, not from request body
@@ -103,6 +103,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         image_size_bytes: imageSizeBytes || null,
         clock_entry_id: clockEntryId || null,
         uploaded_by: authUser.id,
+        is_company_cost: isCompanyCost ?? false,
+        is_overhead: isOverhead ?? false,
       })
       .select()
       .single();
