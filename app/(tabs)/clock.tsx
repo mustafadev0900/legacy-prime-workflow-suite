@@ -3,7 +3,7 @@ import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import ClockInOutComponent from '@/components/ClockInOutComponent';
-import { Briefcase, ChevronDown, Clock } from 'lucide-react-native';
+import { ArrowLeft, Briefcase, ChevronDown, Clock } from 'lucide-react-native';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
@@ -233,6 +233,9 @@ export default function ClockScreen() {
           <View style={[styles.header, isWeb && styles.headerWeb]}>
             {isWeb ? (
               <View style={styles.headerTop}>
+                <TouchableOpacity onPress={onChangeSelection} style={styles.backBtn}>
+                  <ArrowLeft size={20} color="#2563EB" />
+                </TouchableOpacity>
                 <View style={styles.headerTitleRow}>
                   <Clock size={22} color="#2563EB" style={{ marginRight: 10 }} />
                   <View style={{ flex: 1 }}>
@@ -240,17 +243,16 @@ export default function ClockScreen() {
                     <Text style={styles.subtitle} numberOfLines={1}>{contextLabel}</Text>
                   </View>
                 </View>
-                <TouchableOpacity style={styles.changeProjectButton} onPress={onChangeSelection}>
-                  <Text style={styles.changeProjectText}>Change Selection</Text>
-                </TouchableOpacity>
               </View>
             ) : (
-              <View>
-                <Text style={styles.title}>Clock In/Out</Text>
-                <Text style={styles.subtitle} numberOfLines={2}>{contextLabel}</Text>
-                <TouchableOpacity style={styles.changeProjectButtonMobile} onPress={onChangeSelection}>
-                  <Text style={styles.changeProjectText}>Change Selection</Text>
+              <View style={styles.headerTop}>
+                <TouchableOpacity onPress={onChangeSelection} style={styles.backBtn}>
+                  <ArrowLeft size={22} color="#2563EB" />
                 </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.title}>Clock In/Out</Text>
+                  <Text style={styles.subtitle} numberOfLines={2}>{contextLabel}</Text>
+                </View>
               </View>
             )}
           </View>
@@ -310,9 +312,7 @@ const styles = StyleSheet.create({
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 12 },
   title: { fontSize: 24, fontWeight: '700' as const, color: '#1F2937', marginBottom: 4 },
   subtitle: { fontSize: 14, color: '#6B7280' },
-  changeProjectButton: { paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#EFF6FF', borderRadius: 8, flexShrink: 0 },
-  changeProjectButtonMobile: { marginTop: 10, alignSelf: 'flex-start' as const, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: '#EFF6FF', borderRadius: 8 },
-  changeProjectText: { fontSize: 14, fontWeight: '600' as const, color: '#2563EB' },
+  backBtn: { padding: 8, marginRight: 8, borderRadius: 8, backgroundColor: '#EFF6FF' },
   employeeCard: { backgroundColor: '#FFFFFF', margin: 16, padding: 20, borderRadius: 12 },
   cardLabel: { fontSize: 14, fontWeight: '600' as const, color: '#6B7280', marginBottom: 8 },
   cardValue: { fontSize: 18, fontWeight: '600' as const, color: '#1F2937' },
