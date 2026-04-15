@@ -763,7 +763,7 @@ export default function FilesNavigationScreen() {
         <View style={styles.categoriesView}>
           <View style={styles.categoriesHeader}>
             <Text style={styles.categoriesTitle}>{folder.name}</Text>
-            {folder.type === 'photos' && !hasCategories && (
+            {!hasCategories && folder.type !== 'videos' && (
               <TouchableOpacity
                 style={styles.addButton}
                 onPress={() => { setModalCategory(''); setUploadModalVisible(true); }}
