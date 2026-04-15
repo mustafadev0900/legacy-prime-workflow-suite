@@ -457,38 +457,33 @@ export default function FilesNavigationScreen() {
           const { uploadUrl, fileUrl, key } = await urlResponse.json();
           console.log('[Files] Got presigned URL, uploading to S3...');
 
-          // Step 2: Read file as blob
-          let fileBlob: Blob;
+          // Step 2 & 3: Upload to S3
+          // iOS/Hermes does not support new Blob([ArrayBufferView]) — use
+          // FileSystem.uploadAsync (binary PUT) on native, fetch blob on web.
+          let fileSize = asset.size ?? 0;
+
           if (Platform.OS === 'web') {
             const response = await fetch(asset.uri);
-            fileBlob = await response.blob();
-          } else {
-            // Mobile: read as base64 and convert to blob
-            const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-              encoding: FileSystem.EncodingType.Base64,
+            const fileBlob = await response.blob();
+            fileSize = fileBlob.size;
+            console.log('[Files] Uploading file directly to S3, size:', fileSize, 'bytes');
+            const s3Response = await fetch(uploadUrl, {
+              method: 'PUT',
+              body: fileBlob,
+              headers: { 'Content-Type': asset.mimeType || 'application/octet-stream' },
             });
-            const byteCharacters = atob(base64);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            if (!s3Response.ok) throw new Error('Failed to upload file to S3');
+          } else {
+            // iOS & Android: use FileSystem.uploadAsync (avoids Blob/ArrayBuffer)
+            console.log('[Files] Uploading file directly to S3 via FileSystem, size:', fileSize, 'bytes');
+            const uploadResult = await FileSystem.uploadAsync(uploadUrl, asset.uri, {
+              httpMethod: 'PUT',
+              headers: { 'Content-Type': asset.mimeType || 'application/octet-stream' },
+              uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+            });
+            if (uploadResult.status < 200 || uploadResult.status >= 300) {
+              throw new Error('Failed to upload file to S3');
             }
-            const byteArray = new Uint8Array(byteNumbers);
-            fileBlob = new Blob([byteArray], { type: asset.mimeType || 'application/octet-stream' });
-          }
-
-          console.log('[Files] Uploading file directly to S3, size:', fileBlob.size, 'bytes');
-
-          // Step 3: Upload directly to S3 using presigned URL
-          const s3Response = await fetch(uploadUrl, {
-            method: 'PUT',
-            body: fileBlob,
-            headers: {
-              'Content-Type': asset.mimeType || 'application/octet-stream',
-            },
-          });
-
-          if (!s3Response.ok) {
-            throw new Error('Failed to upload file to S3');
           }
 
           console.log('[Files] S3 upload successful, saving metadata...');
@@ -502,7 +497,7 @@ export default function FilesNavigationScreen() {
               projectId: id,
               fileName: asset.name,
               fileType: asset.mimeType || 'application/octet-stream',
-              fileSize: fileBlob.size,
+              fileSize,
               category,
               s3Key: key,
               s3Url: fileUrl,
