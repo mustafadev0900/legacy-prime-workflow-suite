@@ -304,7 +304,7 @@ export default function CRMScreen() {
         address: editClientAddress.trim() || undefined,
         source: editClientSource as 'Google' | 'Referral' | 'Ad' | 'Phone Call',
         status: editClientStatus as 'Lead' | 'Project' | 'Completed' | 'Cold Lead',
-        assignedRep: editClientAssignedRep || undefined,
+        assignedRep: editClientAssignedRep || null,
       });
       // Rename linked projects whose name starts with the old client name
       if (oldName && oldName !== newName) {
