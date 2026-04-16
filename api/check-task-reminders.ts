@@ -85,14 +85,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         dueDateTime: task.due_date_time
       });
 
-      // Mark reminder as sent
-      const { error: updateError } = await supabase
+      // Atomically claim this task — only one concurrent caller wins.
+      // Adding .eq('reminder_sent', false) means if another instance already
+      // set it to true, this UPDATE matches 0 rows and we skip sending.
+      const { data: claimed, error: updateError } = await supabase
         .from('daily_tasks')
         .update({ reminder_sent: true })
-        .eq('id', task.id);
+        .eq('id', task.id)
+        .eq('reminder_sent', false)
+        .select('id');
 
       if (updateError) {
         console.error('[check-task-reminders] Error updating task:', task.id, updateError);
+        continue;
+      }
+
+      if (!claimed || claimed.length === 0) {
+        console.log('[check-task-reminders] Task already claimed by concurrent request, skipping:', task.id);
         continue;
       }
 
