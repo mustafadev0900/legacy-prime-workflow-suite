@@ -1557,6 +1557,46 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     };
   }, [company?.id, clockEntryChannelRetry]);
 
+  // ─── Realtime: clients sync ───────────────────────────────────────────────
+  // Listens for INSERT, UPDATE, DELETE on clients scoped to this company so
+  // all users (including salespeople) see assignment changes without refresh.
+  useEffect(() => {
+    if (!company?.id) return;
+
+    const channel = supabase
+      .channel(`clients:${company.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'clients', filter: `company_id=eq.${company.id}` },
+        (payload) => {
+          const incoming = mapClient(payload.new);
+          setClients(prev => prev.some(c => c.id === incoming.id) ? prev : [...prev, incoming]);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'clients', filter: `company_id=eq.${company.id}` },
+        (payload) => {
+          const updated = mapClient(payload.new);
+          setClients(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } : c));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'clients', filter: `company_id=eq.${company.id}` },
+        (payload) => {
+          setClients(prev => prev.filter(c => c.id !== payload.old?.id));
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Clients channel status:', status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [company?.id]);
+
   // Load daily logs when company is available
   useEffect(() => {
     if (company?.id) {
