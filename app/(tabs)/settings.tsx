@@ -1196,20 +1196,24 @@ export default function SettingsScreen() {
                       ]}
                       onPress={() => {
                         if (selectedUser.role !== role) {
-                          Alert.alert(
-                            t('settings.confirmRoleChange'),
-                            t('settings.confirmRoleChangeMessage', {
-                              name: selectedUser.name,
-                              role: getRoleDisplayName(role)
-                            }),
-                            [
-                              { text: t('common.cancel'), style: 'cancel' },
-                              {
-                                text: t('common.confirm'),
-                                onPress: () => handleRoleChange(selectedUser.id, role),
-                              },
-                            ]
-                          );
+                          if (Platform.OS === 'web') {
+                            handleRoleChange(selectedUser.id, role);
+                          } else {
+                            Alert.alert(
+                              t('settings.confirmRoleChange'),
+                              t('settings.confirmRoleChangeMessage', {
+                                name: selectedUser.name,
+                                role: getRoleDisplayName(role)
+                              }),
+                              [
+                                { text: t('common.cancel'), style: 'cancel' },
+                                {
+                                  text: t('common.confirm'),
+                                  onPress: () => handleRoleChange(selectedUser.id, role),
+                                },
+                              ]
+                            );
+                          }
                         }
                       }}
                       disabled={isUpdatingUser}
