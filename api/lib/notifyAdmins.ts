@@ -58,14 +58,16 @@ export async function notifyCompanyAdmins(
 
   console.log('[AdminNotify] Notifying', admins.length, 'admin(s):', title);
 
-  for (const admin of admins) {
-    void sendNotification(supabase, {
-      userId: admin.id,
-      companyId,
-      type,
-      title,
-      message,
-      data,
-    });
-  }
+  await Promise.all(
+    admins.map(admin =>
+      sendNotification(supabase, {
+        userId: admin.id,
+        companyId,
+        type,
+        title,
+        message,
+        data,
+      })
+    )
+  );
 }

@@ -41,26 +41,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get current time and 30 minutes from now
+    // Get current time window.
+    // Lower bound: 5 minutes in the past — catches reminders whose time has just
+    // passed (e.g. user sets 7:10 reminder at 7:08, cron next fires at 7:10 but
+    // AddTaskModal.toISOString() rounded up by a few seconds, pushing due_date_time
+    // to 7:10:xx which is already behind 'now' when the cron queries at 7:10:00).
+    // reminder_sent guard prevents double-firing for the same task.
     const now = new Date();
-    const in30Minutes = new Date(now.getTime() + 30 * 60 * 1000);
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+    const in30Minutes    = new Date(now.getTime() + 30 * 60 * 1000);
 
     console.log('[check-task-reminders] Time range:', {
-      now: now.toISOString(),
-      in30Minutes: in30Minutes.toISOString()
+      from: fiveMinutesAgo.toISOString(),
+      to:   in30Minutes.toISOString(),
     });
 
     // Query tasks that need reminders
     // - reminder is true
-    // - reminder_sent is false
-    // - due_date_time is within the next 30 minutes
+    // - reminder_sent is false (prevents duplicate fires)
+    // - due_date_time is within [now-5min, now+30min]
     const { data: tasks, error } = await supabase
       .from('daily_tasks')
       .select('*')
       .eq('reminder', true)
       .eq('reminder_sent', false)
       .not('due_date_time', 'is', null)
-      .gte('due_date_time', now.toISOString())
+      .gte('due_date_time', fiveMinutesAgo.toISOString())
       .lte('due_date_time', in30Minutes.toISOString());
 
     if (error) {

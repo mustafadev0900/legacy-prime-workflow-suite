@@ -196,18 +196,12 @@ export function useNotificationSetup(
               // Silently skip if the browser blocks it (e.g. Firefox focus mode)
             }
 
-            // Also push into the in-app notifications list immediately
-            onNotificationReceived?.({
-              id:        payload.messageId ?? String(Date.now()),
-              userId:    user.id,
-              companyId: company.id,
-              type:      ((pData.type as string) ?? 'general') as Notification['type'],
-              title,
-              message:   body,
-              data:      pData as any,
-              read:      false,
-              createdAt: new Date().toISOString(),
-            });
+            // NOTE: Do NOT call onNotificationReceived here.
+            // The Supabase Realtime INSERT subscription in AppContext already adds
+            // the notification to state the moment the server persists it.
+            // Calling addNotification here would insert a SECOND DB row (different
+            // payload.messageId vs DB UUID), triggering another Realtime event and
+            // creating a duplicate entry in the bell list.
           });
         } catch (err) {
           console.warn('[Notifications] Web push setup error (non-fatal):', err);
@@ -377,17 +371,11 @@ export function useNotificationSetup(
         return;
       }
 
-      onNotificationReceived?.({
-        id:        incoming.request.identifier,
-        userId:    user.id,
-        companyId: company.id,
-        type:      (notifType as Notification['type']) ?? 'general',
-        title:     incoming.request.content.title ?? 'Notification',
-        message:   incoming.request.content.body  ?? '',
-        data:      incoming.request.content.data as any,
-        read:      false,
-        createdAt: new Date().toISOString(),
-      });
+      // NOTE: Do NOT call onNotificationReceived here.
+      // The Supabase Realtime INSERT subscription in AppContext already adds the
+      // DB row to state instantly. Calling addNotification here uses the FCM
+      // request.identifier (not the DB UUID), so dedup fails and users see two
+      // entries in the bell list — one from Realtime, one from this listener.
     });
 
     // Tap routing — fires when user taps a notification (background or killed state)

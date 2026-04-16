@@ -108,7 +108,7 @@ const promotionTemplates: MessageTemplate[] = [
 ];
 
 export default function CRMScreen() {
-  const { clients, addClient, addProject, updateClient, updateProject, estimates, updateEstimate, callLogs, addCallLog, deleteCallLog, setCallLogs, company, user, refreshClients, refreshEstimates, projects, customPriceListItems, isLoading, isCompanyReloading } = useApp();
+  const { clients, addClient, addProject, updateClient, updateProject, estimates, updateEstimate, callLogs, addCallLog, deleteCallLog, setCallLogs, company, user, refreshClients, refreshEstimates, projects, priceListItems, isLoading, isCompanyReloading } = useApp();
   const router = useRouter();
   const { sendSingleSMS, sendBulkSMSMessages, isLoading: isSendingSMS } = useTwilioSMS();
   const { initiateCall, isLoadingCall } = useTwilioCalls();
@@ -852,7 +852,7 @@ export default function CRMScreen() {
       clients,
       projects,
       company,
-      customPriceListItems,
+      customPriceListItems: priceListItems,
       updateEstimate,
       clientId: selectedClientForEstimate,
     });
