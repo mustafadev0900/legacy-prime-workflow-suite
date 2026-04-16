@@ -208,10 +208,24 @@ export interface Client {
   email: string;
   phone: string;
   source: 'Google' | 'Referral' | 'Ad' | 'Phone Call';
-  status: 'Lead' | 'Project' | 'Completed';
+  status: 'Lead' | 'Project' | 'Completed' | 'Cold Lead';
   lastContacted: string;
   lastContactDate?: string;
   nextFollowUpDate?: string;
+  createdAt?: string;
+  assignedRep?: string;
+  jobDetails?: string;
+}
+
+export interface Appointment {
+  id: string;
+  companyId: string;
+  createdBy?: string;
+  clientId?: string;
+  title: string;
+  date: string;
+  time?: string;
+  notes?: string;
   createdAt?: string;
 }
 

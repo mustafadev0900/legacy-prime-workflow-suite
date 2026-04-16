@@ -2,7 +2,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Platform, AppState as RNAppState } from 'react-native';
-import { User, Project, Client, Expense, Photo, Task, DailyTask, ClockEntry, Subscription, Estimate, CallLog, ChatConversation, ChatMessage, Report, ProjectFile, DailyLog, Payment, ChangeOrder, Company, Subcontractor, SubcontractorProposal, Notification, ScheduledTask, DailyTaskReminder, ScheduleShareLink } from '@/types';
+import { User, Project, Client, Expense, Photo, Task, DailyTask, ClockEntry, Subscription, Estimate, CallLog, ChatConversation, ChatMessage, Report, ProjectFile, DailyLog, Payment, ChangeOrder, Company, Subcontractor, SubcontractorProposal, Notification, ScheduledTask, DailyTaskReminder, ScheduleShareLink, Appointment } from '@/types';
 import { PriceListItem, CustomPriceListItem, CustomCategory } from '@/mocks/priceList';
 import { mockProjects, mockClients, mockExpenses, mockPhotos, mockTasks } from '@/mocks/data';
 import { checkAndSeedData, getDefaultCompany, getDefaultUser } from '@/lib/seed-data';
@@ -38,6 +38,36 @@ const mapClient = (row: any) => ({
   lastContactDate: row.last_contact_date ?? row.lastContactDate,
   nextFollowUpDate: row.next_follow_up_date ?? row.nextFollowUpDate,
   createdAt: row.created_at ?? row.createdAt,
+  assignedRep: row.assigned_rep ?? row.assignedRep ?? undefined,
+  jobDetails: row.job_details ?? row.jobDetails ?? undefined,
+});
+
+const mapUser = (row: any) => ({
+  id: row.id,
+  name: row.name,
+  email: row.email,
+  role: row.role,
+  companyId: row.company_id,
+  avatar: row.avatar,
+  createdAt: row.created_at,
+  isActive: row.is_active,
+  phone: row.phone,
+  address: row.address,
+  hourlyRate: row.hourly_rate,
+  rateChangeRequest: row.rate_change_request,
+  customPermissions: row.custom_permissions,
+});
+
+const mapAppointment = (row: any) => ({
+  id: row.id,
+  companyId: row.company_id,
+  createdBy: row.created_by,
+  clientId: row.client_id,
+  title: row.title,
+  date: row.date,
+  time: row.time,
+  notes: row.notes,
+  createdAt: row.created_at,
 });
 
 const mapProject = (row: any) => ({
@@ -156,6 +186,8 @@ interface AppState {
   scheduledTasks: ScheduledTask[];
   scheduleShareLinks: ScheduleShareLink[];
   dailyTaskReminders: DailyTaskReminder[];
+  companyUsers: User[];
+  appointments: Appointment[];
   isLoading: boolean;
   isCompanyReloading: boolean;
 
@@ -246,6 +278,9 @@ interface AppState {
   addDailyTask: (task: Omit<DailyTask, 'id' | 'createdAt' | 'updatedAt'>) => Promise<DailyTask | undefined>;
   updateDailyTask: (taskId: string, updates: Partial<DailyTask>) => Promise<void>;
   deleteDailyTask: (taskId: string) => Promise<void>;
+  addAppointment: (appointment: Omit<Appointment, 'id' | 'createdAt'>) => Promise<Appointment | undefined>;
+  updateAppointment: (id: string, updates: Partial<Appointment>) => Promise<void>;
+  deleteAppointment: (id: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -306,6 +341,8 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
   const [scheduledTasks, setScheduledTasks] = useState<ScheduledTask[]>([]);
   const [scheduleShareLinks, setScheduleShareLinks] = useState<ScheduleShareLink[]>([]);
   const [dailyTaskReminders, setDailyTaskReminders] = useState<DailyTaskReminder[]>([]);
+  const [companyUsers, setCompanyUsers] = useState<User[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isCompanyReloading, setIsCompanyReloading] = useState<boolean>(false);
 
@@ -366,6 +403,24 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
           } catch (error: any) {
             console.error('[App] ❌ Error loading clients:', error?.message || error);
             setClients([]);
+          }
+
+          // Load company users
+          try {
+            const { data: userRows } = await supabase.from('users').select('*').eq('company_id', company.id).eq('is_active', true);
+            setCompanyUsers(userRows?.map(mapUser) ?? []);
+          } catch (error) {
+            console.error('[App] Error loading company users:', error);
+            setCompanyUsers([]);
+          }
+
+          // Load appointments
+          try {
+            const { data: appointmentRows } = await supabase.from('appointments').select('*').eq('company_id', company.id).order('date', { ascending: true });
+            setAppointments(appointmentRows?.map(mapAppointment) ?? []);
+          } catch (error) {
+            console.error('[App] Error loading appointments:', error);
+            setAppointments([]);
           }
 
           // Load projects
@@ -705,6 +760,24 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
           } catch (error) {
             console.error('[App] Error loading clients:', error);
             setClients([]);
+          }
+
+          // Load company users
+          try {
+            const { data: userRows } = await supabase.from('users').select('*').eq('company_id', parsedCompany.id).eq('is_active', true);
+            setCompanyUsers(userRows?.map(mapUser) ?? []);
+          } catch (error) {
+            console.error('[App] Error loading company users:', error);
+            setCompanyUsers([]);
+          }
+
+          // Load appointments
+          try {
+            const { data: appointmentRows } = await supabase.from('appointments').select('*').eq('company_id', parsedCompany.id).order('date', { ascending: true });
+            setAppointments(appointmentRows?.map(mapAppointment) ?? []);
+          } catch (error) {
+            console.error('[App] Error loading appointments:', error);
+            setAppointments([]);
           }
 
           // Load projects
@@ -1081,6 +1154,8 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
             lastContacted: client.lastContacted || null,
             lastContactDate: client.lastContactDate || new Date().toISOString(),
             nextFollowUpDate: client.nextFollowUpDate || null,
+            assignedRep: client.assignedRep || null,
+            jobDetails: client.jobDetails || null,
           }),
         });
 
@@ -1137,6 +1212,8 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
       if (updates.lastContacted !== undefined) updatePayload.last_contacted = updates.lastContacted;
       if (updates.lastContactDate !== undefined) updatePayload.last_contact_date = updates.lastContactDate;
       if (updates.nextFollowUpDate !== undefined) updatePayload.next_follow_up_date = updates.nextFollowUpDate;
+      if (updates.assignedRep !== undefined) updatePayload.assigned_rep = updates.assignedRep || null;
+      if (updates.jobDetails !== undefined) updatePayload.job_details = updates.jobDetails || null;
       const { error } = await supabase.from('clients').update(updatePayload).eq('id', id);
       if (error) {
         console.error('[App] Error updating client:', error);
@@ -2742,14 +2819,53 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     }
   }, [user?.id]);
 
-  // Schedule/Appointment Management
-  const addAppointment = useCallback(async (appointment: any) => {
-    // For now, store in local state - you can add API call later
-    console.log('[AppContext] Appointment added:', appointment);
+  // Appointment Management
+  const addAppointment = useCallback(async (appointment: Omit<Appointment, 'id' | 'createdAt'>): Promise<Appointment | undefined> => {
+    if (!company?.id) return undefined;
+    try {
+      const baseUrl = getApiBaseUrl();
+      const response = await fetch(`${baseUrl}/api/add-appointment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...appointment, companyId: company.id }),
+      });
+      if (!response.ok) throw new Error('Failed to add appointment');
+      const data = await response.json();
+      const newAppt: Appointment = data.appointment;
+      setAppointments(prev => [...prev, newAppt].sort((a, b) => a.date.localeCompare(b.date)));
+      return newAppt;
+    } catch (error) {
+      console.error('[App] Error adding appointment:', error);
+      return undefined;
+    }
+  }, [company]);
+
+  const updateAppointment = useCallback(async (id: string, updates: Partial<Appointment>): Promise<void> => {
+    setAppointments(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+    try {
+      const baseUrl = getApiBaseUrl();
+      await fetch(`${baseUrl}/api/update-appointment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...updates }),
+      });
+    } catch (error) {
+      console.error('[App] Error updating appointment:', error);
+    }
   }, []);
 
-  const deleteAppointment = useCallback(async (appointmentId: string) => {
-    console.log('[AppContext] Appointment deleted:', appointmentId);
+  const deleteAppointment = useCallback(async (id: string): Promise<void> => {
+    setAppointments(prev => prev.filter(a => a.id !== id));
+    try {
+      const baseUrl = getApiBaseUrl();
+      await fetch(`${baseUrl}/api/delete-appointment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+    } catch (error) {
+      console.error('[App] Error deleting appointment:', error);
+    }
   }, []);
 
   // Team Management
@@ -3119,6 +3235,8 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     scheduledTasks,
     scheduleShareLinks,
     dailyTaskReminders,
+    companyUsers,
+    appointments,
     isLoading,
     isCompanyReloading,
     loadScheduledTasks,
@@ -3195,6 +3313,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     markNotificationRead,
     markAllNotificationsRead,
     addAppointment,
+    updateAppointment,
     deleteAppointment,
     addTeamMember,
     assignTeamToProject,
@@ -3247,6 +3366,8 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     scheduledTasks,
     scheduleShareLinks,
     dailyTaskReminders,
+    companyUsers,
+    appointments,
     isLoading,
     isCompanyReloading,
     loadScheduledTasks,
@@ -3325,6 +3446,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
     markNotificationRead,
     markAllNotificationsRead,
     addAppointment,
+    updateAppointment,
     deleteAppointment,
     addTeamMember,
     assignTeamToProject,

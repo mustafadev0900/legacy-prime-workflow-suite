@@ -18,6 +18,8 @@ import { useTwilioSMS, useTwilioCalls } from '@/components/TwilioIntegration';
 import { supabase } from '@/lib/supabase';
 import CompanyHeader from '@/components/CompanyHeader';
 import { generateUUID } from '@/utils/uuid';
+import AppointmentFormModal from '@/components/AppointmentFormModal';
+import CRMCalendar from '@/components/CRMCalendar';
 
 // Phone validation helpers
 const isValidUSPhone = (phone: string): boolean => {
@@ -108,7 +110,7 @@ const promotionTemplates: MessageTemplate[] = [
 ];
 
 export default function CRMScreen() {
-  const { clients, addClient, addProject, updateClient, updateProject, estimates, updateEstimate, callLogs, addCallLog, deleteCallLog, setCallLogs, company, user, refreshClients, refreshEstimates, projects, priceListItems, isLoading, isCompanyReloading } = useApp();
+  const { clients, addClient, addProject, updateClient, updateProject, estimates, updateEstimate, callLogs, addCallLog, deleteCallLog, setCallLogs, company, user, refreshClients, refreshEstimates, projects, priceListItems, isLoading, isCompanyReloading, companyUsers, appointments, addAppointment, updateAppointment, deleteAppointment } = useApp();
   const router = useRouter();
   const { sendSingleSMS, sendBulkSMSMessages, isLoading: isSendingSMS } = useTwilioSMS();
   const { initiateCall, isLoadingCall } = useTwilioCalls();
@@ -214,7 +216,8 @@ export default function CRMScreen() {
           email: newClientEmail,
           phone: formattedPhone,
           source: newClientSource,
-          status: 'Lead',
+          status: newClientStatus || 'Lead',
+          assignedRep: newClientAssignedRep || null,
           lastContactDate: new Date().toISOString(),
         }),
       });
@@ -236,6 +239,8 @@ export default function CRMScreen() {
       setNewClientEmail('');
       setNewClientPhone('');
       setNewClientSource('');
+      setNewClientStatus('Lead');
+      setNewClientAssignedRep(undefined);
 
       if (fromModal) {
         setShowAddClientModal(false);
@@ -259,6 +264,8 @@ export default function CRMScreen() {
     setNewClientEmail('');
     setNewClientPhone('');
     setNewClientSource('');
+    setNewClientStatus('Lead');
+    setNewClientAssignedRep(undefined);
     setClientFieldErrors({});
     setShowAddClientModal(true);
   };
@@ -270,6 +277,8 @@ export default function CRMScreen() {
     setEditClientEmail(client.email || '');
     setEditClientPhone(client.phone.replace(/\D/g, '').slice(-10));
     setEditClientSource(client.source);
+    setEditClientStatus(client.status || 'Lead');
+    setEditClientAssignedRep(client.assignedRep);
     setEditClientFieldErrors({});
     setShowEditClientModal(true);
   };
@@ -294,6 +303,8 @@ export default function CRMScreen() {
         phone: formattedPhone,
         address: editClientAddress.trim() || undefined,
         source: editClientSource as 'Google' | 'Referral' | 'Ad' | 'Phone Call',
+        status: editClientStatus as 'Lead' | 'Project' | 'Completed' | 'Cold Lead',
+        assignedRep: editClientAssignedRep || undefined,
       });
       // Rename linked projects whose name starts with the old client name
       if (oldName && oldName !== newName) {
@@ -359,6 +370,17 @@ export default function CRMScreen() {
   const [editClientPhone, setEditClientPhone] = useState<string>('');
   const [editClientSource, setEditClientSource] = useState<string>('');
   const [editClientFieldErrors, setEditClientFieldErrors] = useState<{ name?: string; email?: string; phone?: string; source?: string }>({});
+  const [editClientStatus, setEditClientStatus] = useState<string>('Lead');
+  const [editClientAssignedRep, setEditClientAssignedRep] = useState<string | undefined>();
+  const [newClientStatus, setNewClientStatus] = useState<string>('Lead');
+  const [newClientAssignedRep, setNewClientAssignedRep] = useState<string | undefined>();
+  const [showColdLeads, setShowColdLeads] = useState<boolean>(false);
+  const [showCalendarModal, setShowCalendarModal] = useState<boolean>(false);
+  const [appointmentFormVisible, setAppointmentFormVisible] = useState<boolean>(false);
+  const [appointmentFormDate, setAppointmentFormDate] = useState<string>('');
+  const [editingAppointment, setEditingAppointment] = useState<import('@/types').Appointment | undefined>();
+
+  const salespersons = companyUsers.filter(u => u.role === 'salesperson');
   const [isUpdatingClient, setIsUpdatingClient] = useState<boolean>(false);
 
   const [callAssistantConfig, setCallAssistantConfig] = useState({
@@ -1030,6 +1052,7 @@ export default function CRMScreen() {
   };
 
   const getAISuggestions = (client: Client): string[] => {
+    if (client.status === 'Cold Lead') return [];
     const suggestions: string[] = [];
     const lastContactStr = client.lastContactDate || client.lastContacted;
     const lastContact = new Date(lastContactStr);
@@ -1543,6 +1566,7 @@ export default function CRMScreen() {
           )}
 
           {[...clients]
+            .filter(c => c.status !== 'Cold Lead' && (user?.role !== 'salesperson' || c.assignedRep === user?.id))
             .sort((a, b) => {
               const dateA = new Date(a.createdAt || a.lastContactDate || a.lastContacted).getTime();
               const dateB = new Date(b.createdAt || b.lastContactDate || b.lastContacted).getTime();
@@ -1597,8 +1621,11 @@ export default function CRMScreen() {
                   <Text style={styles.clientEmail}>{client.email}</Text>
                   <Text style={styles.clientPhone}>{client.phone}</Text>
                   <Text style={styles.clientSource}>{client.source}</Text>
-                  <View style={[styles.statusBadge, client.status === 'Lead' ? styles.leadBadge : styles.projectBadge]}>
-                    <Text style={styles.statusText}>{client.status}</Text>
+                  {client.assignedRep && (
+                    <Text style={styles.clientAssignedRep}>Rep: {companyUsers.find(u => u.id === client.assignedRep)?.name || 'Unknown'}</Text>
+                  )}
+                  <View style={[styles.statusBadge, client.status === 'Lead' ? styles.leadBadge : client.status === 'Project' ? styles.projectBadge : client.status === 'Cold Lead' ? styles.coldLeadBadge : styles.completedBadge]}>
+                    <Text style={[styles.statusText, client.status === 'Cold Lead' && styles.statusTextDark]}>{client.status}</Text>
                   </View>
                   {(client.lastContactDate || client.lastContacted) && (
                     <Text style={styles.clientDate}>
@@ -1824,6 +1851,60 @@ export default function CRMScreen() {
               </View>
             </View>
           ); })}
+
+          {/* Cold Leads Section */}
+          {(() => {
+            const coldLeads = [...clients]
+              .filter(c => c.status === 'Cold Lead' && (user?.role !== 'salesperson' || c.assignedRep === user?.id))
+              .sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
+            if (coldLeads.length === 0) return null;
+            return (
+              <View style={styles.coldLeadsSection}>
+                <TouchableOpacity style={styles.coldLeadsHeader} onPress={() => setShowColdLeads(v => !v)}>
+                  <Text style={styles.coldLeadsTitle}>Cold Leads ({coldLeads.length})</Text>
+                  {showColdLeads ? <ChevronUp size={18} color="#94A3B8" /> : <ChevronDown size={18} color="#94A3B8" />}
+                </TouchableOpacity>
+                {showColdLeads && coldLeads.map(client => (
+                  <View key={client.id} style={styles.coldLeadCard}>
+                    <Text style={styles.coldLeadName}>{client.name}</Text>
+                    <Text style={styles.coldLeadMeta}>{client.phone} · {client.source}</Text>
+                    {client.assignedRep && (
+                      <Text style={styles.coldLeadMeta}>Rep: {companyUsers.find(u => u.id === client.assignedRep)?.name || 'Unknown'}</Text>
+                    )}
+                    <View style={styles.coldLeadActions}>
+                      <TouchableOpacity style={styles.reactivateButton} onPress={() => updateClient(client.id, { status: 'Lead' })}>
+                        <Text style={styles.reactivateButtonText}>Reactivate</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.actionButton} onPress={() => openEditClientModal(client)}>
+                        <Pencil size={14} color="#6B7280" />
+                        <Text style={styles.actionButtonText}>Edit</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
+
+          {/* Appointment Calendar */}
+          <View style={styles.calendarSection}>
+            <View style={styles.calendarSectionHeader}>
+              <Text style={styles.calendarSectionTitle}>Appointment Calendar</Text>
+            </View>
+            <CRMCalendar
+              appointments={appointments}
+              clients={clients}
+              onAddAppointment={(date) => {
+                setAppointmentFormDate(date);
+                setEditingAppointment(undefined);
+                setAppointmentFormVisible(true);
+              }}
+              onEditAppointment={(appt) => {
+                setEditingAppointment(appt);
+                setAppointmentFormVisible(true);
+              }}
+            />
+          </View>
 
           <View style={styles.metricsWidget}>
             <TouchableOpacity 
@@ -2085,6 +2166,42 @@ export default function CRMScreen() {
               {clientFieldErrors.source && (
                 <Text style={styles.fieldErrorText}>{clientFieldErrors.source}</Text>
               )}
+
+              <Text style={styles.inputLabel}>Lead Status</Text>
+              <View style={styles.sourceButtonsContainer}>
+                {(['Lead', 'Cold Lead'] as const).map((status) => (
+                  <TouchableOpacity
+                    key={status}
+                    style={[styles.sourceButton, newClientStatus === status && styles.sourceButtonActive]}
+                    onPress={() => setNewClientStatus(status)}
+                  >
+                    <Text style={[styles.sourceButtonText, newClientStatus === status && styles.sourceButtonTextActive]}>{status}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {salespersons.length > 0 && (
+                <>
+                  <Text style={styles.inputLabel}>Assign Rep <Text style={styles.optionalHint}>(optional)</Text></Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.repChipScroll}>
+                    <TouchableOpacity
+                      style={[styles.repChip, !newClientAssignedRep && styles.repChipActive]}
+                      onPress={() => setNewClientAssignedRep(undefined)}
+                    >
+                      <Text style={[styles.repChipText, !newClientAssignedRep && styles.repChipTextActive]}>None</Text>
+                    </TouchableOpacity>
+                    {salespersons.map(sp => (
+                      <TouchableOpacity
+                        key={sp.id}
+                        style={[styles.repChip, newClientAssignedRep === sp.id && styles.repChipActive]}
+                        onPress={() => setNewClientAssignedRep(newClientAssignedRep === sp.id ? undefined : sp.id)}
+                      >
+                        <Text style={[styles.repChipText, newClientAssignedRep === sp.id && styles.repChipTextActive]} numberOfLines={1}>{sp.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -2198,6 +2315,42 @@ export default function CRMScreen() {
                 ))}
               </View>
               {editClientFieldErrors.source && <Text style={styles.fieldErrorText}>{editClientFieldErrors.source}</Text>}
+
+              <Text style={styles.inputLabel}>Status</Text>
+              <View style={styles.sourceButtonsContainer}>
+                {(['Lead', 'Project', 'Completed', 'Cold Lead'] as const).map((status) => (
+                  <TouchableOpacity
+                    key={status}
+                    style={[styles.sourceButton, editClientStatus === status && styles.sourceButtonActive]}
+                    onPress={() => setEditClientStatus(status)}
+                  >
+                    <Text style={[styles.sourceButtonText, editClientStatus === status && styles.sourceButtonTextActive]}>{status}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {salespersons.length > 0 && (
+                <>
+                  <Text style={styles.inputLabel}>Assign Rep <Text style={styles.optionalHint}>(optional)</Text></Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.repChipScroll}>
+                    <TouchableOpacity
+                      style={[styles.repChip, !editClientAssignedRep && styles.repChipActive]}
+                      onPress={() => setEditClientAssignedRep(undefined)}
+                    >
+                      <Text style={[styles.repChipText, !editClientAssignedRep && styles.repChipTextActive]}>None</Text>
+                    </TouchableOpacity>
+                    {salespersons.map(sp => (
+                      <TouchableOpacity
+                        key={sp.id}
+                        style={[styles.repChip, editClientAssignedRep === sp.id && styles.repChipActive]}
+                        onPress={() => setEditClientAssignedRep(editClientAssignedRep === sp.id ? undefined : sp.id)}
+                      >
+                        <Text style={[styles.repChipText, editClientAssignedRep === sp.id && styles.repChipTextActive]} numberOfLines={1}>{sp.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -3774,6 +3927,27 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
           </View>
         </View>
       </Modal>
+
+      <AppointmentFormModal
+        visible={appointmentFormVisible}
+        onClose={() => { setAppointmentFormVisible(false); setEditingAppointment(undefined); setAppointmentFormDate(''); }}
+        onSave={async (data) => {
+          if (editingAppointment) {
+            await updateAppointment(editingAppointment.id, data);
+          } else {
+            await addAppointment(data);
+          }
+        }}
+        onDelete={editingAppointment ? () => {
+          deleteAppointment(editingAppointment.id);
+          setAppointmentFormVisible(false);
+          setEditingAppointment(undefined);
+        } : undefined}
+        initial={editingAppointment ?? (appointmentFormDate ? { id: '', companyId: company?.id ?? '', title: '', date: appointmentFormDate } as import('@/types').Appointment : undefined)}
+        clients={clients}
+        companyId={company?.id ?? ''}
+        createdBy={user?.id}
+      />
     </View>
   );
 }
@@ -5871,5 +6045,112 @@ const styles = StyleSheet.create({
   },
   sourceButtonTextActive: {
     color: '#2563EB',
+  },
+  coldLeadBadge: {
+    backgroundColor: '#F1F5F9',
+  },
+  completedBadge: {
+    backgroundColor: '#6B7280',
+  },
+  statusTextDark: {
+    color: '#64748B',
+  },
+  clientAssignedRep: {
+    fontSize: 12,
+    color: '#2563EB',
+    fontWeight: '500' as const,
+    marginBottom: 4,
+  },
+  coldLeadsSection: {
+    marginBottom: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  coldLeadsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: '#F8FAFC',
+  },
+  coldLeadsTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: '#94A3B8',
+  },
+  coldLeadCard: {
+    padding: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  coldLeadName: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#9CA3AF',
+    marginBottom: 4,
+  },
+  coldLeadMeta: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginBottom: 2,
+  },
+  coldLeadActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  reactivateButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  reactivateButtonText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#2563EB',
+  },
+  repChipScroll: {
+    marginBottom: 4,
+  },
+  repChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+    marginRight: 8,
+  },
+  repChipActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  repChipText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#4B5563',
+  },
+  repChipTextActive: {
+    color: '#FFFFFF',
+  },
+  calendarSection: {
+    marginBottom: 16,
+  },
+  calendarSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  calendarSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#1E3A5F',
   },
 });

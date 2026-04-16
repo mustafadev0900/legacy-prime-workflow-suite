@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('[Add Client] Starting request...');
 
   try {
-    const { companyId, name, address, email, phone, source, status, lastContacted, lastContactDate, nextFollowUpDate } = req.body;
+    const { companyId, name, address, email, phone, source, status, lastContacted, lastContactDate, nextFollowUpDate, assignedRep, jobDetails } = req.body;
 
     // Validate required fields
     if (!companyId) {
@@ -38,6 +38,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const validSources = ['Google', 'Referral', 'Ad', 'Phone Call'];
     if (!validSources.includes(source)) {
       return res.status(400).json({ error: `Invalid source. Must be one of: ${validSources.join(', ')}` });
+    }
+
+    // Validate status value
+    const validStatuses = ['Lead', 'Project', 'Completed', 'Cold Lead'];
+    if (status && !validStatuses.includes(status)) {
+      return res.status(400).json({ error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
     }
 
     // Create Supabase client
@@ -66,6 +72,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         last_contacted: lastContacted || null,
         last_contact_date: lastContactDate || new Date().toISOString(),
         next_follow_up_date: nextFollowUpDate || null,
+        assigned_rep: assignedRep || null,
+        job_details: jobDetails || null,
       })
       .select()
       .single();
@@ -92,6 +100,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       lastContactDate: data.last_contact_date || undefined,
       nextFollowUpDate: data.next_follow_up_date || undefined,
       createdAt: data.created_at,
+      assignedRep: data.assigned_rep || undefined,
+      jobDetails: data.job_details || undefined,
     };
 
     return res.status(200).json({
