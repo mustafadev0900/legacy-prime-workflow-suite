@@ -6461,7 +6461,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 6,
-    marginTop: 6,
+    marginTop: 8,
+    marginBottom: 2,
   },
   cardInlineLabel: {
     fontSize: 13,
