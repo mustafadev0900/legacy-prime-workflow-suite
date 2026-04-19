@@ -265,8 +265,8 @@ export default function TaskDetailModal({
               hideNotes={isReadOnly}
             />
 
-            {/* Subcontractor Assignment */}
-            {!isReadOnly && (
+            {/* Subcontractor Assignment — visible under Subcontractor tab */}
+            {workType === 'subcontractor' && !isReadOnly && (
               <View style={styles.subSection}>
                 <Text style={styles.subSectionHeader}>ASSIGN SUBCONTRACTORS</Text>
                 {subcontractors.length === 0 ? (

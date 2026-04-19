@@ -2391,8 +2391,8 @@ ${pdfDates.length > 0 ? `
                   </TouchableOpacity>
                 </View>
 
-                {/* Employee picker */}
-                {(
+                {/* Employee picker — In-House tab */}
+                {editWorkType === 'in-house' && (
                   <View style={{ marginTop: 4 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                       <Text style={styles.editLabel}>ASSIGN EMPLOYEES</Text>
@@ -2474,8 +2474,8 @@ ${pdfDates.length > 0 ? `
                   </View>
                 )}
 
-                {/* Subcontractor picker */}
-                {(
+                {/* Subcontractor picker — Subcontractor tab */}
+                {editWorkType === 'subcontractor' && (
                   <View style={{ marginTop: 4 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
                       <Users size={16} color="#D97706" />
