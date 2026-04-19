@@ -304,7 +304,6 @@ export default function CRMScreen() {
         address: editClientAddress.trim() || undefined,
         source: editClientSource as 'Google' | 'Referral' | 'Ad' | 'Phone Call',
         status: editClientStatus as 'Lead' | 'Project' | 'Completed' | 'Cold Lead',
-        assignedRep: editClientAssignedRep || null,
       });
       // Rename linked projects whose name starts with the old client name
       if (oldName && oldName !== newName) {
@@ -382,6 +381,10 @@ export default function CRMScreen() {
   const [editingAppointment, setEditingAppointment] = useState<import('@/types').Appointment | undefined>();
 
   const salespersons = companyUsers.filter(u => u.role === 'salesperson');
+  const [repPickerClientId, setRepPickerClientId] = useState<string | null>(null);
+  const [repPickerValue, setRepPickerValue] = useState<string | null>(null);
+  const [jobDetailsClientId, setJobDetailsClientId] = useState<string | null>(null);
+  const [jobDetailsText, setJobDetailsText] = useState<string>('');
   const [isUpdatingClient, setIsUpdatingClient] = useState<boolean>(false);
 
   const [callAssistantConfig, setCallAssistantConfig] = useState({
@@ -1636,8 +1639,84 @@ export default function CRMScreen() {
                   <Text style={styles.clientEmail}>{client.email}</Text>
                   <Text style={styles.clientPhone}>{client.phone}</Text>
                   <Text style={styles.clientSource}>{client.source}</Text>
-                  {client.assignedRep && (
-                    <Text style={styles.clientAssignedRep}>Rep: {companyUsers.find(u => u.id === client.assignedRep)?.name || 'Unknown'}</Text>
+                  {/* Assign Rep — inline on card */}
+                  {(user?.role === 'admin' || user?.role === 'super-admin') ? (
+                    <View>
+                      <TouchableOpacity style={styles.cardInlineRow} onPress={() => {
+                        if (repPickerClientId === client.id) { setRepPickerClientId(null); }
+                        else { setRepPickerClientId(client.id); setRepPickerValue(client.assignedRep ?? null); }
+                      }}>
+                        <Users size={14} color="#2563EB" />
+                        <Text style={styles.cardInlineLabel}>{client.assignedRep ? `Rep: ${companyUsers.find(u => u.id === client.assignedRep)?.name || 'Unknown'}` : 'Assign Rep'}</Text>
+                        <Pencil size={12} color="#9CA3AF" />
+                      </TouchableOpacity>
+                      {repPickerClientId === client.id && (
+                        <View style={styles.repPickerPanel}>
+                          <Text style={styles.repPickerTitle}>Assign Sales Rep</Text>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cardRepChipScroll}>
+                            {salespersons.map(sp => (
+                              <TouchableOpacity
+                                key={sp.id}
+                                style={[styles.repChip, repPickerValue === sp.id && styles.repChipActive]}
+                                onPress={() => setRepPickerValue(sp.id)}
+                              >
+                                <Text style={[styles.repChipText, repPickerValue === sp.id && styles.repChipTextActive]} numberOfLines={1}>{sp.name}</Text>
+                              </TouchableOpacity>
+                            ))}
+                            <TouchableOpacity
+                              style={[styles.repChip, !repPickerValue && styles.repChipActive]}
+                              onPress={() => setRepPickerValue(null)}
+                            >
+                              <Text style={[styles.repChipText, !repPickerValue && styles.repChipTextActive]}>Unassigned</Text>
+                            </TouchableOpacity>
+                          </ScrollView>
+                          <View style={styles.repPickerActions}>
+                            <TouchableOpacity style={styles.repPickerSaveBtn} onPress={() => { updateClient(client.id, { assignedRep: repPickerValue }); setRepPickerClientId(null); }}>
+                              <Text style={styles.repPickerSaveBtnText}>Save</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.repPickerCancelBtn} onPress={() => setRepPickerClientId(null)}>
+                              <Text style={styles.repPickerCancelBtnText}>Cancel</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  ) : client.assignedRep ? (
+                    <View style={styles.cardInlineRow}>
+                      <Users size={14} color="#2563EB" />
+                      <Text style={styles.cardInlineLabel}>Rep: {companyUsers.find(u => u.id === client.assignedRep)?.name || 'Unknown'}</Text>
+                    </View>
+                  ) : null}
+
+                  {/* Job Details — inline on card */}
+                  {jobDetailsClientId === client.id ? (
+                    <View style={styles.jobDetailsEditRow}>
+                      <TextInput
+                        style={styles.jobDetailsInput}
+                        placeholder="e.g. Kitchen remodel, 2nd floor bathroom"
+                        placeholderTextColor="#9CA3AF"
+                        value={jobDetailsText}
+                        onChangeText={setJobDetailsText}
+                        multiline
+                        autoFocus
+                      />
+                      <View style={styles.jobDetailsActions}>
+                        <TouchableOpacity onPress={() => setJobDetailsClientId(null)}>
+                          <Text style={styles.jobDetailsCancelText}>Cancel</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => { updateClient(client.id, { jobDetails: jobDetailsText.trim() || null }); setJobDetailsClientId(null); }}>
+                          <Text style={styles.jobDetailsSaveText}>Save</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ) : (
+                    <TouchableOpacity style={styles.cardInlineRow} onPress={() => { setJobDetailsClientId(client.id); setJobDetailsText(client.jobDetails ?? ''); }}>
+                      <ClipboardList size={14} color="#D97706" />
+                      <Text style={[styles.cardInlineLabel, { color: client.jobDetails ? '#374151' : '#D97706' }]}>
+                        {client.jobDetails || 'Add Job Details'}
+                      </Text>
+                      {client.jobDetails && <Pencil size={12} color="#9CA3AF" />}
+                    </TouchableOpacity>
                   )}
                   {(() => {
                     const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> = {
@@ -1863,7 +1942,7 @@ export default function CRMScreen() {
                     onPress={() => updateClient(client.id, { status: 'Cold Lead' })}
                   >
                     <Snowflake size={14} color="#6B7280" />
-                    <Text style={styles.freezeButtonText}>Mark Cold</Text>
+                    <Text style={styles.freezeButtonText}>Cold lead</Text>
                   </TouchableOpacity>
                 )}
                 {client.status === 'Cold Lead' && (
@@ -2191,28 +2270,6 @@ export default function CRMScreen() {
                 ))}
               </View>
 
-              {salespersons.length > 0 && (user?.role === 'admin' || user?.role === 'super-admin') && (
-                <>
-                  <Text style={styles.inputLabel}>Assign Rep <Text style={styles.optionalHint}>(optional)</Text></Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.repChipScroll}>
-                    <TouchableOpacity
-                      style={[styles.repChip, !newClientAssignedRep && styles.repChipActive]}
-                      onPress={() => setNewClientAssignedRep(undefined)}
-                    >
-                      <Text style={[styles.repChipText, !newClientAssignedRep && styles.repChipTextActive]}>None</Text>
-                    </TouchableOpacity>
-                    {salespersons.map(sp => (
-                      <TouchableOpacity
-                        key={sp.id}
-                        style={[styles.repChip, newClientAssignedRep === sp.id && styles.repChipActive]}
-                        onPress={() => setNewClientAssignedRep(newClientAssignedRep === sp.id ? undefined : sp.id)}
-                      >
-                        <Text style={[styles.repChipText, newClientAssignedRep === sp.id && styles.repChipTextActive]} numberOfLines={1}>{sp.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </>
-              )}
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -2340,28 +2397,6 @@ export default function CRMScreen() {
                 ))}
               </View>
 
-              {salespersons.length > 0 && (user?.role === 'admin' || user?.role === 'super-admin') && (
-                <>
-                  <Text style={styles.inputLabel}>Assign Rep <Text style={styles.optionalHint}>(optional)</Text></Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.repChipScroll}>
-                    <TouchableOpacity
-                      style={[styles.repChip, !editClientAssignedRep && styles.repChipActive]}
-                      onPress={() => setEditClientAssignedRep(undefined)}
-                    >
-                      <Text style={[styles.repChipText, !editClientAssignedRep && styles.repChipTextActive]}>None</Text>
-                    </TouchableOpacity>
-                    {salespersons.map(sp => (
-                      <TouchableOpacity
-                        key={sp.id}
-                        style={[styles.repChip, editClientAssignedRep === sp.id && styles.repChipActive]}
-                        onPress={() => setEditClientAssignedRep(editClientAssignedRep === sp.id ? undefined : sp.id)}
-                      >
-                        <Text style={[styles.repChipText, editClientAssignedRep === sp.id && styles.repChipTextActive]} numberOfLines={1}>{sp.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </>
-              )}
             </ScrollView>
 
             <View style={styles.modalFooter}>
@@ -6131,6 +6166,92 @@ const styles = StyleSheet.create({
     color: '#2563EB',
     fontWeight: '500' as const,
     marginBottom: 4,
+  },
+  cardInlineRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginTop: 6,
+  },
+  cardInlineLabel: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: '#2563EB',
+    flex: 1,
+  },
+  cardRepChipScroll: {
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  repPickerPanel: {
+    backgroundColor: '#F0F4FF',
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  repPickerTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: '#1F2937',
+  },
+  repPickerActions: {
+    flexDirection: 'row' as const,
+    gap: 8,
+  },
+  repPickerSaveBtn: {
+    backgroundColor: '#2563EB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  repPickerSaveBtnText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
+  },
+  repPickerCancelBtn: {
+    backgroundColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  repPickerCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#374151',
+  },
+  jobDetailsEditRow: {
+    marginTop: 6,
+  },
+  jobDetailsInput: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    fontSize: 13,
+    color: '#1F2937',
+    minHeight: 48,
+    textAlignVertical: 'top' as const,
+  },
+  jobDetailsActions: {
+    flexDirection: 'row' as const,
+    justifyContent: 'flex-end' as const,
+    gap: 12,
+    marginTop: 6,
+  },
+  jobDetailsCancelText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#6B7280',
+  },
+  jobDetailsSaveText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#2563EB',
   },
   repChipScroll: {
     marginBottom: 4,
