@@ -2920,7 +2920,8 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
   // Delete client
   const deleteClient = useCallback(async (clientId: string) => {
     try {
-      const response = await fetch('/api/delete-client', {
+      const baseUrl = getApiBaseUrl();
+      const response = await fetch(`${baseUrl}/api/delete-client`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId, companyId: company?.id }),

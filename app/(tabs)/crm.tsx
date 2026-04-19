@@ -110,7 +110,7 @@ const promotionTemplates: MessageTemplate[] = [
 ];
 
 export default function CRMScreen() {
-  const { clients, addClient, addProject, updateClient, updateProject, estimates, updateEstimate, callLogs, addCallLog, deleteCallLog, setCallLogs, company, user, refreshClients, refreshEstimates, projects, priceListItems, isLoading, isCompanyReloading, companyUsers, appointments, addAppointment, updateAppointment, deleteAppointment } = useApp();
+  const { clients, addClient, addProject, updateClient, updateProject, deleteClient, estimates, updateEstimate, callLogs, addCallLog, deleteCallLog, setCallLogs, company, user, refreshClients, refreshEstimates, projects, priceListItems, isLoading, isCompanyReloading, companyUsers, appointments, addAppointment, updateAppointment, deleteAppointment } = useApp();
   const router = useRouter();
   const { sendSingleSMS, sendBulkSMSMessages, isLoading: isSendingSMS } = useTwilioSMS();
   const { initiateCall, isLoadingCall } = useTwilioCalls();
@@ -373,7 +373,9 @@ export default function CRMScreen() {
   const [editClientAssignedRep, setEditClientAssignedRep] = useState<string | undefined>();
   const [newClientStatus, setNewClientStatus] = useState<string>('Lead');
   const [newClientAssignedRep, setNewClientAssignedRep] = useState<string | undefined>();
-  const [showColdLeads, setShowColdLeads] = useState<boolean>(false);
+  const [showColdLeadsModal, setShowColdLeadsModal] = useState<boolean>(false);
+  const [coldLeadConfirmClient, setColdLeadConfirmClient] = useState<import('@/types').Client | null>(null);
+  const [coldLeadDoneClient, setColdLeadDoneClient] = useState<import('@/types').Client | null>(null);
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>('All');
   const [showCalendarModal, setShowCalendarModal] = useState<boolean>(false);
   const [appointmentFormVisible, setAppointmentFormVisible] = useState<boolean>(false);
@@ -381,13 +383,40 @@ export default function CRMScreen() {
   const [editingAppointment, setEditingAppointment] = useState<import('@/types').Appointment | undefined>();
 
   const salespersons = companyUsers.filter(u => u.role === 'salesperson');
+  const coldLeads = clients.filter(c => c.status === 'Cold Lead' && (user?.role !== 'salesperson' || c.assignedRep === user?.id));
+  const coldLeadCount = coldLeads.length;
+
+  const handleMarkColdLead = (client: import('@/types').Client) => {
+    setColdLeadConfirmClient(client);
+  };
+  const confirmMarkColdLead = async () => {
+    if (!coldLeadConfirmClient) return;
+    const client = coldLeadConfirmClient;
+    setColdLeadConfirmClient(null);
+    await updateClient(client.id, { status: 'Cold Lead' });
+    setColdLeadDoneClient(client);
+  };
+  const handleDeleteColdLead = (clientId: string, clientName: string) => {
+    if (Platform.OS === 'web') {
+      const confirmed = confirm(`Delete ${clientName}? This cannot be undone.`);
+      if (confirmed) deleteClient(clientId);
+    } else {
+      Alert.alert('Delete Client', `Delete ${clientName}? This cannot be undone.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => deleteClient(clientId) },
+      ]);
+    }
+  };
+  const handleRestoreColdLead = (clientId: string) => {
+    updateClient(clientId, { status: 'Lead' });
+  };
   const [repPickerClientId, setRepPickerClientId] = useState<string | null>(null);
   const [repPickerValue, setRepPickerValue] = useState<string | null>(null);
   const [jobDetailsClientId, setJobDetailsClientId] = useState<string | null>(null);
   const [jobDetailsText, setJobDetailsText] = useState<string>('');
   const [isUpdatingClient, setIsUpdatingClient] = useState<boolean>(false);
 
-  const [callAssistantConfig, setCallAssistantConfig] = useState({
+  const [callAssistantConfig, setCallAssistantConfig] = useState<{ enabled: boolean; businessName: string; greeting: string; nameQuestion: string; customQuestions: string[]; autoAddToCRM: boolean; autoSchedule: boolean; seriousLeadCriteria: string }>({
     enabled: true,
     businessName: 'Legacy Prime Construction',
     greeting: `Thank you for calling ${company?.name || 'us'}. How can I help you today?`,
@@ -878,7 +907,7 @@ export default function CRMScreen() {
       clients,
       projects,
       company,
-      customPriceListItems: priceListItems,
+      customPriceListItems: priceListItems as any,
       updateEstimate,
       clientId: selectedClientForEstimate,
     });
@@ -1482,6 +1511,14 @@ export default function CRMScreen() {
             )}
 
             <TouchableOpacity
+              style={styles.coldLeadsButton}
+              onPress={() => setShowColdLeadsModal(true)}
+            >
+              <Snowflake size={20} color="#FFFFFF" />
+              <Text style={styles.coldLeadsButtonText}>Cold Leads ({coldLeadCount})</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.addButton}
               onPress={openAddClientModal}
             >
@@ -1554,13 +1591,12 @@ export default function CRMScreen() {
           
           {/* Status Filter Tabs */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterTabsRow} contentContainerStyle={{ paddingRight: 16 }}>
-            {['All', 'Lead', 'Project', 'Completed', 'Cold Lead'].map(tab => (
+            {['All', 'Lead', 'Project', 'Completed'].map(tab => (
               <TouchableOpacity
                 key={tab}
-                style={[styles.filterTab, activeStatusFilter === tab && (tab === 'Cold Lead' ? styles.filterTabActiveCold : styles.filterTabActive)]}
+                style={[styles.filterTab, activeStatusFilter === tab && styles.filterTabActive]}
                 onPress={() => setActiveStatusFilter(tab)}
               >
-                {tab === 'Cold Lead' && <Snowflake size={11} color={activeStatusFilter === tab ? '#FFFFFF' : '#6B7280'} style={{ marginRight: 3 }} />}
                 <Text style={[styles.filterTabText, activeStatusFilter === tab && styles.filterTabTextActive]}>{tab}</Text>
               </TouchableOpacity>
             ))}
@@ -1584,7 +1620,7 @@ export default function CRMScreen() {
           )}
 
           {[...clients]
-            .filter(c => (activeStatusFilter === 'All' || c.status === activeStatusFilter) && (user?.role !== 'salesperson' || c.assignedRep === user?.id))
+            .filter(c => c.status !== 'Cold Lead' && (activeStatusFilter === 'All' || c.status === activeStatusFilter) && (user?.role !== 'salesperson' || c.assignedRep === user?.id))
             .sort((a, b) => {
               const dateA = new Date(a.createdAt || a.lastContactDate || a.lastContacted).getTime();
               const dateB = new Date(b.createdAt || b.lastContactDate || b.lastContacted).getTime();
@@ -1592,8 +1628,8 @@ export default function CRMScreen() {
             }).map((client) => {
             const linkedProject = projects.find(p => p.clientId === client.id);
             return (
-            <View key={client.id} style={[styles.clientRow, client.status === 'Cold Lead' && styles.clientRowCold]}>
-              <View style={[styles.clientRowHeader, client.status === 'Cold Lead' && styles.clientRowHeaderCold]}>
+            <View key={client.id} style={styles.clientRow}>
+              <View style={styles.clientRowHeader}>
                 <TouchableOpacity 
                   style={styles.checkbox}
                   onPress={() => toggleClientSelection(client.id)}
@@ -1939,19 +1975,10 @@ export default function CRMScreen() {
                 {client.status === 'Lead' && (
                   <TouchableOpacity
                     style={styles.freezeButton}
-                    onPress={() => updateClient(client.id, { status: 'Cold Lead' })}
+                    onPress={() => handleMarkColdLead(client)}
                   >
                     <Snowflake size={14} color="#6B7280" />
                     <Text style={styles.freezeButtonText}>Cold lead</Text>
-                  </TouchableOpacity>
-                )}
-                {client.status === 'Cold Lead' && (
-                  <TouchableOpacity
-                    style={styles.restoreButton}
-                    onPress={() => updateClient(client.id, { status: 'Lead' })}
-                  >
-                    <RotateCcw size={14} color="#0284C7" />
-                    <Text style={styles.restoreButtonText}>Re-activate</Text>
                   </TouchableOpacity>
                 )}
                 {client.status === 'Project' && linkedProject && (
@@ -2693,7 +2720,7 @@ export default function CRMScreen() {
                           <TouchableOpacity
                             style={styles.workflowButtonHalf}
                             onPress={() => createPaymentLinkAndEmail(estimate.id, selectedClientForEstimate || undefined)}
-                            disabled={estimate.status !== 'sent' && estimate.status !== 'approved'}
+                            disabled={estimate.status !== 'sent' && (estimate.status as string) !== 'approved'}
                           >
                             <DollarSign size={18} color="#F59E0B" />
                             <Text style={styles.workflowButtonTextSmall}>Request Payment</Text>
@@ -3974,6 +4001,141 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
         </View>
       </Modal>
 
+      {/* Cold Leads Modal */}
+      <Modal
+        visible={showColdLeadsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowColdLeadsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
+          <View style={styles.coldLeadsModalContent}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Snowflake size={24} color="#0284C7" />
+                <Text style={styles.modalTitle}>Cold Leads</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowColdLeadsModal(false)}>
+                <X size={24} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.coldLeadsSubtitle}>
+              {coldLeadCount} cold lead{coldLeadCount !== 1 ? 's' : ''} — send offers or restore them to active leads
+            </Text>
+
+            <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+              {coldLeads.length === 0 ? (
+                <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+                  <Snowflake size={48} color="#D1D5DB" />
+                  <Text style={{ fontSize: 16, color: '#6B7280', marginTop: 12 }}>No cold leads yet</Text>
+                </View>
+              ) : (
+                coldLeads.map(client => (
+                  <View key={client.id} style={styles.coldLeadCard}>
+                    <View style={styles.coldLeadCardHeader}>
+                      <Text style={styles.coldLeadName}>{client.name}</Text>
+                      <View style={styles.coldLeadSourceBadge}>
+                        <Text style={styles.coldLeadSourceText}>{client.source}</Text>
+                      </View>
+                    </View>
+                    {client.phone && <Text style={styles.coldLeadDetail}>{client.phone}</Text>}
+                    {client.email && <Text style={styles.coldLeadDetail}>{client.email}</Text>}
+                    {client.address && !client.address.startsWith('[AI Call]') && (
+                      <Text style={styles.coldLeadDetail}>{client.address}</Text>
+                    )}
+                    <View style={styles.coldLeadActions}>
+                      <TouchableOpacity
+                        style={styles.coldLeadEmailBtn}
+                        onPress={() => { setShowColdLeadsModal(false); openMessageModal('email', client.id); }}
+                      >
+                        <Mail size={14} color="#FFFFFF" />
+                        <Text style={styles.coldLeadActionText}>Email Offer</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.coldLeadSmsBtn}
+                        onPress={() => { setShowColdLeadsModal(false); openMessageModal('sms', client.id); }}
+                      >
+                        <MessageSquare size={14} color="#FFFFFF" />
+                        <Text style={styles.coldLeadActionText}>SMS Offer</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.coldLeadRestoreBtn}
+                        onPress={() => handleRestoreColdLead(client.id)}
+                      >
+                        <RotateCcw size={14} color="#FFFFFF" />
+                        <Text style={styles.coldLeadActionText}>Restore</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.coldLeadDeleteBtn}
+                        onPress={() => handleDeleteColdLead(client.id, client.name)}
+                      >
+                        <Trash2 size={14} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.coldLeadsCloseBtn}
+              onPress={() => setShowColdLeadsModal(false)}
+            >
+              <Text style={styles.coldLeadsCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Cold Lead Confirm Modal */}
+      <Modal
+        visible={coldLeadConfirmClient !== null}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setColdLeadConfirmClient(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.coldLeadConfirmModal}>
+            <Text style={styles.coldLeadConfirmTitle}>Mark as Cold Lead</Text>
+            <Text style={styles.coldLeadConfirmMessage}>
+              Move {coldLeadConfirmClient?.name} to Cold Leads? They won't appear in your active leads or projects.
+            </Text>
+            <View style={styles.coldLeadConfirmActions}>
+              <TouchableOpacity style={styles.coldLeadCancelBtn} onPress={() => setColdLeadConfirmClient(null)}>
+                <Text style={styles.coldLeadCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.coldLeadMarkBtn} onPress={confirmMarkColdLead}>
+                <Text style={styles.coldLeadMarkBtnText}>Mark Cold</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Cold Lead Done Modal */}
+      <Modal
+        visible={coldLeadDoneClient !== null}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setColdLeadDoneClient(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.coldLeadConfirmModal}>
+            <Text style={styles.coldLeadConfirmTitle}>Done</Text>
+            <Text style={styles.coldLeadConfirmMessage}>
+              {coldLeadDoneClient?.name} moved to Cold Leads. You can still send offers from the Cold Leads section.
+            </Text>
+            <View style={styles.coldLeadConfirmActions}>
+              <TouchableOpacity style={styles.coldLeadMarkBtn} onPress={() => setColdLeadDoneClient(null)}>
+                <Text style={styles.coldLeadMarkBtnText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <AppointmentFormModal
         visible={appointmentFormVisible}
         onClose={() => { setAppointmentFormVisible(false); setEditingAppointment(undefined); setAppointmentFormDate(''); }}
@@ -4037,6 +4199,178 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600' as const,
+  },
+  coldLeadsButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#0284C7',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 4,
+  },
+  coldLeadsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600' as const,
+  },
+  coldLeadsModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%' as any,
+    maxWidth: 700,
+    maxHeight: '90%' as any,
+  },
+  coldLeadsSubtitle: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginBottom: 16,
+  },
+  coldLeadCard: {
+    backgroundColor: '#F0F9FF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  coldLeadCardHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginBottom: 8,
+  },
+  coldLeadName: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#1F2937',
+    flex: 1,
+  },
+  coldLeadSourceBadge: {
+    backgroundColor: '#E5E7EB',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  coldLeadSourceText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#374151',
+  },
+  coldLeadDetail: {
+    fontSize: 13,
+    color: '#4B5563',
+    marginBottom: 2,
+  },
+  coldLeadActions: {
+    flexDirection: 'row' as const,
+    gap: 8,
+    marginTop: 12,
+    flexWrap: 'wrap' as const,
+    alignItems: 'center' as const,
+  },
+  coldLeadEmailBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 6,
+  },
+  coldLeadSmsBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 6,
+  },
+  coldLeadRestoreBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 6,
+  },
+  coldLeadDeleteBtn: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 6,
+    marginLeft: 'auto' as any,
+  },
+  coldLeadActionText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
+  },
+  coldLeadsCloseBtn: {
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+    marginTop: 12,
+  },
+  coldLeadsCloseBtnText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#374151',
+  },
+  coldLeadConfirmModal: {
+    backgroundColor: '#1F2937',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%' as any,
+    maxWidth: 400,
+  },
+  coldLeadConfirmTitle: {
+    fontSize: 20,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  coldLeadConfirmMessage: {
+    fontSize: 15,
+    color: '#9CA3AF',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  coldLeadConfirmActions: {
+    flexDirection: 'row' as const,
+    gap: 12,
+  },
+  coldLeadCancelBtn: {
+    flex: 1,
+    backgroundColor: '#60A5FA',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+  },
+  coldLeadCancelBtnText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
+  },
+  coldLeadMarkBtn: {
+    flex: 1,
+    backgroundColor: '#374151',
+    borderWidth: 1,
+    borderColor: '#6B7280',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+  },
+  coldLeadMarkBtnText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
   },
   sidebar: {
     backgroundColor: '#E5E7EB',
@@ -4612,20 +4946,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
   },
-  createEstimateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  createEstimateButtonText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600' as const,
-  },
   estimateCard: {
     backgroundColor: '#F9FAFB',
     borderRadius: 12,
@@ -5113,17 +5433,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
     gap: 8,
-  },
-  questionNumber: {
-    fontSize: 14,
-    fontWeight: '700' as const,
-    color: '#2563EB',
-  },
-  questionText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#1F2937',
-    lineHeight: 20,
   },
   checkboxRow: {
     flexDirection: 'row',
@@ -5899,22 +6208,14 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginBottom: 16,
   },
-  estimateCard: {
-    backgroundColor: '#F9FAFB',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
   estimateCardDisabled: {
     opacity: 0.6,
     backgroundColor: '#F3F4F6',
   },
   estimateCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: 12,
   },
   estimateCardName: {
@@ -5922,12 +6223,6 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: '#1F2937',
     flex: 1,
-  },
-  estimateStatusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#E5E7EB',
   },
   estimateStatusApproved: {
     backgroundColor: '#D1FAE5',
@@ -5944,17 +6239,12 @@ const styles = StyleSheet.create({
   estimateStatusPaid: {
     backgroundColor: '#D1FAE5',
   },
-  estimateStatusText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: '#4B5563',
-  },
   estimateCardDetails: {
     marginBottom: 12,
   },
   estimateDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
     marginBottom: 8,
   },
   estimateDetailLabel: {
@@ -5967,8 +6257,8 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   estimateCardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 6,
     paddingTop: 12,
     borderTopWidth: 1,
@@ -5980,7 +6270,7 @@ const styles = StyleSheet.create({
     color: '#10B981',
   },
   emptyEstimatesContainer: {
-    alignItems: 'center',
+    alignItems: 'center' as const,
     paddingVertical: 40,
   },
   emptyEstimatesTitle: {
@@ -5993,13 +6283,13 @@ const styles = StyleSheet.create({
   emptyEstimatesText: {
     fontSize: 14,
     color: '#6B7280',
-    textAlign: 'center',
+    textAlign: 'center' as const,
     marginBottom: 24,
     paddingHorizontal: 20,
   },
   createEstimateButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 8,
     backgroundColor: '#2563EB',
     paddingVertical: 12,
