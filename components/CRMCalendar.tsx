@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react-native';
+import { Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ChevronLeft, ChevronRight, MapPin, Plus } from 'lucide-react-native';
 import { Appointment, Client } from '@/types';
 
 interface Props {
@@ -22,6 +22,23 @@ function formatFullDate(dateStr: string): string {
   const d = new Date(dateStr + 'T00:00:00');
   return `${FULL_DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 }
+
+function formatTime12(time: string): string {
+  const [h, m] = time.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return time;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+const TYPE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  'Estimate': { bg: '#EFF6FF', text: '#2563EB', border: '#BFDBFE' },
+  'Site Visit': { bg: '#F0FDF4', text: '#16A34A', border: '#BBF7D0' },
+  'Follow-Up': { bg: '#FFFBEB', text: '#D97706', border: '#FDE68A' },
+  'Client Meeting': { bg: '#F5F3FF', text: '#7C3AED', border: '#DDD6FE' },
+  'Project Meeting': { bg: '#FFF1F2', text: '#E11D48', border: '#FECDD3' },
+  'Other': { bg: '#F3F4F6', text: '#6B7280', border: '#E5E7EB' },
+};
 
 export default function CRMCalendar({ appointments, clients, onAddAppointment, onEditAppointment }: Props) {
   const today = new Date();
@@ -172,18 +189,39 @@ export default function CRMCalendar({ appointments, clients, onAddAppointment, o
           <ScrollView showsVerticalScrollIndicator={false}>
             {selectedAppts.map(appt => {
               const client = selectedClient(appt);
+              const typeColor = TYPE_COLORS[appt.type ?? 'Other'] ?? TYPE_COLORS['Other'];
               return (
-                <TouchableOpacity key={appt.id} style={styles.apptRow} onPress={() => onEditAppointment(appt)}>
+                <TouchableOpacity key={appt.id} style={styles.apptRow} onPress={() => onEditAppointment(appt)} activeOpacity={0.7}>
+                  {/* Green vertical bar */}
+                  <View style={styles.apptBar} />
+                  {/* Time column */}
                   <View style={styles.apptTimeCol}>
-                    <Text style={styles.apptTime}>{appt.time ?? '—'}</Text>
-                    {appt.endTime && <Text style={styles.apptEndTime}>{appt.endTime}</Text>}
+                    <Text style={styles.apptTime}>{appt.time ? formatTime12(appt.time) : '—'}</Text>
                   </View>
+                  {/* Info column */}
                   <View style={styles.apptInfo}>
-                    <Text style={styles.apptTitle} numberOfLines={1}>{appt.title}</Text>
-                    {appt.type && <Text style={styles.apptType} numberOfLines={1}>{appt.type}</Text>}
+                    <Text style={styles.apptTitle} numberOfLines={2}>{appt.title}</Text>
                     {client && <Text style={styles.apptClient} numberOfLines={1}>{client.name}</Text>}
-                    {appt.notes && <Text style={styles.apptNotes} numberOfLines={1}>{appt.notes}</Text>}
+                    {appt.address ? (
+                      <TouchableOpacity
+                        style={styles.apptAddressRow}
+                        onPress={(e) => {
+                          e.stopPropagation?.();
+                          Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(appt.address!)}`);
+                        }}
+                        activeOpacity={0.6}
+                      >
+                        <MapPin size={13} color="#2563EB" />
+                        <Text style={styles.apptAddress} numberOfLines={1}>{appt.address}</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </View>
+                  {/* Type badge */}
+                  {appt.type && (
+                    <View style={[styles.apptTypeBadge, { backgroundColor: typeColor.bg, borderColor: typeColor.border }]}>
+                      <Text style={[styles.apptTypeBadgeText, { color: typeColor.text }]}>{appt.type}</Text>
+                    </View>
+                  )}
                 </TouchableOpacity>
               );
             })}
@@ -230,13 +268,15 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 13, color: '#94A3B8', textAlign: 'center', marginBottom: 12 },
   addAppointmentBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#BFDBFE', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FFFFFF' },
   addAppointmentBtnText: { fontSize: 13, fontWeight: '600', color: '#2563EB' },
-  apptRow: { flexDirection: 'row', backgroundColor: '#F8FAFC', borderRadius: 10, padding: 10, marginBottom: 6 },
-  apptTimeCol: { width: 48, marginRight: 10 },
-  apptTime: { fontSize: 12, color: '#6B7280', fontWeight: '600' },
-  apptEndTime: { fontSize: 11, color: '#9CA3AF', marginTop: 2 },
-  apptInfo: { flex: 1 },
-  apptTitle: { fontSize: 14, fontWeight: '600', color: '#1F2937' },
-  apptType: { fontSize: 11, color: '#6B7280', marginTop: 2 },
-  apptClient: { fontSize: 12, color: '#2563EB', marginTop: 2 },
-  apptNotes: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  apptRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 14, paddingHorizontal: 4, marginBottom: 4, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
+  apptBar: { width: 3, borderRadius: 2, backgroundColor: '#10B981', alignSelf: 'stretch', marginRight: 12, minHeight: 40 },
+  apptTimeCol: { width: 72, marginRight: 12, paddingTop: 2 },
+  apptTime: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
+  apptInfo: { flex: 1, paddingTop: 1 },
+  apptTitle: { fontSize: 15, fontWeight: '700', color: '#1F2937', lineHeight: 20 },
+  apptClient: { fontSize: 13, color: '#6B7280', marginTop: 3 },
+  apptAddressRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  apptAddress: { fontSize: 13, color: '#2563EB', textDecorationLine: 'underline' },
+  apptTypeBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginLeft: 8, marginTop: 2 },
+  apptTypeBadgeText: { fontSize: 12, fontWeight: '600' },
 });
