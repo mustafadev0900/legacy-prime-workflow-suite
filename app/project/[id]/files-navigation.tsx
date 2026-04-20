@@ -1,4 +1,4 @@
-import { Alert, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
@@ -376,7 +376,12 @@ export default function FilesNavigationScreen() {
       quality: 1,
     });
     if (!result.canceled) {
-      await uploadPhotoToS3AndSave(result.assets[0].uri);
+      setIsUploading(true);
+      try {
+        await uploadPhotoToS3AndSave(result.assets[0].uri);
+      } finally {
+        setIsUploading(false);
+      }
     }
   };
 
@@ -397,7 +402,12 @@ export default function FilesNavigationScreen() {
       quality: 1,
     });
     if (!result.canceled) {
-      await uploadPhotoToS3AndSave(result.assets[0].uri);
+      setIsUploading(true);
+      try {
+        await uploadPhotoToS3AndSave(result.assets[0].uri);
+      } finally {
+        setIsUploading(false);
+      }
     }
   };
 
@@ -1174,10 +1184,17 @@ export default function FilesNavigationScreen() {
                     onPress={handleUploadDocument}
                     disabled={isUploading}
                   >
-                    <Upload size={20} color="#FFFFFF" />
-                    <Text style={styles.modalActionButtonText}>
-                      {isUploading ? 'Uploading...' : 'Upload File'}
-                    </Text>
+                    {isUploading ? (
+                      <>
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                        <Text style={styles.modalActionButtonText}>Uploading...</Text>
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={20} color="#FFFFFF" />
+                        <Text style={styles.modalActionButtonText}>Upload File</Text>
+                      </>
+                    )}
                   </TouchableOpacity>
                 )}
               </View>
@@ -1277,6 +1294,15 @@ export default function FilesNavigationScreen() {
           </View>
         </Modal>
       </View>
+
+      <Modal visible={isUploading} transparent animationType="fade">
+        <View style={styles.uploadingOverlay}>
+          <View style={styles.uploadingCard}>
+            <ActivityIndicator size="large" color="#2563EB" />
+            <Text style={styles.uploadingText}>Uploading...</Text>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -1912,5 +1938,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 2,
     elevation: 1,
+  },
+  uploadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  uploadingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center' as const,
+    gap: 16,
+    minWidth: 200,
+  },
+  uploadingText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#1F2937',
   },
 });

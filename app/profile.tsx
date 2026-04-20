@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ActivityIndicator, Alert, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
@@ -1047,6 +1047,15 @@ export default function ProfileScreen() {
         </View>
       </ScrollView>
       </View>
+
+      <Modal visible={isUploadingPhoto} transparent animationType="fade">
+        <View style={styles.uploadingOverlay}>
+          <View style={styles.uploadingCard}>
+            <ActivityIndicator size="large" color="#2563EB" />
+            <Text style={styles.uploadingText}>Uploading photo...</Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1359,5 +1368,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#DC2626',
+  },
+  uploadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  uploadingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center' as const,
+    gap: 16,
+    minWidth: 200,
+  },
+  uploadingText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#1F2937',
   },
 });

@@ -4336,6 +4336,15 @@ NEVER respond with plain text. ALWAYS use JSON format above.`;
         </View>
       </View>
     </Modal>
+
+    <Modal visible={uploadingImageItemId !== null} transparent animationType="fade">
+      <View style={styles.uploadingOverlay}>
+        <View style={styles.uploadingCard}>
+          <ActivityIndicator size="large" color="#2563EB" />
+          <Text style={styles.uploadingText}>Uploading photos...</Text>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -6041,5 +6050,24 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9CA3AF',
     fontStyle: 'italic',
+  },
+  uploadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center' as const,
+    alignItems: 'center' as const,
+  },
+  uploadingCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center' as const,
+    gap: 16,
+    minWidth: 200,
+  },
+  uploadingText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: '#1F2937',
   },
 });
