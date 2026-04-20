@@ -1764,12 +1764,12 @@ export default function CRMScreen() {
                         autoFocus
                       />
                       <View style={styles.jobDetailsActions}>
-                        <TouchableOpacity onPress={() => setJobDetailsClientId(null)}>
-                          <Text style={styles.jobDetailsCancelText}>Cancel</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity onPress={() => { updateClient(client.id, { jobDetails: jobDetailsText.trim() || null }); setJobDetailsClientId(null); }}>
-                          <Text style={styles.jobDetailsSaveText}>Save</Text>
-                        </TouchableOpacity>
+                          <TouchableOpacity onPress={() => setJobDetailsClientId(null)}>
+                            <Text style={styles.jobDetailsCancelText}>Cancel</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => { updateClient(client.id, { jobDetails: jobDetailsText.trim() || null }); setJobDetailsClientId(null); }}>
+                            <Text style={styles.jobDetailsSaveText}>Save</Text>
+                          </TouchableOpacity>
                       </View>
                     </View>
                   ) : (
@@ -4444,6 +4444,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 2,
     elevation: 1,
+    overflow: 'hidden' as const,
   },
   clientRowCold: {
     backgroundColor: '#F0F9FF',
@@ -4735,6 +4736,7 @@ const styles = StyleSheet.create({
   },
   clientInfo: {
     flex: 1,
+    overflow: 'hidden' as const,
   },
   clientActions: {
     flexDirection: 'row',
