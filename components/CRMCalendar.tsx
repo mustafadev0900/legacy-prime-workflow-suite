@@ -143,22 +143,36 @@ export default function CRMCalendar({ appointments, clients, onAddAppointment, o
             {cells.map((day, idx) => {
               if (!day) return <View key={`e-${idx}`} style={styles.cell} />;
               const dateStr = toYMD(viewYear, viewMonth, day);
-              const apptCount = apptsByDate[dateStr]?.length ?? 0;
+              const dayAppts = apptsByDate[dateStr] ?? [];
               const isToday = dateStr === todayStr;
               const isSelected = dateStr === selectedDate;
               return (
                 <TouchableOpacity
                   key={dateStr}
-                  style={[styles.cell, isSelected && styles.cellSelected, isToday && !isSelected && styles.cellToday]}
+                  style={[styles.cell, isSelected && styles.cellSelectedBorder]}
                   onPress={() => setSelectedDate(dateStr)}
+                  activeOpacity={0.7}
                 >
-                  <Text style={[styles.cellText, isSelected && styles.cellTextSelected, isToday && !isSelected && styles.cellTextToday]}>
-                    {day}
-                  </Text>
-                  {apptCount > 0 && (
-                    <View style={[styles.apptCountBadge, isSelected && styles.apptCountBadgeSelected]}>
-                      <Text style={[styles.apptCountText, isSelected && styles.apptCountTextSelected]}>{apptCount}</Text>
+                  <View style={styles.cellDayRow}>
+                    <View style={[isToday && styles.todayCircle]}>
+                      <Text style={[styles.cellText, isToday && styles.cellTextToday]}>
+                        {day}
+                      </Text>
                     </View>
+                  </View>
+                  {dayAppts.slice(0, 2).map((a, i) => {
+                    const c = a.clientId ? clients.find(cl => cl.id === a.clientId) : null;
+                    const barColor = TYPE_COLORS[a.type ?? 'Other']?.text ?? '#2563EB';
+                    const timeStr = a.time ? formatTime12(a.time).replace(':00 ', ' ').replace(/^0/, '') : '';
+                    const label = `${timeStr}${c ? ' ' + c.name.split(' ')[0] : ''}`.trim();
+                    return (
+                      <View key={a.id ?? i} style={[styles.cellApptBar, { borderLeftColor: barColor }]}>
+                        <Text style={styles.cellApptText} numberOfLines={1}>{label || a.title.slice(0, 10)}</Text>
+                      </View>
+                    );
+                  })}
+                  {dayAppts.length > 2 && (
+                    <Text style={styles.cellMoreText}>+{dayAppts.length - 2} more</Text>
                   )}
                 </TouchableOpacity>
               );
@@ -251,17 +265,16 @@ const styles = StyleSheet.create({
   newBtnText: { fontSize: 13, fontWeight: '600', color: '#FFFFFF' },
   dayHeaders: { flexDirection: 'row', paddingHorizontal: 4 },
   dayHeader: { flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '600', color: '#94A3B8', paddingBottom: 6 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 4 },
-  cell: { width: `${100 / 7}%` as any, aspectRatio: 1, alignItems: 'center', justifyContent: 'center' },
-  cellSelected: { backgroundColor: '#2563EB', borderRadius: 20 },
-  cellToday: { backgroundColor: '#EFF6FF', borderRadius: 20 },
-  cellText: { fontSize: 13, color: '#1F2937', fontWeight: '500' },
-  cellTextSelected: { color: '#FFFFFF', fontWeight: '700' },
-  cellTextToday: { color: '#2563EB', fontWeight: '700' },
-  apptCountBadge: { minWidth: 16, height: 16, borderRadius: 8, backgroundColor: '#DBEAFE', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3, marginTop: 2 },
-  apptCountBadgeSelected: { backgroundColor: 'rgba(255,255,255,0.25)' },
-  apptCountText: { fontSize: 9, fontWeight: '700', color: '#2563EB' },
-  apptCountTextSelected: { color: '#FFFFFF' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 0, borderTopWidth: 1, borderLeftWidth: 1, borderColor: '#E5E7EB' },
+  cell: { width: `${100 / 7}%` as any, minHeight: 70, borderRightWidth: 1, borderBottomWidth: 1, borderColor: '#E5E7EB', padding: 3 },
+  cellSelectedBorder: { backgroundColor: '#F0F5FF' },
+  cellDayRow: { alignItems: 'flex-start', marginBottom: 2 },
+  todayCircle: { backgroundColor: '#2563EB', borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  cellText: { fontSize: 12, color: '#1F2937', fontWeight: '500' },
+  cellTextToday: { color: '#FFFFFF', fontWeight: '700' },
+  cellApptBar: { backgroundColor: '#EFF6FF', borderLeftWidth: 3, borderRadius: 3, paddingHorizontal: 3, paddingVertical: 2, marginBottom: 2 },
+  cellApptText: { fontSize: 9, fontWeight: '600', color: '#1F2937' },
+  cellMoreText: { fontSize: 8, color: '#6B7280', fontWeight: '600', marginTop: 1 },
   daySection: { borderTopWidth: 1, borderTopColor: '#E5E7EB', padding: 16 },
   daySectionTitle: { fontSize: 14, fontWeight: '700', color: '#1E3A5F', marginBottom: 10 },
   emptyContainer: { alignItems: 'center', paddingVertical: 16 },
