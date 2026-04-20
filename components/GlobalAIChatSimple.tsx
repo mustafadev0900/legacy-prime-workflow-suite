@@ -1894,7 +1894,7 @@ Generate appropriate line items from the price list that fit this scope of work$
           case 'create_task':
             if (addTask && pendingAction.data) {
               const task = {
-                id: `task-${Date.now()}`,
+                id: generateUUID(),
                 ...pendingAction.data,
               };
               await addTask(task);

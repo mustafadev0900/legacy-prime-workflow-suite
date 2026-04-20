@@ -2,7 +2,7 @@ import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, Refresh
 import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { Camera, Upload, Edit2, X, Check, Plus, Trash2, Settings } from 'lucide-react-native';
+import { Camera, Upload, Edit2, X, Check, Plus, Trash2, Settings, LayoutGrid, LayoutList } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Photo } from '@/types';
@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 export default function PhotosScreen() {
   const { user, photos, addPhoto, updatePhoto, deletePhoto, photoCategories, priceListCategories, addPhotoCategory, updatePhotoCategory, deletePhotoCategory, company, projects, refreshPhotos, isLoading, isCompanyReloading } = useApp();
   const isEmployee = user?.role === 'employee' || user?.role === 'field-employee';
+  const [photoViewMode, setPhotoViewMode] = useState<'grid' | 'list'>('grid');
 
   // Merge price-list categories with photo-specific categories (deduped, price list first).
   const allCategories = useMemo(() => {
@@ -413,7 +414,23 @@ export default function PhotosScreen() {
         </View>
 
         <View style={styles.gallery}>
-          <Text style={styles.galleryTitle}>Thumbnail Gallery</Text>
+          <View style={styles.galleryHeader}>
+            <Text style={styles.galleryTitle}>Thumbnail Gallery</Text>
+            <View style={styles.viewToggle}>
+              <TouchableOpacity
+                style={[styles.viewToggleBtn, photoViewMode === 'grid' && styles.viewToggleBtnActive]}
+                onPress={() => setPhotoViewMode('grid')}
+              >
+                <LayoutGrid size={16} color={photoViewMode === 'grid' ? '#2563EB' : '#9CA3AF'} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.viewToggleBtn, photoViewMode === 'list' && styles.viewToggleBtnActive]}
+                onPress={() => setPhotoViewMode('list')}
+              >
+                <LayoutList size={16} color={photoViewMode === 'list' ? '#2563EB' : '#9CA3AF'} />
+              </TouchableOpacity>
+            </View>
+          </View>
           {(isLoading || isCompanyReloading) && photos.length === 0 ? (
             <View style={styles.galleryGrid}>
               {[0, 1, 2, 3, 4, 5].map(i => (
@@ -424,7 +441,7 @@ export default function PhotosScreen() {
                 </View>
               ))}
             </View>
-          ) : (
+          ) : photoViewMode === 'grid' ? (
           <View style={styles.galleryGrid}>
             {photos
               .filter(photo => !selectedProjectId || photo.projectId === selectedProjectId)
@@ -432,7 +449,6 @@ export default function PhotosScreen() {
               <View key={photo.id} style={styles.galleryItem}>
                 <Image source={{ uri: photo.url }} style={styles.thumbnail} contentFit="cover" />
 
-                {/* 🎯 CLIENT DESIGN: Uploader info with avatar + name */}
                 <View style={styles.thumbnailFooter}>
                   <View style={styles.uploaderRow}>
                     {photo.uploader ? (
@@ -503,6 +519,51 @@ export default function PhotosScreen() {
                   {photo.notes && (
                     <Text style={styles.photoNotes} numberOfLines={2}>{photo.notes}</Text>
                   )}
+                </View>
+              </View>
+            ))}
+          </View>
+          ) : (
+          <View>
+            {photos
+              .filter(photo => !selectedProjectId || photo.projectId === selectedProjectId)
+              .map((photo) => (
+              <View key={photo.id} style={styles.listRow}>
+                <Image source={{ uri: photo.url }} style={styles.listThumbnail} contentFit="cover" />
+                <View style={styles.listInfo}>
+                  <Text style={styles.listCategory} numberOfLines={1}>{photo.category}</Text>
+                  {photo.uploader && <Text style={styles.listUploader} numberOfLines={1}>{photo.uploader.name}</Text>}
+                  {photo.notes && <Text style={styles.listNotes} numberOfLines={1}>{photo.notes}</Text>}
+                  <Text style={styles.listDate}>{photo.date}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  {photo.uploadedBy === user?.id && <TouchableOpacity onPress={() => handleEditCategory(photo)} style={styles.editButton}>
+                    <Edit2 size={14} color="#2563EB" />
+                  </TouchableOpacity>}
+                  {photo.uploadedBy === user?.id && <TouchableOpacity
+                    style={styles.editButton}
+                    onPress={() => {
+                      const doDelete = () => {
+                        deletePhoto(photo.id).catch((err: Error) => {
+                          if (Platform.OS === 'web') {
+                            window.alert(err.message || 'Failed to delete photo');
+                          } else {
+                            Alert.alert('Error', err.message || 'Failed to delete photo');
+                          }
+                        });
+                      };
+                      if (Platform.OS === 'web') {
+                        if (window.confirm('Delete this photo? This cannot be undone.')) doDelete();
+                      } else {
+                        Alert.alert('Delete Photo', 'Are you sure? This cannot be undone.', [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Delete', style: 'destructive', onPress: doDelete },
+                        ]);
+                      }
+                    }}
+                  >
+                    <Trash2 size={14} color="#EF4444" />
+                  </TouchableOpacity>}
                 </View>
               </View>
             ))}
@@ -1008,11 +1069,38 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: '#E5E7EB',
   },
+  galleryHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginBottom: 16,
+  },
   galleryTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: '#1F2937',
-    marginBottom: 16,
+  },
+  viewToggle: {
+    flexDirection: 'row' as const,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 2,
+    gap: 2,
+  },
+  viewToggleBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 6,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  viewToggleBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   galleryGrid: {
     flexDirection: 'row',
@@ -1043,6 +1131,44 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     fontWeight: '600' as const,
     flex: 1,
+  },
+  listRow: {
+    flexDirection: 'row' as const,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 8,
+    alignItems: 'center' as const,
+  },
+  listThumbnail: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    marginRight: 12,
+  },
+  listInfo: {
+    flex: 1,
+  },
+  listCategory: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#1F2937',
+  },
+  listUploader: {
+    fontSize: 12,
+    color: '#2563EB',
+    marginTop: 2,
+  },
+  listNotes: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  listDate: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
   },
   thumbnailFooter: {
     marginTop: 4,

@@ -378,6 +378,7 @@ export default function CRMScreen() {
   const [coldLeadDoneClient, setColdLeadDoneClient] = useState<import('@/types').Client | null>(null);
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>('All');
   const [showCalendarModal, setShowCalendarModal] = useState<boolean>(false);
+  const [calendarExpanded, setCalendarExpanded] = useState<boolean>(false);
   const [appointmentFormVisible, setAppointmentFormVisible] = useState<boolean>(false);
   const [appointmentFormDate, setAppointmentFormDate] = useState<string>('');
   const [editingAppointment, setEditingAppointment] = useState<import('@/types').Appointment | undefined>();
@@ -1589,21 +1590,30 @@ export default function CRMScreen() {
             </View>
           </View>
           
-          {/* Appointment Calendar */}
+          {/* Scheduling Calendar Dropdown */}
           <View style={styles.calendarSection}>
-            <CRMCalendar
-              appointments={appointments}
-              clients={clients}
-              onAddAppointment={(date) => {
-                setAppointmentFormDate(date);
-                setEditingAppointment(undefined);
-                setAppointmentFormVisible(true);
-              }}
-              onEditAppointment={(appt) => {
-                setEditingAppointment(appt);
-                setAppointmentFormVisible(true);
-              }}
-            />
+            <TouchableOpacity style={styles.calendarDropdownHeader} onPress={() => setCalendarExpanded(!calendarExpanded)} activeOpacity={0.7}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Calendar size={18} color="#1E3A5F" />
+                <Text style={styles.calendarDropdownTitle}>Scheduling Calendar</Text>
+              </View>
+              <ChevronDown size={20} color="#6B7280" style={calendarExpanded ? { transform: [{ rotate: '180deg' }] } : undefined} />
+            </TouchableOpacity>
+            {calendarExpanded && (
+              <CRMCalendar
+                appointments={appointments}
+                clients={clients}
+                onAddAppointment={(date) => {
+                  setAppointmentFormDate(date);
+                  setEditingAppointment(undefined);
+                  setAppointmentFormVisible(true);
+                }}
+                onEditAppointment={(appt) => {
+                  setEditingAppointment(appt);
+                  setAppointmentFormVisible(true);
+                }}
+              />
+            )}
           </View>
 
           {/* Status Filter Tabs */}
@@ -1989,7 +1999,7 @@ export default function CRMScreen() {
                   <Pencil size={16} color="#6B7280" />
                   <Text style={styles.actionButtonText}>Edit Info</Text>
                 </TouchableOpacity>
-                {client.status === 'Lead' && (
+                {(client.status === 'Lead' || client.status === 'Project') && (
                   <TouchableOpacity
                     style={styles.freezeButton}
                     onPress={() => handleMarkColdLead(client)}
@@ -4005,8 +4015,8 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
         transparent={true}
         onRequestClose={() => setShowColdLeadsModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
+        <View style={[styles.modalOverlay, { justifyContent: 'flex-end', padding: 0 }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowColdLeadsModal(false)} />
           <View style={styles.coldLeadsModalContent}>
             <View style={styles.modalHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -4201,7 +4211,7 @@ const styles = StyleSheet.create({
   coldLeadsButton: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    backgroundColor: '#0284C7',
+    backgroundColor: '#475569',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -4214,11 +4224,12 @@ const styles = StyleSheet.create({
   },
   coldLeadsModalContent: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     padding: 24,
     width: '100%' as any,
-    maxWidth: 700,
-    maxHeight: '90%' as any,
+    maxHeight: '85%' as any,
+    minHeight: '50%' as any,
   },
   coldLeadsSubtitle: {
     fontSize: 14,
@@ -4298,7 +4309,7 @@ const styles = StyleSheet.create({
   coldLeadDeleteBtn: {
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: '#FEE2E2',
+    backgroundColor: '#DC2626',
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 6,
@@ -6568,6 +6579,23 @@ const styles = StyleSheet.create({
   },
   calendarSection: {
     marginBottom: 16,
+  },
+  calendarDropdownHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 2,
+  },
+  calendarDropdownTitle: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: '#1E3A5F',
   },
   calendarSectionHeader: {
     flexDirection: 'row',
