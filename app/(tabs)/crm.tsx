@@ -1550,46 +1550,6 @@ export default function CRMScreen() {
         </View>
 
         <View style={styles.content}>
-          <View style={styles.clientListHeader}>
-            <View style={styles.leftActions}>
-              <Text style={styles.sectionTitle}>Client List</Text>
-              {selectedClients.size > 0 && (
-                <Text style={styles.selectedCount}>{selectedClients.size} selected</Text>
-              )}
-            </View>
-            <View style={styles.rightActions}>
-              <TouchableOpacity
-                style={styles.selectAllButton}
-                onPress={selectAllClients}
-              >
-                {selectedClients.size === clients.length && selectedClients.size > 0 ? (
-                  <CheckSquare size={20} color="#2563EB" />
-                ) : (
-                  <Square size={20} color="#6B7280" />
-                )}
-                <Text style={styles.selectAllText}>Select All</Text>
-              </TouchableOpacity>
-              {selectedClients.size > 0 && (
-                <>
-                  <TouchableOpacity 
-                    style={styles.bulkActionButton}
-                    onPress={() => openMessageModal('email')}
-                  >
-                    <Mail size={18} color="#FFFFFF" />
-                    <Text style={styles.bulkActionText}>Email</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity 
-                    style={[styles.bulkActionButton, styles.smsButton]}
-                    onPress={() => openMessageModal('sms')}
-                  >
-                    <MessageSquare size={18} color="#FFFFFF" />
-                    <Text style={styles.bulkActionText}>SMS</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          </View>
-          
           {/* Scheduling Calendar Dropdown */}
           <View style={styles.calendarSection}>
             <TouchableOpacity style={styles.calendarDropdownHeader} onPress={() => setCalendarExpanded(!calendarExpanded)} activeOpacity={0.7}>
@@ -1614,6 +1574,46 @@ export default function CRMScreen() {
                 }}
               />
             )}
+          </View>
+
+          <View style={styles.clientListHeader}>
+            <View style={styles.leftActions}>
+              <Text style={styles.sectionTitle}>Client List</Text>
+              {selectedClients.size > 0 && (
+                <Text style={styles.selectedCount}>{selectedClients.size} selected</Text>
+              )}
+            </View>
+            <View style={styles.rightActions}>
+              <TouchableOpacity
+                style={styles.selectAllButton}
+                onPress={selectAllClients}
+              >
+                {selectedClients.size === clients.length && selectedClients.size > 0 ? (
+                  <CheckSquare size={20} color="#2563EB" />
+                ) : (
+                  <Square size={20} color="#6B7280" />
+                )}
+                <Text style={styles.selectAllText}>Select All</Text>
+              </TouchableOpacity>
+              {selectedClients.size > 0 && (
+                <>
+                  <TouchableOpacity
+                    style={styles.bulkActionButton}
+                    onPress={() => openMessageModal('email')}
+                  >
+                    <Mail size={18} color="#FFFFFF" />
+                    <Text style={styles.bulkActionText}>Email</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.bulkActionButton, styles.smsButton]}
+                    onPress={() => openMessageModal('sms')}
+                  >
+                    <MessageSquare size={18} color="#FFFFFF" />
+                    <Text style={styles.bulkActionText}>SMS</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
           </View>
 
           {/* Status Filter Tabs */}
