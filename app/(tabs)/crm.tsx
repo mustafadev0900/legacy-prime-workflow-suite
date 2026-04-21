@@ -389,7 +389,7 @@ export default function CRMScreen() {
   const [apptSuccessMessage, setApptSuccessMessage] = useState<string>('Appointment created!');
   const [editingAppointment, setEditingAppointment] = useState<import('@/types').Appointment | undefined>();
 
-  const salespersons = companyUsers.filter(u => u.role === 'salesperson');
+  const salespersons = companyUsers.filter(u => u.role?.toLowerCase() === 'salesperson');
   const coldLeads = clients.filter(c => c.status === 'Cold Lead' && (user?.role !== 'salesperson' || c.assignedRep === user?.id));
   const coldLeadCount = coldLeads.length;
 
@@ -2351,7 +2351,7 @@ export default function CRMScreen() {
 
               <Text style={[styles.inputLabel, { marginTop: 16 }]}>Assign Sales Rep</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-                {companyUsers.filter(u => u.isActive !== false).map(sp => (
+                {companyUsers.filter(u => u.isActive !== false && u.role?.toLowerCase() === 'salesperson').map(sp => (
                   <TouchableOpacity
                     key={sp.id}
                     style={[styles.sourceButton, newClientAssignedRep === sp.id && styles.sourceButtonActive, { marginRight: 8 }]}
