@@ -2204,6 +2204,26 @@ export default function CRMScreen() {
                 onChangeText={setNewClientJobDetails}
                 multiline
               />
+
+              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E3A5F', marginTop: 10, marginBottom: 6 }}>Assign Sales Rep</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                {companyUsers.filter(u => u.isActive !== false && u.role?.toLowerCase() === 'salesperson').map(sp => (
+                  <TouchableOpacity
+                    key={sp.id}
+                    style={[styles.sourceButton, newClientAssignedRep === sp.id && styles.sourceButtonActive, { marginRight: 8 }]}
+                    onPress={() => setNewClientAssignedRep(newClientAssignedRep === sp.id ? undefined : sp.id)}
+                  >
+                    <Text style={[styles.sourceButtonText, newClientAssignedRep === sp.id && styles.sourceButtonTextActive]}>{sp.name}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[styles.sourceButton, !newClientAssignedRep && styles.sourceButtonActive]}
+                  onPress={() => setNewClientAssignedRep(undefined)}
+                >
+                  <Text style={[styles.sourceButtonText, !newClientAssignedRep && styles.sourceButtonTextActive]}>Unassigned</Text>
+                </TouchableOpacity>
+              </ScrollView>
+
               <TouchableOpacity
                 style={[styles.submitButton, isAddingClient && styles.submitButtonDisabled]}
                 onPress={() => handleAddClient(false)}
