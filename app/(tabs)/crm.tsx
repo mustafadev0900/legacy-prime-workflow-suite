@@ -2351,7 +2351,7 @@ export default function CRMScreen() {
 
               <Text style={[styles.inputLabel, { marginTop: 16 }]}>Assign Sales Rep</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-                {salespersons.map(sp => (
+                {companyUsers.filter(u => u.isActive !== false).map(sp => (
                   <TouchableOpacity
                     key={sp.id}
                     style={[styles.sourceButton, newClientAssignedRep === sp.id && styles.sourceButtonActive, { marginRight: 8 }]}
