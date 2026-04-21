@@ -3,21 +3,27 @@ import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import ClockInOutComponent from '@/components/ClockInOutComponent';
-import { ArrowLeft, Briefcase, ChevronDown, Clock } from 'lucide-react-native';
+import { ArrowLeft, Briefcase, Building2, ChevronDown, ChevronRight, ClipboardList, Clock, FileText, HardHat, Megaphone, Monitor, MoreHorizontal, Phone, Send, Truck, Users } from 'lucide-react-native';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 
 const isWeb = Platform.OS === 'web';
 
-const OFFICE_ROLES = [
-  'Project Manager',
-  'Bookkeeper',
-  'Accountant',
-  'Sales',
-  'Marketing',
-  'Office Assistant',
-  'Receptionist',
-  'Project Coordinator',
+const OFFICE_ROLES: { name: string; icon: React.ComponentType<any> }[] = [
+  { name: 'Project Manager', icon: ClipboardList },
+  { name: 'Bookkeeper', icon: ClipboardList },
+  { name: 'Accountant', icon: ClipboardList },
+  { name: 'Sales', icon: Send },
+  { name: 'Marketing', icon: Megaphone },
+  { name: 'Office Assistant', icon: ClipboardList },
+  { name: 'Receptionist', icon: Phone },
+  { name: 'Project Coordinator', icon: ClipboardList },
+  { name: 'HR / Payroll Admin', icon: Users },
+  { name: 'Estimator', icon: FileText },
+  { name: 'Office Manager', icon: Building2 },
+  { name: 'IT Support', icon: Monitor },
+  { name: 'Dispatcher', icon: Truck },
+  { name: 'Other', icon: MoreHorizontal },
 ];
 
 export default function ClockScreen() {
@@ -81,6 +87,26 @@ export default function ClockScreen() {
   const effectiveOfficeRole = selectedOfficeRole || autoOfficeRole;
   const effectiveProject = effectiveProjectId ? projects.find(p => p.id === effectiveProjectId) : null;
 
+  // ─── Render a single office role row ──────────────────────────────────────────
+  const renderRoleRow = (role: { name: string; icon: React.ComponentType<any> }, webStyle?: boolean) => {
+    const RoleIcon = role.icon;
+    return (
+      <TouchableOpacity
+        key={role.name}
+        style={[styles.projectItem, webStyle && styles.projectItemWeb]}
+        onPress={() => handleSelectOfficeRole(role.name)}
+      >
+        <View style={styles.roleRow}>
+          <View style={styles.roleIconWrap}>
+            <RoleIcon size={18} color="#6B7280" />
+          </View>
+          <Text style={styles.projectName}>{role.name}</Text>
+        </View>
+        <ChevronRight size={20} color="#6B7280" />
+      </TouchableOpacity>
+    );
+  };
+
   // ─── Project/Role Selection Screen ───────────────────────────────────────────
   if (!effectiveProject && !effectiveOfficeRole) {
     const mobileContent = (
@@ -93,7 +119,14 @@ export default function ClockScreen() {
 
         {/* Active Projects */}
         <View style={styles.projectListCard}>
-          <Text style={styles.projectListTitle}>Active Projects</Text>
+          <View style={styles.officeSectionHeader}>
+            <View style={[styles.officeIconWrap, { backgroundColor: '#FEF3C7' }]}>
+              <HardHat size={16} color="#D97706" />
+            </View>
+            <View>
+              <Text style={styles.projectListTitle}>Active Projects</Text>
+            </View>
+          </View>
           {(isLoading || isCompanyReloading) && activeProjects.length === 0 ? (
             [0, 1, 2, 3].map(i => (
               <View key={i} style={{ padding: 14, marginBottom: 8, backgroundColor: '#F3F4F6', borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -111,9 +144,7 @@ export default function ClockScreen() {
                 <View style={styles.projectInfo}>
                   <Text style={styles.projectName}>{project.name}</Text>
                 </View>
-                <View style={{ transform: [{ rotate: '-90deg' }] }}>
-                  <ChevronDown size={20} color="#6B7280" />
-                </View>
+                <ChevronRight size={20} color="#6B7280" />
               </TouchableOpacity>
             ))
           ) : (
@@ -132,20 +163,7 @@ export default function ClockScreen() {
               <Text style={styles.officeSectionSubtitle}>Clock in as office staff</Text>
             </View>
           </View>
-          {OFFICE_ROLES.map((role) => (
-            <TouchableOpacity
-              key={role}
-              style={styles.projectItem}
-              onPress={() => handleSelectOfficeRole(role)}
-            >
-              <View style={styles.projectInfo}>
-                <Text style={styles.projectName}>{role}</Text>
-              </View>
-              <View style={{ transform: [{ rotate: '-90deg' }] }}>
-                <ChevronDown size={20} color="#6B7280" />
-              </View>
-            </TouchableOpacity>
-          ))}
+          {OFFICE_ROLES.map((role) => renderRoleRow(role))}
         </View>
       </>
     );
@@ -165,7 +183,14 @@ export default function ClockScreen() {
         {/* Right: lists */}
         <View style={styles.webMain}>
           <View style={styles.projectListCard}>
-            <Text style={styles.projectListTitle}>Active Projects</Text>
+            <View style={styles.officeSectionHeader}>
+              <View style={[styles.officeIconWrap, { backgroundColor: '#FEF3C7' }]}>
+                <HardHat size={16} color="#D97706" />
+              </View>
+              <View>
+                <Text style={styles.projectListTitle}>Active Projects</Text>
+              </View>
+            </View>
             {activeProjects.map((project) => (
               <TouchableOpacity
                 key={project.id}
@@ -173,9 +198,7 @@ export default function ClockScreen() {
                 onPress={() => handleSelectProject(project.id)}
               >
                 <Text style={styles.projectName}>{project.name}</Text>
-                <View style={{ transform: [{ rotate: '-90deg' }] }}>
-                  <ChevronDown size={20} color="#6B7280" />
-                </View>
+                <ChevronRight size={20} color="#6B7280" />
               </TouchableOpacity>
             ))}
           </View>
@@ -190,18 +213,7 @@ export default function ClockScreen() {
                 <Text style={styles.officeSectionSubtitle}>Clock in as office staff</Text>
               </View>
             </View>
-            {OFFICE_ROLES.map((role) => (
-              <TouchableOpacity
-                key={role}
-                style={[styles.projectItem, styles.projectItemWeb]}
-                onPress={() => handleSelectOfficeRole(role)}
-              >
-                <Text style={styles.projectName}>{role}</Text>
-                <View style={{ transform: [{ rotate: '-90deg' }] }}>
-                  <ChevronDown size={20} color="#6B7280" />
-                </View>
-              </TouchableOpacity>
-            ))}
+            {OFFICE_ROLES.map((role) => renderRoleRow(role, true))}
           </View>
         </View>
       </View>
@@ -338,6 +350,8 @@ const styles = StyleSheet.create({
   officeSectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
   officeIconWrap: { width: 32, height: 32, borderRadius: 8, backgroundColor: '#EFF6FF', alignItems: 'center', justifyContent: 'center' },
   officeSectionSubtitle: { fontSize: 13, color: '#6B7280' },
+  roleRow: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 12 },
+  roleIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#F3F4F6', alignItems: 'center', justifyContent: 'center' },
   conflictBanner: { backgroundColor: '#FEF2F2', borderRadius: 10, padding: 14, marginHorizontal: 16, marginBottom: 12, borderLeftWidth: 4, borderLeftColor: '#EF4444' },
   conflictText: { fontSize: 13, color: '#991B1B', lineHeight: 20 },
 });
