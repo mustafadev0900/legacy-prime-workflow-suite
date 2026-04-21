@@ -162,11 +162,12 @@ export default function CRMCalendar({ appointments, clients, onAddAppointment, o
                   </View>
                   {dayAppts.slice(0, 2).map((a, i) => {
                     const c = a.clientId ? clients.find(cl => cl.id === a.clientId) : null;
-                    const barColor = TYPE_COLORS[a.type ?? 'Other']?.text ?? '#2563EB';
+                    const typeColor = TYPE_COLORS[a.type ?? 'Other'] ?? TYPE_COLORS['Other'];
+                    const barBg = a.type === 'Site Visit' ? '#16A34A' : typeColor.text;
                     const timeStr = a.time ? formatTime12(a.time).replace(':00 ', ' ').replace(/^0/, '') : '';
                     const label = `${timeStr}${c ? ' ' + c.name.split(' ')[0] : ''}`.trim();
                     return (
-                      <View key={a.id ?? i} style={[styles.cellApptBar, { borderLeftColor: barColor }]}>
+                      <View key={a.id ?? i} style={[styles.cellApptBar, { backgroundColor: barBg }]}>
                         <Text style={styles.cellApptText} numberOfLines={1}>{label || a.title.slice(0, 10)}</Text>
                       </View>
                     );
@@ -272,8 +273,8 @@ const styles = StyleSheet.create({
   todayCircle: { backgroundColor: '#2563EB', borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
   cellText: { fontSize: 12, color: '#1F2937', fontWeight: '500' },
   cellTextToday: { color: '#FFFFFF', fontWeight: '700' },
-  cellApptBar: { backgroundColor: '#EFF6FF', borderLeftWidth: 3, borderRadius: 3, paddingHorizontal: 3, paddingVertical: 2, marginBottom: 2 },
-  cellApptText: { fontSize: 9, fontWeight: '600', color: '#1F2937' },
+  cellApptBar: { borderRadius: 4, paddingHorizontal: 4, paddingVertical: 3, marginBottom: 2 },
+  cellApptText: { fontSize: 9, fontWeight: '700', color: '#FFFFFF' },
   cellMoreText: { fontSize: 8, color: '#6B7280', fontWeight: '600', marginTop: 1 },
   daySection: { borderTopWidth: 1, borderTopColor: '#E5E7EB', padding: 16 },
   daySectionTitle: { fontSize: 14, fontWeight: '700', color: '#1E3A5F', marginBottom: 10 },
