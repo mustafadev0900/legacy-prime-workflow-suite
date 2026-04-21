@@ -218,6 +218,7 @@ export default function CRMScreen() {
           source: newClientSource,
           status: newClientStatus || 'Lead',
           assignedRep: newClientAssignedRep || null,
+          jobDetails: newClientJobDetails.trim() || null,
           lastContactDate: new Date().toISOString(),
         }),
       });
@@ -241,6 +242,7 @@ export default function CRMScreen() {
       setNewClientSource('');
       setNewClientStatus('Lead');
       setNewClientAssignedRep(undefined);
+      setNewClientJobDetails('');
 
       if (fromModal) {
         setShowAddClientModal(false);
@@ -373,6 +375,7 @@ export default function CRMScreen() {
   const [editClientAssignedRep, setEditClientAssignedRep] = useState<string | undefined>();
   const [newClientStatus, setNewClientStatus] = useState<string>('Lead');
   const [newClientAssignedRep, setNewClientAssignedRep] = useState<string | undefined>();
+  const [newClientJobDetails, setNewClientJobDetails] = useState<string>('');
   const [showColdLeadsModal, setShowColdLeadsModal] = useState<boolean>(false);
   const [coldLeadConfirmClient, setColdLeadConfirmClient] = useState<import('@/types').Client | null>(null);
   const [coldLeadDoneClient, setColdLeadDoneClient] = useState<import('@/types').Client | null>(null);
@@ -2193,6 +2196,14 @@ export default function CRMScreen() {
                 value={newClientSource}
                 onChangeText={setNewClientSource}
               />
+              <TextInput
+                style={[styles.input, { height: 70, textAlignVertical: 'top' }]}
+                placeholder="Job Details (What is the job about?)"
+                placeholderTextColor="#9CA3AF"
+                value={newClientJobDetails}
+                onChangeText={setNewClientJobDetails}
+                multiline
+              />
               <TouchableOpacity
                 style={[styles.submitButton, isAddingClient && styles.submitButtonDisabled]}
                 onPress={() => handleAddClient(false)}
@@ -2328,6 +2339,34 @@ export default function CRMScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
+
+              <TextInput
+                style={[styles.modalInput, { height: 80, textAlignVertical: 'top', marginTop: 16 }]}
+                placeholder="Job Details (What is the job about?)"
+                placeholderTextColor="#9CA3AF"
+                value={newClientJobDetails}
+                onChangeText={setNewClientJobDetails}
+                multiline
+              />
+
+              <Text style={[styles.inputLabel, { marginTop: 16 }]}>Assign Sales Rep</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+                {salespersons.map(sp => (
+                  <TouchableOpacity
+                    key={sp.id}
+                    style={[styles.sourceButton, newClientAssignedRep === sp.id && styles.sourceButtonActive, { marginRight: 8 }]}
+                    onPress={() => setNewClientAssignedRep(newClientAssignedRep === sp.id ? undefined : sp.id)}
+                  >
+                    <Text style={[styles.sourceButtonText, newClientAssignedRep === sp.id && styles.sourceButtonTextActive]}>{sp.name}</Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={[styles.sourceButton, !newClientAssignedRep && styles.sourceButtonActive]}
+                  onPress={() => setNewClientAssignedRep(undefined)}
+                >
+                  <Text style={[styles.sourceButtonText, !newClientAssignedRep && styles.sourceButtonTextActive]}>Unassigned</Text>
+                </TouchableOpacity>
+              </ScrollView>
 
             </ScrollView>
 
