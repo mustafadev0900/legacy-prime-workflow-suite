@@ -1,9 +1,24 @@
 import { useState, useEffect } from 'react';
 import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { X } from 'lucide-react-native';
+import { X, Clock } from 'lucide-react-native';
 import { Appointment, Client, Project } from '@/types';
 
 const APPOINTMENT_TYPES: Appointment['type'][] = ['Estimate', 'Site Visit', 'Follow-Up', 'Client Meeting', 'Project Meeting', 'Other'];
+
+// Generate 30-min slots from 7:00 AM to 6:00 PM
+const TIME_SLOTS: string[] = [];
+for (let h = 7; h <= 18; h++) {
+  TIME_SLOTS.push(`${String(h).padStart(2, '0')}:00`);
+  if (h < 18) TIME_SLOTS.push(`${String(h).padStart(2, '0')}:30`);
+}
+
+function formatTime12(val: string): string {
+  const [h, m] = val.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return val;
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${hour12}:${String(m).padStart(2, '0')} ${period}`;
+}
 
 interface Props {
   visible: boolean;
@@ -55,12 +70,6 @@ export default function AppointmentFormModal({ visible, onClose, onSave, onDelet
 
   const isValidDate = (val: string) => /^\d{4}-\d{2}-\d{2}$/.test(val);
   const isValidTime = (val: string) => val === '' || /^\d{2}:\d{2}$/.test(val);
-
-  const formatTimeInput = (raw: string): string => {
-    const digits = raw.replace(/\D/g, '').slice(0, 4);
-    if (digits.length <= 2) return digits;
-    return `${digits.slice(0, 2)}:${digits.slice(2)}`;
-  };
 
   const handleSave = async () => {
     let valid = true;
@@ -155,26 +164,63 @@ export default function AppointmentFormModal({ visible, onClose, onSave, onDelet
             {/* Time (start to end) */}
             <Text style={styles.label}>Time <Text style={styles.optional}>(optional)</Text></Text>
             <View style={styles.timeRow}>
-              <TextInput
-                style={[styles.input, styles.timeInput]}
-                placeholder="09:00"
-                placeholderTextColor="#9CA3AF"
-                value={time}
-                onChangeText={(raw) => setTime(formatTimeInput(raw))}
-                keyboardType="number-pad"
-                maxLength={5}
-              />
+              <TouchableOpacity
+                style={[styles.timeDisplay, time && styles.timeDisplayActive]}
+                onPress={() => {
+                  if (!time) setTime('09:00');
+                }}
+              >
+                <Clock size={16} color={time ? '#2563EB' : '#9CA3AF'} />
+                <Text style={[styles.timeDisplayText, time && styles.timeDisplayTextActive]}>
+                  {time ? formatTime12(time) : 'Start'}
+                </Text>
+              </TouchableOpacity>
               <Text style={styles.timeSeparator}>to</Text>
-              <TextInput
-                style={[styles.input, styles.timeInput]}
-                placeholder="10:00"
-                placeholderTextColor="#9CA3AF"
-                value={endTime}
-                onChangeText={(raw) => setEndTime(formatTimeInput(raw))}
-                keyboardType="number-pad"
-                maxLength={5}
-              />
+              <TouchableOpacity
+                style={[styles.timeDisplay, endTime && styles.timeDisplayActive]}
+                onPress={() => {
+                  if (!endTime) {
+                    // Default to 1 hour after start
+                    if (time) {
+                      const [h, m] = time.split(':').map(Number);
+                      setEndTime(`${String(h + 1).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                    } else {
+                      setEndTime('10:00');
+                    }
+                  }
+                }}
+              >
+                <Clock size={16} color={endTime ? '#2563EB' : '#9CA3AF'} />
+                <Text style={[styles.timeDisplayText, endTime && styles.timeDisplayTextActive]}>
+                  {endTime ? formatTime12(endTime) : 'End'}
+                </Text>
+              </TouchableOpacity>
+              {(time || endTime) && (
+                <TouchableOpacity onPress={() => { setTime(''); setEndTime(''); }} style={styles.timeClearBtn}>
+                  <X size={14} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
             </View>
+            <Text style={styles.timeChipsLabel}>Select start time:</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timeChipsScroll}>
+              {TIME_SLOTS.map(slot => (
+                <TouchableOpacity
+                  key={slot}
+                  style={[styles.timeChip, time === slot && styles.timeChipActive]}
+                  onPress={() => {
+                    setTime(slot);
+                    // Auto-set end time to 1 hour after
+                    const [h, m] = slot.split(':').map(Number);
+                    const endH = Math.min(h + 1, 18);
+                    setEndTime(`${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                  }}
+                >
+                  <Text style={[styles.timeChipText, time === slot && styles.timeChipTextActive]}>
+                    {formatTime12(slot)}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
 
             {/* Client */}
             <Text style={styles.label}>Client <Text style={styles.optional}>(optional)</Text></Text>
@@ -297,8 +343,66 @@ const styles = StyleSheet.create({
   notesInput: { minHeight: 72, textAlignVertical: 'top' },
   errorText: { fontSize: 12, color: '#DC2626', marginTop: 4 },
   timeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  timeInput: { flex: 1 },
+  timeDisplay: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  timeDisplayActive: {
+    borderColor: '#BFDBFE',
+    backgroundColor: '#F0F7FF',
+  },
+  timeDisplayText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontWeight: '500',
+  },
+  timeDisplayTextActive: {
+    color: '#1F2937',
+    fontWeight: '600',
+  },
+  timeClearBtn: {
+    padding: 4,
+  },
   timeSeparator: { fontSize: 14, color: '#6B7280', fontWeight: '500' },
+  timeChipsLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontWeight: '500',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  timeChipsScroll: {
+    marginBottom: 4,
+  },
+  timeChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    marginRight: 8,
+  },
+  timeChipActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  timeChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4B5563',
+  },
+  timeChipTextActive: {
+    color: '#FFFFFF',
+  },
   chipScroll: { marginBottom: 4 },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: '#E5E7EB', backgroundColor: '#F9FAFB', marginRight: 8 },
