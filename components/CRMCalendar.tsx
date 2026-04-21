@@ -207,8 +207,8 @@ export default function CRMCalendar({ appointments, clients, onAddAppointment, o
               const typeColor = TYPE_COLORS[appt.type ?? 'Other'] ?? TYPE_COLORS['Other'];
               return (
                 <TouchableOpacity key={appt.id} style={styles.apptRow} onPress={() => onEditAppointment(appt)} activeOpacity={0.7}>
-                  {/* Green vertical bar */}
-                  <View style={styles.apptBar} />
+                  {/* Type-colored vertical bar */}
+                  <View style={[styles.apptBar, { backgroundColor: typeColor.text }]} />
                   {/* Time column */}
                   <View style={styles.apptTimeCol}>
                     <Text style={styles.apptTime}>{appt.time ? formatTime12(appt.time) : '—'}</Text>
@@ -283,7 +283,7 @@ const styles = StyleSheet.create({
   addAppointmentBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: '#BFDBFE', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#FFFFFF' },
   addAppointmentBtnText: { fontSize: 13, fontWeight: '600', color: '#2563EB' },
   apptRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 14, paddingHorizontal: 4, marginBottom: 4, borderBottomWidth: 1, borderBottomColor: '#F3F4F6' },
-  apptBar: { width: 3, borderRadius: 2, backgroundColor: '#10B981', alignSelf: 'stretch', marginRight: 12, minHeight: 40 },
+  apptBar: { width: 3, borderRadius: 2, alignSelf: 'stretch', marginRight: 12, minHeight: 40 },
   apptTimeCol: { width: 72, marginRight: 12, paddingTop: 2 },
   apptTime: { fontSize: 13, color: '#6B7280', fontWeight: '600' },
   apptInfo: { flex: 1, paddingTop: 1 },
