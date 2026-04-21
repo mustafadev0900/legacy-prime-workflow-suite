@@ -411,8 +411,20 @@ export default function CRMScreen() {
       ]);
     }
   };
+  const [restoreConfirmClient, setRestoreConfirmClient] = useState<import('@/types').Client | null>(null);
+  const [restoreSuccessName, setRestoreSuccessName] = useState<string>('');
+
   const handleRestoreColdLead = (clientId: string) => {
-    updateClient(clientId, { status: 'Lead' });
+    const client = clients.find(c => c.id === clientId);
+    if (client) setRestoreConfirmClient(client);
+  };
+
+  const confirmRestoreColdLead = async () => {
+    if (!restoreConfirmClient) return;
+    const name = restoreConfirmClient.name;
+    await updateClient(restoreConfirmClient.id, { status: 'Lead' });
+    setRestoreConfirmClient(null);
+    setRestoreSuccessName(name);
   };
   const [repPickerClientId, setRepPickerClientId] = useState<string | null>(null);
   const [repPickerValue, setRepPickerValue] = useState<string | null>(null);
@@ -4170,6 +4182,43 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
             </Text>
             <View style={styles.coldLeadConfirmActions}>
               <TouchableOpacity style={styles.coldLeadMarkBtn} onPress={() => setColdLeadDoneClient(null)}>
+                <Text style={styles.coldLeadMarkBtnText}>OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Restore Cold Lead Confirm Modal */}
+      <Modal visible={restoreConfirmClient !== null} animationType="fade" transparent onRequestClose={() => setRestoreConfirmClient(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.coldLeadConfirmModal}>
+            <Text style={styles.coldLeadConfirmTitle}>Restore Lead</Text>
+            <Text style={styles.coldLeadConfirmMessage}>
+              Restore {restoreConfirmClient?.name} back to active leads?
+            </Text>
+            <View style={styles.coldLeadConfirmActions}>
+              <TouchableOpacity style={styles.coldLeadCancelBtn} onPress={() => setRestoreConfirmClient(null)}>
+                <Text style={styles.coldLeadCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.coldLeadMarkBtn} onPress={confirmRestoreColdLead}>
+                <Text style={styles.coldLeadMarkBtnText}>Restore</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Restore Cold Lead Success Modal */}
+      <Modal visible={!!restoreSuccessName} animationType="fade" transparent onRequestClose={() => setRestoreSuccessName('')}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.coldLeadConfirmModal}>
+            <Text style={styles.coldLeadConfirmTitle}>Restored</Text>
+            <Text style={styles.coldLeadConfirmMessage}>
+              {restoreSuccessName} is now an active lead again.
+            </Text>
+            <View style={styles.coldLeadConfirmActions}>
+              <TouchableOpacity style={styles.coldLeadMarkBtn} onPress={() => setRestoreSuccessName('')}>
                 <Text style={styles.coldLeadMarkBtnText}>OK</Text>
               </TouchableOpacity>
             </View>
