@@ -382,6 +382,7 @@ export default function CRMScreen() {
   const [appointmentFormVisible, setAppointmentFormVisible] = useState<boolean>(false);
   const [appointmentFormDate, setAppointmentFormDate] = useState<string>('');
   const [appointmentFormTime, setAppointmentFormTime] = useState<string>('');
+  const [showApptSuccessModal, setShowApptSuccessModal] = useState<boolean>(false);
   const [editingAppointment, setEditingAppointment] = useState<import('@/types').Appointment | undefined>();
 
   const salespersons = companyUsers.filter(u => u.role === 'salesperson');
@@ -4180,11 +4181,7 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
             await updateAppointment(editingAppointment.id, data);
           } else {
             await addAppointment(data);
-            if (Platform.OS === 'web') {
-              window.alert('Appointment created!');
-            } else {
-              Alert.alert('Success', 'Appointment created!');
-            }
+            setShowApptSuccessModal(true);
           }
         }}
         onDelete={editingAppointment ? () => {
@@ -4198,6 +4195,20 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
         companyId={company?.id ?? ''}
         createdBy={user?.id}
       />
+
+      {/* Appointment Success Modal */}
+      <Modal visible={showApptSuccessModal} animationType="fade" transparent onRequestClose={() => setShowApptSuccessModal(false)}>
+        <View style={styles.successModalOverlay}>
+          <View style={styles.successModalCard}>
+            <Text style={styles.successModalTitle}>Success</Text>
+            <Text style={styles.successModalMessage}>Appointment created!</Text>
+            <View style={styles.successModalDivider} />
+            <TouchableOpacity style={styles.successModalBtn} onPress={() => setShowApptSuccessModal(false)}>
+              <Text style={styles.successModalBtnText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -6647,5 +6658,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700' as const,
     color: '#1E3A5F',
+  },
+  successModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 40,
+  },
+  successModalCard: {
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    paddingTop: 24,
+    paddingHorizontal: 24,
+  },
+  successModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 6,
+  },
+  successModalMessage: {
+    fontSize: 14,
+    color: '#94A3B8',
+    marginBottom: 20,
+  },
+  successModalDivider: {
+    height: 1,
+    backgroundColor: '#334155',
+  },
+  successModalBtn: {
+    alignSelf: 'flex-end',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+  },
+  successModalBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#475569',
+    borderRadius: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    overflow: 'hidden',
   },
 });
