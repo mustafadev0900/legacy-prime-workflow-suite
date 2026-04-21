@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
@@ -832,69 +832,74 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
         transparent
         onRequestClose={() => setShowEditRateModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit Hourly Rate</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Edit Hourly Rate</Text>
 
-            {selectedEmployee && (
-              <>
-                <View style={styles.modalInfo}>
-                  <Text style={styles.modalInfoLabel}>Employee:</Text>
-                  <Text style={styles.modalInfoValue}>{selectedEmployee.name}</Text>
-                </View>
+              {selectedEmployee && (
+                <>
+                  <View style={styles.modalInfo}>
+                    <Text style={styles.modalInfoLabel}>Employee:</Text>
+                    <Text style={styles.modalInfoValue}>{selectedEmployee.name}</Text>
+                  </View>
 
-                <View style={styles.modalInfo}>
-                  <Text style={styles.modalInfoLabel}>Current Hourly Rate:</Text>
-                  <Text style={styles.modalInfoValue}>
-                    ${selectedEmployee.hourlyRate?.toFixed(2) || '0.00'}/hr
+                  <View style={styles.modalInfo}>
+                    <Text style={styles.modalInfoLabel}>Current Hourly Rate:</Text>
+                    <Text style={styles.modalInfoValue}>
+                      ${selectedEmployee.hourlyRate?.toFixed(2) || '0.00'}/hr
+                    </Text>
+                  </View>
+
+                  <View style={styles.rateInputSection}>
+                    <Text style={styles.rateInputLabel}>New Hourly Rate:</Text>
+                    <TextInput
+                      style={styles.rateInput}
+                      value={editingRate}
+                      onChangeText={(text) => {
+                        // Only allow numbers and decimal point
+                        const filtered = text.replace(/[^0-9.]/g, '');
+                        // Ensure only one decimal point
+                        const parts = filtered.split('.');
+                        if (parts.length > 2) return;
+                        setEditingRate(filtered);
+                      }}
+                      placeholder="25.50"
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+                </>
+              )}
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalCancelButton}
+                  onPress={() => {
+                    setShowEditRateModal(false);
+                    setSelectedEmployee(null);
+                    setEditingRate('');
+                  }}
+                >
+                  <Text style={styles.modalCancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalConfirmButton}
+                  onPress={handleUpdateRate}
+                  disabled={isSaving}
+                >
+                  <Text style={styles.modalConfirmButtonText}>
+                    {isSaving ? 'Updating...' : 'Update Rate'}
                   </Text>
-                </View>
-
-                <View style={styles.rateInputSection}>
-                  <Text style={styles.rateInputLabel}>New Hourly Rate:</Text>
-                  <TextInput
-                    style={styles.rateInput}
-                    value={editingRate}
-                    onChangeText={(text) => {
-                      // Only allow numbers and decimal point
-                      const filtered = text.replace(/[^0-9.]/g, '');
-                      // Ensure only one decimal point
-                      const parts = filtered.split('.');
-                      if (parts.length > 2) return;
-                      setEditingRate(filtered);
-                    }}
-                    placeholder="25.50"
-                    placeholderTextColor="#9CA3AF"
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-              </>
-            )}
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalCancelButton}
-                onPress={() => {
-                  setShowEditRateModal(false);
-                  setSelectedEmployee(null);
-                  setEditingRate('');
-                }}
-              >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalConfirmButton}
-                onPress={handleUpdateRate}
-                disabled={isSaving}
-              >
-                <Text style={styles.modalConfirmButtonText}>
-                  {isSaving ? 'Updating...' : 'Update Rate'}
-                </Text>
-              </TouchableOpacity>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

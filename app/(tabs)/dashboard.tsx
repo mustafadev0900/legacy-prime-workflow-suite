@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useApp } from '@/contexts/AppContext';
 import { Search, Plus, X, Archive, FileText, CheckSquare, FolderOpen, Sparkles, AlertTriangle, Camera, MoreHorizontal, Pencil, PauseCircle, PlayCircle, Coffee } from 'lucide-react-native';
 import { Image } from 'expo-image';
@@ -1728,131 +1728,136 @@ export default function DashboardScreen() {
         transparent
         onRequestClose={() => setShowCreateModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
-          <ScrollView
-            style={styles.modalScrollView}
-            contentContainerStyle={styles.modalScrollContent}
-            showsVerticalScrollIndicator={false}
-          
-          keyboardDismissMode="on-drag"
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
         >
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{t('projects.createNew')}</Text>
-                <TouchableOpacity onPress={() => setShowCreateModal(false)}>
-                  <X size={24} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
+          <View style={styles.modalOverlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
+            <ScrollView
+              style={styles.modalScrollView}
+              contentContainerStyle={styles.modalScrollContent}
+              showsVerticalScrollIndicator={false}
 
-              <View style={styles.modalBody}>
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>{t('projects.name')} *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={projectName}
-                    onChangeText={setProjectName}
-                    placeholder="Enter client or project name"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>{t('projects.address')}</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={projectAddress}
-                    onChangeText={setProjectAddress}
-                    placeholder="Enter project address"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>{t('forms.email')} *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={projectEmail}
-                    onChangeText={setProjectEmail}
-                    placeholder="Enter client email"
-                    placeholderTextColor="#9CA3AF"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>{t('forms.phone')} *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={projectPhone}
-                    onChangeText={handlePhoneChange}
-                    placeholder="(555) 555-5555"
-                    placeholderTextColor="#9CA3AF"
-                    keyboardType="phone-pad"
-                    maxLength={14}
-                  />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>{t('forms.source')}</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={projectSource}
-                    onChangeText={setProjectSource}
-                    placeholder="Google, Referral, Ad, Phone Call"
-                    placeholderTextColor="#9CA3AF"
-                  />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>{t('projects.budget')} *</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    value={projectBudget}
-                    onChangeText={handleBudgetChange}
-                    placeholder="Enter budget amount"
-                    placeholderTextColor="#9CA3AF"
-                    keyboardType="decimal-pad"
-                  />
-                </View>
-
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Cover Photo (optional)</Text>
-                  <TouchableOpacity
-                    style={styles.coverPhotoPickerButton}
-                    onPress={handlePickCoverPhoto}
-                  >
-                    {coverPhotoUri ? (
-                      <Image
-                        source={{ uri: coverPhotoUri }}
-                        style={styles.coverPhotoPreview}
-                        contentFit="cover"
-                      />
-                    ) : (
-                      <View style={styles.coverPhotoPlaceholder}>
-                        <Camera size={28} color="#9CA3AF" />
-                        <Text style={styles.coverPhotoPlaceholderText}>Tap to add a project photo</Text>
-                      </View>
-                    )}
+            keyboardDismissMode="on-drag"
+          >
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>{t('projects.createNew')}</Text>
+                  <TouchableOpacity onPress={() => setShowCreateModal(false)}>
+                    <X size={24} color="#6B7280" />
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity
-                  style={[styles.createButton, (isCreatingProject || isUploadingCover) && styles.createButtonDisabled]}
-                  onPress={handleCreateProject}
-                  disabled={isCreatingProject || isUploadingCover}
-                >
-                  {isCreatingProject || isUploadingCover ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
-                  ) : (
-                    <Text style={styles.createButtonText}>{t('projects.createNew')}</Text>
-                  )}
-                </TouchableOpacity>
+                <View style={styles.modalBody}>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>{t('projects.name')} *</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      value={projectName}
+                      onChangeText={setProjectName}
+                      placeholder="Enter client or project name"
+                      placeholderTextColor="#9CA3AF"
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>{t('projects.address')}</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      value={projectAddress}
+                      onChangeText={setProjectAddress}
+                      placeholder="Enter project address"
+                      placeholderTextColor="#9CA3AF"
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>{t('forms.email')} *</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      value={projectEmail}
+                      onChangeText={setProjectEmail}
+                      placeholder="Enter client email"
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>{t('forms.phone')} *</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      value={projectPhone}
+                      onChangeText={handlePhoneChange}
+                      placeholder="(555) 555-5555"
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="phone-pad"
+                      maxLength={14}
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>{t('forms.source')}</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      value={projectSource}
+                      onChangeText={setProjectSource}
+                      placeholder="Google, Referral, Ad, Phone Call"
+                      placeholderTextColor="#9CA3AF"
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>{t('projects.budget')} *</Text>
+                    <TextInput
+                      style={styles.formInput}
+                      value={projectBudget}
+                      onChangeText={handleBudgetChange}
+                      placeholder="Enter budget amount"
+                      placeholderTextColor="#9CA3AF"
+                      keyboardType="decimal-pad"
+                    />
+                  </View>
+
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>Cover Photo (optional)</Text>
+                    <TouchableOpacity
+                      style={styles.coverPhotoPickerButton}
+                      onPress={handlePickCoverPhoto}
+                    >
+                      {coverPhotoUri ? (
+                        <Image
+                          source={{ uri: coverPhotoUri }}
+                          style={styles.coverPhotoPreview}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <View style={styles.coverPhotoPlaceholder}>
+                          <Camera size={28} color="#9CA3AF" />
+                          <Text style={styles.coverPhotoPlaceholderText}>Tap to add a project photo</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.createButton, (isCreatingProject || isUploadingCover) && styles.createButtonDisabled]}
+                    onPress={handleCreateProject}
+                    disabled={isCreatingProject || isUploadingCover}
+                  >
+                    {isCreatingProject || isUploadingCover ? (
+                      <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                      <Text style={styles.createButtonText}>{t('projects.createNew')}</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </ScrollView>
-        </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -1865,176 +1870,181 @@ export default function DashboardScreen() {
           setSelectedProjects([]);
         }}
       >
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
-          <View style={styles.aiModalContent}>
-            <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Sparkles size={24} color="#10B981" />
-                <Text style={styles.modalTitle}>Custom AI Report</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
+            <View style={styles.aiModalContent}>
+              <View style={styles.modalHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Sparkles size={24} color="#10B981" />
+                  <Text style={styles.modalTitle}>Custom AI Report</Text>
+                </View>
+                <TouchableOpacity onPress={() => {
+                  setShowAICustomModal(false);
+                  setAiReportPrompt('');
+                  setShowProjectPicker(false);
+                  setSelectedProjects([]);
+                }}>
+                  <X size={24} color="#6B7280" />
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity onPress={() => {
-                setShowAICustomModal(false);
-                setAiReportPrompt('');
-                setShowProjectPicker(false);
-                setSelectedProjects([]);
-              }}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
 
-            <ScrollView style={styles.aiModalScroll} showsVerticalScrollIndicator={false}
-          keyboardDismissMode="on-drag"
-        >
-              <View style={styles.modalBody}>
-                <Text style={styles.aiInstructionText}>
-                  Describe what you want in your custom report. AI will analyze your project data and generate a comprehensive report based on your requirements.
-                </Text>
+              <ScrollView style={styles.aiModalScroll} showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+          >
+                <View style={styles.modalBody}>
+                  <Text style={styles.aiInstructionText}>
+                    Describe what you want in your custom report. AI will analyze your project data and generate a comprehensive report based on your requirements.
+                  </Text>
 
-                <View style={styles.formGroup}>
-                  <Text style={styles.formLabel}>Report Instructions</Text>
-                  <TextInput
-                    style={[styles.formInput, styles.aiTextArea]}
-                    value={aiReportPrompt}
-                    onChangeText={setAiReportPrompt}
-                    placeholder="Example: Generate a summary of budget vs actual expenses with variance analysis and recommendations for cost savings..."
-                    placeholderTextColor="#9CA3AF"
-                    multiline
-                    numberOfLines={6}
-                    textAlignVertical="top"
-                  />
-                </View>
+                  <View style={styles.formGroup}>
+                    <Text style={styles.formLabel}>Report Instructions</Text>
+                    <TextInput
+                      style={[styles.formInput, styles.aiTextArea]}
+                      value={aiReportPrompt}
+                      onChangeText={setAiReportPrompt}
+                      placeholder="Example: Generate a summary of budget vs actual expenses with variance analysis and recommendations for cost savings..."
+                      placeholderTextColor="#9CA3AF"
+                      multiline
+                      numberOfLines={6}
+                      textAlignVertical="top"
+                    />
+                  </View>
 
-                <Text style={styles.aiExampleTitle}>Quick Examples:</Text>
-                <View style={styles.aiExamplesContainer}>
-                  <TouchableOpacity
-                    style={styles.aiExampleChip}
-                    onPress={() => setAiReportPrompt('Analyze budget vs expenses with variance analysis and cost-saving recommendations')}
-                  >
-                    <Text style={styles.aiExampleText}>Budget variance analysis</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.aiExampleChip}
-                    onPress={() => setAiReportPrompt('Provide project timeline analysis with progress insights and schedule recommendations')}
-                  >
-                    <Text style={styles.aiExampleText}>Timeline & progress analysis</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.aiExampleChip}
-                    onPress={() => setAiReportPrompt('Compare project performance metrics across all selected projects')}
-                  >
-                    <Text style={styles.aiExampleText}>Performance comparison</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.aiExampleChip}
-                    onPress={() => setAiReportPrompt('Generate executive summary with key metrics and action items')}
-                  >
-                    <Text style={styles.aiExampleText}>Executive summary</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.aiButtonsContainer}>
-                  <TouchableOpacity
-                    style={styles.aiSecondaryButton}
-                    onPress={() => {
-                      setShowProjectPicker(!showProjectPicker);
-                      if (showProjectPicker) {
-                        setSelectedProjects([]);
-                      }
-                    }}
-                  >
-                    <Text style={styles.aiSecondaryButtonText}>
-                      {showProjectPicker ? 'Hide Projects' : 'Select Specific Projects'}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.aiGenerateButton, isGeneratingAI && styles.aiGenerateButtonDisabled]}
-                    onPress={() => handleAIReportGeneration(selectedProjects.length > 0 ? 'selected' : 'all')}
-                    disabled={isGeneratingAI}
-                  >
-                    {isGeneratingAI ? (
-                      <>
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                        <Text style={styles.aiGenerateButtonText}>Generating...</Text>
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles size={18} color="#FFFFFF" />
-                        <Text style={styles.aiGenerateButtonText}>
-                          Generate Report {selectedProjects.length > 0 ? `(${selectedProjects.length} Projects)` : '(All Projects)'}
-                        </Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
-                </View>
-
-                {/* Project Picker List */}
-                {showProjectPicker && (
-                  <View style={styles.aiProjectPickerContainer}>
-                    <Text style={styles.aiProjectPickerTitle}>
-                      Select Projects ({selectedProjects.length} selected)
-                    </Text>
-                    <ScrollView style={styles.aiProjectPickerList} nestedScrollEnabled
-          keyboardDismissMode="on-drag"
-        >
-                      {activeProjects.map(project => (
-                        <TouchableOpacity
-                          key={project.id}
-                          style={[
-                            styles.aiProjectPickerItem,
-                            selectedProjects.includes(project.id) && styles.aiProjectPickerItemSelected
-                          ]}
-                          onPress={() => {
-                            setSelectedProjects(prev =>
-                              prev.includes(project.id)
-                                ? prev.filter(id => id !== project.id)
-                                : [...prev, project.id]
-                            );
-                          }}
-                        >
-                          <View style={styles.aiProjectPickerCheckbox}>
-                            {selectedProjects.includes(project.id) ? (
-                              <CheckSquare size={20} color="#10B981" />
-                            ) : (
-                              <View style={styles.aiProjectPickerEmptyCheckbox} />
-                            )}
-                          </View>
-                          <View style={styles.aiProjectPickerInfo}>
-                            <Text style={styles.aiProjectPickerName}>{project.name}</Text>
-                            <Text style={styles.aiProjectPickerDetails}>
-                              Budget: ${project.budget.toLocaleString()} • {project.status}
-                            </Text>
-                          </View>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
+                  <Text style={styles.aiExampleTitle}>Quick Examples:</Text>
+                  <View style={styles.aiExamplesContainer}>
                     <TouchableOpacity
-                      style={styles.aiSelectAllButton}
+                      style={styles.aiExampleChip}
+                      onPress={() => setAiReportPrompt('Analyze budget vs expenses with variance analysis and cost-saving recommendations')}
+                    >
+                      <Text style={styles.aiExampleText}>Budget variance analysis</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.aiExampleChip}
+                      onPress={() => setAiReportPrompt('Provide project timeline analysis with progress insights and schedule recommendations')}
+                    >
+                      <Text style={styles.aiExampleText}>Timeline & progress analysis</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.aiExampleChip}
+                      onPress={() => setAiReportPrompt('Compare project performance metrics across all selected projects')}
+                    >
+                      <Text style={styles.aiExampleText}>Performance comparison</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.aiExampleChip}
+                      onPress={() => setAiReportPrompt('Generate executive summary with key metrics and action items')}
+                    >
+                      <Text style={styles.aiExampleText}>Executive summary</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.aiButtonsContainer}>
+                    <TouchableOpacity
+                      style={styles.aiSecondaryButton}
                       onPress={() => {
-                        if (selectedProjects.length === activeProjects.length) {
+                        setShowProjectPicker(!showProjectPicker);
+                        if (showProjectPicker) {
                           setSelectedProjects([]);
-                        } else {
-                          setSelectedProjects(activeProjects.map(p => p.id));
                         }
                       }}
                     >
-                      <Text style={styles.aiSelectAllButtonText}>
-                        {selectedProjects.length === activeProjects.length ? 'Deselect All' : 'Select All'}
+                      <Text style={styles.aiSecondaryButtonText}>
+                        {showProjectPicker ? 'Hide Projects' : 'Select Specific Projects'}
                       </Text>
                     </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.aiGenerateButton, isGeneratingAI && styles.aiGenerateButtonDisabled]}
+                      onPress={() => handleAIReportGeneration(selectedProjects.length > 0 ? 'selected' : 'all')}
+                      disabled={isGeneratingAI}
+                    >
+                      {isGeneratingAI ? (
+                        <>
+                          <ActivityIndicator size="small" color="#FFFFFF" />
+                          <Text style={styles.aiGenerateButtonText}>Generating...</Text>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={18} color="#FFFFFF" />
+                          <Text style={styles.aiGenerateButtonText}>
+                            Generate Report {selectedProjects.length > 0 ? `(${selectedProjects.length} Projects)` : '(All Projects)'}
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
                   </View>
-                )}
-                
-                <View style={styles.aiHelpTextContainer}>
-                  <Text style={styles.aiHelpText}>
-                    ✓ Generated reports will appear in the Reports Library
-                  </Text>
+
+                  {/* Project Picker List */}
+                  {showProjectPicker && (
+                    <View style={styles.aiProjectPickerContainer}>
+                      <Text style={styles.aiProjectPickerTitle}>
+                        Select Projects ({selectedProjects.length} selected)
+                      </Text>
+                      <ScrollView style={styles.aiProjectPickerList} nestedScrollEnabled
+            keyboardDismissMode="on-drag"
+          >
+                        {activeProjects.map(project => (
+                          <TouchableOpacity
+                            key={project.id}
+                            style={[
+                              styles.aiProjectPickerItem,
+                              selectedProjects.includes(project.id) && styles.aiProjectPickerItemSelected
+                            ]}
+                            onPress={() => {
+                              setSelectedProjects(prev =>
+                                prev.includes(project.id)
+                                  ? prev.filter(id => id !== project.id)
+                                  : [...prev, project.id]
+                              );
+                            }}
+                          >
+                            <View style={styles.aiProjectPickerCheckbox}>
+                              {selectedProjects.includes(project.id) ? (
+                                <CheckSquare size={20} color="#10B981" />
+                              ) : (
+                                <View style={styles.aiProjectPickerEmptyCheckbox} />
+                              )}
+                            </View>
+                            <View style={styles.aiProjectPickerInfo}>
+                              <Text style={styles.aiProjectPickerName}>{project.name}</Text>
+                              <Text style={styles.aiProjectPickerDetails}>
+                                Budget: ${project.budget.toLocaleString()} • {project.status}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                      <TouchableOpacity
+                        style={styles.aiSelectAllButton}
+                        onPress={() => {
+                          if (selectedProjects.length === activeProjects.length) {
+                            setSelectedProjects([]);
+                          } else {
+                            setSelectedProjects(activeProjects.map(p => p.id));
+                          }
+                        }}
+                      >
+                        <Text style={styles.aiSelectAllButtonText}>
+                          {selectedProjects.length === activeProjects.length ? 'Deselect All' : 'Select All'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  <View style={styles.aiHelpTextContainer}>
+                    <Text style={styles.aiHelpText}>
+                      ✓ Generated reports will appear in the Reports Library
+                    </Text>
+                  </View>
                 </View>
-              </View>
-            </ScrollView>
+              </ScrollView>
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Report Generation Loading Modal */}
@@ -2356,95 +2366,100 @@ export default function DashboardScreen() {
         transparent
         onRequestClose={() => setShowDashEditClientModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Edit Client Info</Text>
-              <TouchableOpacity onPress={() => setShowDashEditClientModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalBody}
-          keyboardDismissMode="on-drag"
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
         >
-              <Text style={styles.inputLabel}>Full Name *</Text>
-              <TextInput
-                style={[styles.modalInput, dashEditClientErrors.name ? styles.modalInputError : undefined]}
-                placeholder="e.g. John Smith"
-                placeholderTextColor="#9CA3AF"
-                value={dashEditClientName}
-                onChangeText={(text) => { setDashEditClientName(text); if (dashEditClientErrors.name) setDashEditClientErrors(e => ({ ...e, name: undefined })); }}
-              />
-              {dashEditClientErrors.name && <Text style={styles.fieldErrorText}>{dashEditClientErrors.name}</Text>}
-
-              <Text style={styles.inputLabel}>Email Address *</Text>
-              <TextInput
-                style={[styles.modalInput, dashEditClientErrors.email ? styles.modalInputError : undefined]}
-                placeholder="e.g. john@example.com"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                value={dashEditClientEmail}
-                onChangeText={(text) => { setDashEditClientEmail(text); if (dashEditClientErrors.email) setDashEditClientErrors(e => ({ ...e, email: undefined })); }}
-              />
-              {dashEditClientErrors.email && <Text style={styles.fieldErrorText}>{dashEditClientErrors.email}</Text>}
-
-              <Text style={styles.inputLabel}>Phone Number *</Text>
-              <TextInput
-                style={[styles.modalInput, dashEditClientErrors.phone ? styles.modalInputError : undefined]}
-                placeholder="e.g. 5551234567"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="number-pad"
-                maxLength={10}
-                value={dashEditClientPhone}
-                onChangeText={(text) => { setDashEditClientPhone(text.replace(/\D/g, '')); if (dashEditClientErrors.phone) setDashEditClientErrors(e => ({ ...e, phone: undefined })); }}
-              />
-              {dashEditClientErrors.phone && <Text style={styles.fieldErrorText}>{dashEditClientErrors.phone}</Text>}
-
-              <Text style={styles.inputLabel}>Address (optional)</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="e.g. 123 Main St, Dallas, TX"
-                placeholderTextColor="#9CA3AF"
-                value={dashEditClientAddress}
-                onChangeText={setDashEditClientAddress}
-              />
-
-              <Text style={styles.inputLabel}>How did they find you? *</Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-                {['Google', 'Referral', 'Ad', 'Phone Call'].map((source) => (
-                  <TouchableOpacity
-                    key={source}
-                    style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: dashEditClientSource === source ? '#2563EB' : '#E5E7EB', backgroundColor: dashEditClientSource === source ? '#EFF6FF' : '#FFFFFF' }}
-                    onPress={() => { setDashEditClientSource(source); if (dashEditClientErrors.source) setDashEditClientErrors(e => ({ ...e, source: undefined })); }}
-                  >
-                    <Text style={{ fontSize: 14, fontWeight: '500', color: dashEditClientSource === source ? '#2563EB' : '#6B7280' }}>{source}</Text>
-                  </TouchableOpacity>
-                ))}
+          <View style={styles.modalOverlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Edit Client Info</Text>
+                <TouchableOpacity onPress={() => setShowDashEditClientModal(false)}>
+                  <X size={24} color="#6B7280" />
+                </TouchableOpacity>
               </View>
-              {dashEditClientErrors.source && <Text style={styles.fieldErrorText}>{dashEditClientErrors.source}</Text>}
-            </ScrollView>
 
-            <View style={styles.modalFooter}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowDashEditClientModal(false)}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.submitButton, isUpdatingDashClient ? { opacity: 0.6 } : undefined]}
-                onPress={handleDashUpdateClient}
-                disabled={isUpdatingDashClient}
-              >
-                {isUpdatingDashClient ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Save Changes</Text>
-                )}
-              </TouchableOpacity>
+              <ScrollView style={styles.modalBody}
+            keyboardDismissMode="on-drag"
+          >
+                <Text style={styles.inputLabel}>Full Name *</Text>
+                <TextInput
+                  style={[styles.modalInput, dashEditClientErrors.name ? styles.modalInputError : undefined]}
+                  placeholder="e.g. John Smith"
+                  placeholderTextColor="#9CA3AF"
+                  value={dashEditClientName}
+                  onChangeText={(text) => { setDashEditClientName(text); if (dashEditClientErrors.name) setDashEditClientErrors(e => ({ ...e, name: undefined })); }}
+                />
+                {dashEditClientErrors.name && <Text style={styles.fieldErrorText}>{dashEditClientErrors.name}</Text>}
+
+                <Text style={styles.inputLabel}>Email Address *</Text>
+                <TextInput
+                  style={[styles.modalInput, dashEditClientErrors.email ? styles.modalInputError : undefined]}
+                  placeholder="e.g. john@example.com"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  value={dashEditClientEmail}
+                  onChangeText={(text) => { setDashEditClientEmail(text); if (dashEditClientErrors.email) setDashEditClientErrors(e => ({ ...e, email: undefined })); }}
+                />
+                {dashEditClientErrors.email && <Text style={styles.fieldErrorText}>{dashEditClientErrors.email}</Text>}
+
+                <Text style={styles.inputLabel}>Phone Number *</Text>
+                <TextInput
+                  style={[styles.modalInput, dashEditClientErrors.phone ? styles.modalInputError : undefined]}
+                  placeholder="e.g. 5551234567"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="number-pad"
+                  maxLength={10}
+                  value={dashEditClientPhone}
+                  onChangeText={(text) => { setDashEditClientPhone(text.replace(/\D/g, '')); if (dashEditClientErrors.phone) setDashEditClientErrors(e => ({ ...e, phone: undefined })); }}
+                />
+                {dashEditClientErrors.phone && <Text style={styles.fieldErrorText}>{dashEditClientErrors.phone}</Text>}
+
+                <Text style={styles.inputLabel}>Address (optional)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="e.g. 123 Main St, Dallas, TX"
+                  placeholderTextColor="#9CA3AF"
+                  value={dashEditClientAddress}
+                  onChangeText={setDashEditClientAddress}
+                />
+
+                <Text style={styles.inputLabel}>How did they find you? *</Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                  {['Google', 'Referral', 'Ad', 'Phone Call'].map((source) => (
+                    <TouchableOpacity
+                      key={source}
+                      style={{ paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: dashEditClientSource === source ? '#2563EB' : '#E5E7EB', backgroundColor: dashEditClientSource === source ? '#EFF6FF' : '#FFFFFF' }}
+                      onPress={() => { setDashEditClientSource(source); if (dashEditClientErrors.source) setDashEditClientErrors(e => ({ ...e, source: undefined })); }}
+                    >
+                      <Text style={{ fontSize: 14, fontWeight: '500', color: dashEditClientSource === source ? '#2563EB' : '#6B7280' }}>{source}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {dashEditClientErrors.source && <Text style={styles.fieldErrorText}>{dashEditClientErrors.source}</Text>}
+              </ScrollView>
+
+              <View style={styles.modalFooter}>
+                <TouchableOpacity style={styles.cancelButton} onPress={() => setShowDashEditClientModal(false)}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.submitButton, isUpdatingDashClient ? { opacity: 0.6 } : undefined]}
+                  onPress={handleDashUpdateClient}
+                  disabled={isUpdatingDashClient}
+                >
+                  {isUpdatingDashClient ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>Save Changes</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </View>

@@ -10,6 +10,7 @@ import {
   Alert,
   TextInput,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import Svg, { Path, Circle, Rect, Line, Text as SvgText } from 'react-native-svg';
@@ -505,6 +506,10 @@ export default function ImageAnnotation({
           animationType="fade"
           onRequestClose={() => setShowTextInput(false)}
         >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+          >
           <View style={styles.textInputModal}>
             <View style={styles.textInputContainer}>
               <Text style={styles.textInputTitle}>Add Text</Text>
@@ -552,6 +557,7 @@ export default function ImageAnnotation({
               </View>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </Modal>
       </View>
     </Modal>

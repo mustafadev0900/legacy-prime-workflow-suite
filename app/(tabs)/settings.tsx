@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import SkeletonBox from '@/components/SkeletonBox';
-import { ActivityIndicator, Alert, Clipboard, Image, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Clipboard, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useApp } from '@/contexts/AppContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { User, UserRole } from '@/types';
@@ -361,64 +361,69 @@ export default function SettingsScreen() {
           transparent
           onRequestClose={() => setShowRateChangeModal(false)}
         >
-          <View style={styles.modalOverlay}>
-            <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Request Rate Change</Text>
-                <TouchableOpacity onPress={() => setShowRateChangeModal(false)}>
-                  <X size={24} color="#6B7280" />
-                </TouchableOpacity>
-              </View>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+          >
+            <View style={styles.modalOverlay}>
+              <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Request Rate Change</Text>
+                  <TouchableOpacity onPress={() => setShowRateChangeModal(false)}>
+                    <X size={24} color="#6B7280" />
+                  </TouchableOpacity>
+                </View>
 
-              <View>
-                <Text style={styles.formLabel}>Current Hourly Rate</Text>
-                <Text style={styles.currentRateDisplay}>
-                  {currentUser?.hourlyRate ? `$${currentUser.hourlyRate.toFixed(2)}/hour` : 'Not set'}
-                </Text>
+                <View>
+                  <Text style={styles.formLabel}>Current Hourly Rate</Text>
+                  <Text style={styles.currentRateDisplay}>
+                    {currentUser?.hourlyRate ? `$${currentUser.hourlyRate.toFixed(2)}/hour` : 'Not set'}
+                  </Text>
 
-                <Text style={[styles.formLabel, { marginTop: 16 }]}>Requested Hourly Rate</Text>
-                <TextInput
-                  style={styles.formInput}
-                  value={requestedRate}
-                  onChangeText={(text) => {
-                    // Only allow numbers and decimal point
-                    const filtered = text.replace(/[^0-9.]/g, '');
-                    // Ensure only one decimal point
-                    const parts = filtered.split('.');
-                    if (parts.length > 2) return;
-                    setRequestedRate(filtered);
-                  }}
-                  placeholder="25.50"
-                  placeholderTextColor="#9CA3AF"
-                  keyboardType="decimal-pad"
-                />
-
-                <View style={styles.formButtonsContainer}>
-                  <TouchableOpacity
-                    style={styles.formCancelButton}
-                    onPress={() => {
-                      setShowRateChangeModal(false);
-                      setRequestedRate('');
+                  <Text style={[styles.formLabel, { marginTop: 16 }]}>Requested Hourly Rate</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={requestedRate}
+                    onChangeText={(text) => {
+                      // Only allow numbers and decimal point
+                      const filtered = text.replace(/[^0-9.]/g, '');
+                      // Ensure only one decimal point
+                      const parts = filtered.split('.');
+                      if (parts.length > 2) return;
+                      setRequestedRate(filtered);
                     }}
-                  >
-                    <Text style={styles.formCancelButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.formSaveButton, isSubmittingRateChange && { opacity: 0.6 }]}
-                    onPress={handleRequestRateChange}
-                    disabled={isSubmittingRateChange}
-                  >
-                    {isSubmittingRateChange ? (
-                      <ActivityIndicator size="small" color="#FFFFFF" />
-                    ) : (
-                      <Text style={styles.formSaveButtonText}>Submit Request</Text>
-                    )}
-                  </TouchableOpacity>
+                    placeholder="25.50"
+                    placeholderTextColor="#9CA3AF"
+                    keyboardType="decimal-pad"
+                  />
+
+                  <View style={styles.formButtonsContainer}>
+                    <TouchableOpacity
+                      style={styles.formCancelButton}
+                      onPress={() => {
+                        setShowRateChangeModal(false);
+                        setRequestedRate('');
+                      }}
+                    >
+                      <Text style={styles.formCancelButtonText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.formSaveButton, isSubmittingRateChange && { opacity: 0.6 }]}
+                      onPress={handleRequestRateChange}
+                      disabled={isSubmittingRateChange}
+                    >
+                      {isSubmittingRateChange ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Text style={styles.formSaveButtonText}>Submit Request</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
       </View>
     );
@@ -995,15 +1000,19 @@ export default function SettingsScreen() {
         transparent
         onRequestClose={() => setShowCompanyProfileModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
-          <View style={[styles.modalContent, { height: '90%' }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Company Profile</Text>
-              <TouchableOpacity onPress={() => setShowCompanyProfileModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
+            <View style={[styles.modalContent, { height: '90%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Company Profile</Text>
+                <TouchableOpacity onPress={() => setShowCompanyProfileModal(false)}>
+                  <X size={24} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
 
             <ScrollView style={styles.companyFormScroll} showsVerticalScrollIndicator={true}
           keyboardDismissMode="on-drag"
@@ -1172,6 +1181,7 @@ export default function SettingsScreen() {
             </ScrollView>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal

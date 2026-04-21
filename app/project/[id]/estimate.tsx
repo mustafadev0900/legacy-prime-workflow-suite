@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Dimensions, FlatList, Image, Keyboard, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Image, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -3157,6 +3157,10 @@ export default function EstimateScreen() {
           setSpotlightSearch('');
         }}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
         <TouchableOpacity
           style={styles.spotlightBackdrop}
           activeOpacity={1}
@@ -3239,6 +3243,7 @@ export default function EstimateScreen() {
             </View>
           </View>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
     </>
   );
@@ -4243,6 +4248,10 @@ NEVER respond with plain text. ALWAYS use JSON format above.`;
       animationType="fade"
       onRequestClose={onClose}
     >
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
       <View style={styles.modalOverlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
         <View style={[styles.modalContent, styles.aiModalContent]}>
@@ -4336,6 +4345,7 @@ NEVER respond with plain text. ALWAYS use JSON format above.`;
           </View>
         </View>
       </View>
+      </KeyboardAvoidingView>
     </Modal>
 
     <Modal visible={uploadingImageItemId !== null} transparent animationType="fade">

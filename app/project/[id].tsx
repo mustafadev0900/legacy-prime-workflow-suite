@@ -2834,7 +2834,11 @@ export default function ProjectDetailScreen() {
               animationType="fade"
               onRequestClose={() => setUploadModalVisible(false)}
             >
-              <TouchableOpacity 
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                style={{ flex: 1 }}
+              >
+              <TouchableOpacity
                 style={styles.modalOverlay}
                 activeOpacity={1}
                 onPress={() => setUploadModalVisible(false)}
@@ -2918,6 +2922,7 @@ export default function ProjectDetailScreen() {
                   </View>
                 </TouchableOpacity>
               </TouchableOpacity>
+              </KeyboardAvoidingView>
             </Modal>
           </View>
         );
@@ -3651,6 +3656,10 @@ export default function ProjectDetailScreen() {
         animationType="fade"
         onRequestClose={() => setShowBudgetModal(false)}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
         <TouchableOpacity
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' }}
           activeOpacity={1}
@@ -3740,6 +3749,7 @@ export default function ProjectDetailScreen() {
 
           </TouchableOpacity>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal

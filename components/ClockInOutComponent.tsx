@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Modal, Alert, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Modal, Alert, Platform, Linking, KeyboardAvoidingView } from 'react-native';
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
 
@@ -591,48 +591,53 @@ export default function ClockInOutComponent({ projectId, projectName, officeRole
         )}
 
         <Modal visible={showClockOutModal} animationType="slide" transparent onRequestClose={() => setShowClockOutModal(false)}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Clock Out Summary</Text>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Clock Out Summary</Text>
 
-              {currentEntry?.category && (
-                <View style={styles.categoryDisplayBox}>
-                  <Text style={styles.categoryDisplayLabel}>Work Category</Text>
-                  <Text style={styles.categoryDisplayValue}>{currentEntry.category}</Text>
+                {currentEntry?.category && (
+                  <View style={styles.categoryDisplayBox}>
+                    <Text style={styles.categoryDisplayLabel}>Work Category</Text>
+                    <Text style={styles.categoryDisplayValue}>{currentEntry.category}</Text>
+                  </View>
+                )}
+
+                <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>What work was performed? (Optional)</Text>
+                  <TextInput
+                    style={styles.textArea}
+                    value={workPerformed}
+                    onChangeText={setWorkPerformed}
+                    placeholder="Describe the work completed..."
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    numberOfLines={4}
+                  />
                 </View>
-              )}
 
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>What work was performed? (Optional)</Text>
-                <TextInput
-                  style={styles.textArea}
-                  value={workPerformed}
-                  onChangeText={setWorkPerformed}
-                  placeholder="Describe the work completed..."
-                  placeholderTextColor="#9CA3AF"
-                  multiline
-                  numberOfLines={4}
-                />
-              </View>
+                <View style={styles.summaryBox}>
+                  <Text style={styles.summaryLabel}>Hours Worked</Text>
+                  <Text style={styles.summaryValue}>{calculateCurrentHours().toFixed(2)}h</Text>
+                </View>
 
-              <View style={styles.summaryBox}>
-                <Text style={styles.summaryLabel}>Hours Worked</Text>
-                <Text style={styles.summaryValue}>{calculateCurrentHours().toFixed(2)}h</Text>
-              </View>
-
-              <View style={styles.modalButtons}>
-                <TouchableOpacity style={styles.cancelButton} onPress={() => setShowClockOutModal(false)}>
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.confirmButton}
-                  onPress={completeClockOut}
-                >
-                  <Text style={styles.confirmButtonText}>Complete Clock Out</Text>
-                </TouchableOpacity>
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity style={styles.cancelButton} onPress={() => setShowClockOutModal(false)}>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.confirmButton}
+                    onPress={completeClockOut}
+                  >
+                    <Text style={styles.confirmButtonText}>Complete Clock Out</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
       </View>
     );
@@ -819,107 +824,117 @@ export default function ClockInOutComponent({ projectId, projectName, officeRole
       </View>
 
       <Modal visible={showClockInModal} animationType="slide" transparent onRequestClose={() => setShowClockInModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Clock In</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Clock In</Text>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>{isOfficeMode ? 'Task Category *' : 'Work Category *'}</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
-                {(isOfficeMode ? OFFICE_CATEGORIES : WORK_CATEGORIES).map((category) => (
-                  <TouchableOpacity
-                    key={category}
-                    style={[styles.categoryChip, clockInCategory === category && styles.categoryChipActive]}
-                    onPress={() => setClockInCategory(category)}
-                  >
-                    <Text style={[styles.categoryChipText, clockInCategory === category && styles.categoryChipTextActive]}>
-                      {category}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>{isOfficeMode ? 'Task Category *' : 'Work Category *'}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
+                  {(isOfficeMode ? OFFICE_CATEGORIES : WORK_CATEGORIES).map((category) => (
+                    <TouchableOpacity
+                      key={category}
+                      style={[styles.categoryChip, clockInCategory === category && styles.categoryChipActive]}
+                      onPress={() => setClockInCategory(category)}
+                    >
+                      <Text style={[styles.categoryChipText, clockInCategory === category && styles.categoryChipTextActive]}>
+                        {category}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>What will you be working on?</Text>
-              <TextInput
-                style={styles.textArea}
-                value={clockInDescription}
-                onChangeText={setClockInDescription}
-                placeholder="Brief description of the work..."
-                placeholderTextColor="#9CA3AF"
-                multiline
-                numberOfLines={4}
-              />
-            </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>What will you be working on?</Text>
+                <TextInput
+                  style={styles.textArea}
+                  value={clockInDescription}
+                  onChangeText={setClockInDescription}
+                  placeholder="Brief description of the work..."
+                  placeholderTextColor="#9CA3AF"
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
 
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowClockInModal(false)}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.confirmButton, !clockInCategory && styles.confirmButtonDisabled]}
-                onPress={completeClockIn}
-                disabled={!clockInCategory}
-              >
-                <Text style={styles.confirmButtonText}>Start Clock</Text>
-              </TouchableOpacity>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity style={styles.cancelButton} onPress={() => setShowClockInModal(false)}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.confirmButton, !clockInCategory && styles.confirmButtonDisabled]}
+                  onPress={completeClockIn}
+                  disabled={!clockInCategory}
+                >
+                  <Text style={styles.confirmButtonText}>Start Clock</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showClockOutModal} animationType="slide" transparent onRequestClose={() => setShowClockOutModal(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Clock Out Summary</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Clock Out Summary</Text>
 
-            {currentEntry?.category && (
-              <View style={styles.categoryDisplayBox}>
-                <Text style={styles.categoryDisplayLabel}>Work Category</Text>
-                <Text style={styles.categoryDisplayValue}>{currentEntry.category}</Text>
-              </View>
-            )}
-
-            <View style={styles.formGroup}>
-              <Text style={styles.formLabel}>What work was performed? (Optional)</Text>
-              <TextInput
-                style={styles.textArea}
-                value={workPerformed}
-                onChangeText={setWorkPerformed}
-                placeholder="Describe the work completed..."
-                placeholderTextColor="#9CA3AF"
-                multiline
-                numberOfLines={4}
-              />
-            </View>
-
-            <View style={styles.summaryBox}>
-              <View>
-                <Text style={styles.summaryLabel}>Hours Worked</Text>
-                <Text style={styles.summaryValue}>{calculateCurrentHours().toFixed(2)}h</Text>
-              </View>
-              {user?.hourlyRate && (
-                <View>
-                  <Text style={styles.summaryLabel}>Estimated Earnings</Text>
-                  <Text style={styles.summaryValue}>${calculateCurrentSessionEarnings().toFixed(2)}</Text>
+              {currentEntry?.category && (
+                <View style={styles.categoryDisplayBox}>
+                  <Text style={styles.categoryDisplayLabel}>Work Category</Text>
+                  <Text style={styles.categoryDisplayValue}>{currentEntry.category}</Text>
                 </View>
               )}
-            </View>
 
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setShowClockOutModal(false)}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.confirmButton}
-                onPress={completeClockOut}
-              >
-                <Text style={styles.confirmButtonText}>Complete Clock Out</Text>
-              </TouchableOpacity>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>What work was performed? (Optional)</Text>
+                <TextInput
+                  style={styles.textArea}
+                  value={workPerformed}
+                  onChangeText={setWorkPerformed}
+                  placeholder="Describe the work completed..."
+                  placeholderTextColor="#9CA3AF"
+                  multiline
+                  numberOfLines={4}
+                />
+              </View>
+
+              <View style={styles.summaryBox}>
+                <View>
+                  <Text style={styles.summaryLabel}>Hours Worked</Text>
+                  <Text style={styles.summaryValue}>{calculateCurrentHours().toFixed(2)}h</Text>
+                </View>
+                {user?.hourlyRate && (
+                  <View>
+                    <Text style={styles.summaryLabel}>Estimated Earnings</Text>
+                    <Text style={styles.summaryValue}>${calculateCurrentSessionEarnings().toFixed(2)}</Text>
+                  </View>
+                )}
+              </View>
+
+              <View style={styles.modalButtons}>
+                <TouchableOpacity style={styles.cancelButton} onPress={() => setShowClockOutModal(false)}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.confirmButton}
+                  onPress={completeClockOut}
+                >
+                  <Text style={styles.confirmButtonText}>Complete Clock Out</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showReportModal} animationType="slide" transparent onRequestClose={() => setShowReportModal(false)}>

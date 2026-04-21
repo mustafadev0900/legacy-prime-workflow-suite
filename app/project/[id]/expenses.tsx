@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useState, useMemo, useEffect } from 'react';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
@@ -1050,68 +1050,73 @@ export default function ProjectExpensesScreen() {
           animationType="slide"
           onRequestClose={() => setShowSubcategoryPicker(false)}
         >
-          <TouchableOpacity
-            style={styles.modalOverlay}
-            activeOpacity={1}
-            onPress={() => setShowSubcategoryPicker(false)}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
           >
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Select Category</Text>
-                <TouchableOpacity onPress={() => setShowSubcategoryPicker(false)}>
-                  <X size={24} color="#1F2937" />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.customCategoryInput}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Or type custom category..."
-                  placeholderTextColor="#9CA3AF"
-                  value={customCategory}
-                  onChangeText={setCustomCategory}
-                />
-                {customCategory.trim() !== '' && (
-                  <TouchableOpacity
-                    style={styles.addCustomButton}
-                    onPress={() => {
-                      setCategory(customCategory.trim());
-                      setCustomCategory('');
-                      setShowSubcategoryPicker(false);
-                    }}
-                  >
-                    <Text style={styles.addCustomButtonText}>Add &quot;{customCategory.trim()}&quot;</Text>
+            <TouchableOpacity
+              style={styles.modalOverlay}
+              activeOpacity={1}
+              onPress={() => setShowSubcategoryPicker(false)}
+            >
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Select Category</Text>
+                  <TouchableOpacity onPress={() => setShowSubcategoryPicker(false)}>
+                    <X size={24} color="#1F2937" />
                   </TouchableOpacity>
-                )}
-              </View>
-              <ScrollView style={styles.categoryList}
-          keyboardDismissMode="on-drag"
-        >
-                {priceListCategories.map((cat) => (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[
-                      styles.pickerOption,
-                      category === cat && styles.pickerOptionSelected,
-                    ]}
-                    onPress={() => {
-                      setCategory(cat);
-                      setCustomCategory('');
-                      setShowSubcategoryPicker(false);
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.pickerOptionText,
-                        category === cat && styles.pickerOptionTextSelected,
-                      ]}
+                </View>
+                <View style={styles.customCategoryInput}>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Or type custom category..."
+                    placeholderTextColor="#9CA3AF"
+                    value={customCategory}
+                    onChangeText={setCustomCategory}
+                  />
+                  {customCategory.trim() !== '' && (
+                    <TouchableOpacity
+                      style={styles.addCustomButton}
+                      onPress={() => {
+                        setCategory(customCategory.trim());
+                        setCustomCategory('');
+                        setShowSubcategoryPicker(false);
+                      }}
                     >
-                      {cat}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
+                      <Text style={styles.addCustomButtonText}>Add &quot;{customCategory.trim()}&quot;</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <ScrollView style={styles.categoryList}
+            keyboardDismissMode="on-drag"
+          >
+                  {priceListCategories.map((cat) => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[
+                        styles.pickerOption,
+                        category === cat && styles.pickerOptionSelected,
+                      ]}
+                      onPress={() => {
+                        setCategory(cat);
+                        setCustomCategory('');
+                        setShowSubcategoryPicker(false);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.pickerOptionText,
+                          category === cat && styles.pickerOptionTextSelected,
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
         </Modal>
 
         {/* Receipt Viewer Modal */}

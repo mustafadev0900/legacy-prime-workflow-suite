@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
@@ -640,98 +640,103 @@ export default function PhotosScreen() {
         animationType="slide"
         onRequestClose={() => setShowManageCategoriesModal(false)}
       >
-        <Pressable 
-          style={styles.modalOverlay}
-          onPress={() => setShowManageCategoriesModal(false)}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
         >
-          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Manage Categories</Text>
-              <TouchableOpacity onPress={() => setShowManageCategoriesModal(false)}>
-                <X size={24} color="#6B7280" />
-              </TouchableOpacity>
-            </View>
+          <Pressable
+            style={styles.modalOverlay}
+            onPress={() => setShowManageCategoriesModal(false)}
+          >
+            <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Manage Categories</Text>
+                <TouchableOpacity onPress={() => setShowManageCategoriesModal(false)}>
+                  <X size={24} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
 
-            <View style={styles.addCategorySection}>
-              <TextInput
-                style={styles.categoryInput}
-                placeholder="Enter new category name..."
-                placeholderTextColor="#9CA3AF"
-                value={newCategoryName}
-                onChangeText={setNewCategoryName}
-              />
-              <TouchableOpacity 
-                style={styles.addCategoryButton}
-                onPress={handleAddCategory}
-              >
-                <Plus size={20} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+              <View style={styles.addCategorySection}>
+                <TextInput
+                  style={styles.categoryInput}
+                  placeholder="Enter new category name..."
+                  placeholderTextColor="#9CA3AF"
+                  value={newCategoryName}
+                  onChangeText={setNewCategoryName}
+                />
+                <TouchableOpacity
+                  style={styles.addCategoryButton}
+                  onPress={handleAddCategory}
+                >
+                  <Plus size={20} color="#FFFFFF" />
+                </TouchableOpacity>
+              </View>
 
-            <Text style={styles.modalLabel}>Existing Categories</Text>
-            <ScrollView style={styles.categoriesList} showsVerticalScrollIndicator={false}
-          keyboardDismissMode="on-drag"
-        >
-              {photoCategories.map((cat) => (
-                <View key={cat} style={styles.categoryManageItem}>
-                  {editingCategoryName === cat ? (
-                    <View style={styles.editCategoryRow}>
-                      <TextInput
-                        style={styles.editCategoryInput}
-                        value={editedCategoryValue}
-                        onChangeText={setEditedCategoryValue}
-                        autoFocus
-                      />
-                      <TouchableOpacity 
-                        onPress={() => handleUpdateCategory(cat)}
-                        style={styles.editCategoryAction}
-                      >
-                        <Check size={20} color="#10B981" />
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        onPress={() => {
-                          setEditingCategoryName(null);
-                          setEditedCategoryValue('');
-                        }}
-                        style={styles.editCategoryAction}
-                      >
-                        <X size={20} color="#EF4444" />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <>
-                      <Text style={styles.categoryManageText}>{cat}</Text>
-                      <View style={styles.categoryManageActions}>
-                        <TouchableOpacity 
-                          onPress={() => {
-                            setEditingCategoryName(cat);
-                            setEditedCategoryValue(cat);
-                          }}
-                          style={styles.categoryActionButton}
+              <Text style={styles.modalLabel}>Existing Categories</Text>
+              <ScrollView style={styles.categoriesList} showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+          >
+                {photoCategories.map((cat) => (
+                  <View key={cat} style={styles.categoryManageItem}>
+                    {editingCategoryName === cat ? (
+                      <View style={styles.editCategoryRow}>
+                        <TextInput
+                          style={styles.editCategoryInput}
+                          value={editedCategoryValue}
+                          onChangeText={setEditedCategoryValue}
+                          autoFocus
+                        />
+                        <TouchableOpacity
+                          onPress={() => handleUpdateCategory(cat)}
+                          style={styles.editCategoryAction}
                         >
-                          <Edit2 size={16} color="#2563EB" />
+                          <Check size={20} color="#10B981" />
                         </TouchableOpacity>
-                        <TouchableOpacity 
-                          onPress={() => handleDeleteCategory(cat)}
-                          style={styles.categoryActionButton}
+                        <TouchableOpacity
+                          onPress={() => {
+                            setEditingCategoryName(null);
+                            setEditedCategoryValue('');
+                          }}
+                          style={styles.editCategoryAction}
                         >
-                          <Trash2 size={16} color="#EF4444" />
+                          <X size={20} color="#EF4444" />
                         </TouchableOpacity>
                       </View>
-                    </>
-                  )}
-                </View>
-              ))}
-            </ScrollView>
+                    ) : (
+                      <>
+                        <Text style={styles.categoryManageText}>{cat}</Text>
+                        <View style={styles.categoryManageActions}>
+                          <TouchableOpacity
+                            onPress={() => {
+                              setEditingCategoryName(cat);
+                              setEditedCategoryValue(cat);
+                            }}
+                            style={styles.categoryActionButton}
+                          >
+                            <Edit2 size={16} color="#2563EB" />
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            onPress={() => handleDeleteCategory(cat)}
+                            style={styles.categoryActionButton}
+                          >
+                            <Trash2 size={16} color="#EF4444" />
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                ))}
+              </ScrollView>
 
-            <TouchableOpacity 
-              style={styles.modalCloseButton}
-              onPress={() => setShowManageCategoriesModal(false)}
-            >
-              <Text style={styles.modalCloseButtonText}>Done</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowManageCategoriesModal(false)}
+              >
+                <Text style={styles.modalCloseButtonText}>Done</Text>
+              </TouchableOpacity>
+            </Pressable>
           </Pressable>
-        </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -740,6 +745,10 @@ export default function PhotosScreen() {
         animationType="slide"
         onRequestClose={handleCancelPreview}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
         <View style={styles.previewModalOverlay}>
           <View style={styles.previewModalContent}>
             <View style={styles.previewModalHeader}>
@@ -850,6 +859,7 @@ export default function PhotosScreen() {
             )}
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Upload Progress Modal */}

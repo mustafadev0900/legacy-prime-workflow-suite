@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 import SkeletonBox from '@/components/SkeletonBox';
-import { ActivityIndicator, Alert, Keyboard, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Users, Plus, Search, Mail, Phone, Star, X, FileText, UserPlus, FolderOpen, File, Send, CheckSquare, Square, MessageSquare, Building2, FileCheck, TrendingUp, Check, Loader } from 'lucide-react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Subcontractor, Project, ProjectFile, EstimateRequest } from '@/types';
@@ -1148,6 +1148,10 @@ ${company?.officePhone || ''}`;
       </ScrollView>
 
       <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Add Subcontractor</Text>
@@ -1308,6 +1312,7 @@ ${company?.officePhone || ''}`;
             </TouchableOpacity>
           </ScrollView>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={showDetailsModal} animationType="slide" presentationStyle="pageSheet">
@@ -1395,6 +1400,10 @@ ${company?.officePhone || ''}`;
       </Modal>
 
       <Modal visible={showRequestModal} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Request Estimate</Text>
@@ -1679,6 +1688,7 @@ ${company?.officePhone || ''}`;
             </TouchableOpacity>
           </ScrollView>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Invite Method Selection Modal */}
@@ -1751,6 +1761,10 @@ ${company?.officePhone || ''}`;
         transparent={true}
         onRequestClose={() => setShowSmsPhoneModal(false)}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
           <View style={styles.smsPhoneModal}>
@@ -1834,6 +1848,7 @@ ${company?.officePhone || ''}`;
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Email Compose Modal */}
@@ -1843,6 +1858,10 @@ ${company?.officePhone || ''}`;
         transparent={true}
         onRequestClose={() => setShowEmailModal(false)}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
           <View style={styles.emailModal}>
@@ -1924,6 +1943,7 @@ ${company?.officePhone || ''}`;
             </View>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </View>

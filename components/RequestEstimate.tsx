@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, TextInput, Alert, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView, TextInput, Alert, Platform, KeyboardAvoidingView } from 'react-native';
 import { Send, X, FileText } from 'lucide-react-native';
 import { Subcontractor, EstimateRequest, Notification } from '@/types';
 import { useApp } from '@/contexts/AppContext';
@@ -139,6 +139,10 @@ export default function RequestEstimateComponent({ projectId, projectName }: Req
         animationType="slide"
         presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
       >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Request Estimate</Text>
@@ -206,6 +210,7 @@ export default function RequestEstimateComponent({ projectId, projectName }: Req
             </TouchableOpacity>
           </ScrollView>
         </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

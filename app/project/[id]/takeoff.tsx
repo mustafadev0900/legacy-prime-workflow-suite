@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
-import { ActivityIndicator, Alert, Dimensions, FlatList, Keyboard, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
@@ -2214,6 +2214,10 @@ export default function TakeoffScreen() {
           animationType="fade"
           onRequestClose={() => setScaleDialogVisible(false)}
         >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+          >
           <View style={[styles.modalOverlay, { justifyContent: 'center', alignItems: 'center' }]}>
             <View style={styles.scaleDialog}>
               <View style={styles.modalHeader}>
@@ -2287,6 +2291,7 @@ export default function TakeoffScreen() {
               </View>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </Modal>
 
         {/* Mode Selection Modal */}
@@ -2562,6 +2567,10 @@ export default function TakeoffScreen() {
           animationType="slide"
           onRequestClose={() => setShowAIReview(false)}
         >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+          >
           <View style={styles.modalOverlay}>
             <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
             <View style={[styles.aiResultsModal, { maxHeight: SCREEN_HEIGHT * 0.9 }]}>
@@ -2645,6 +2654,7 @@ export default function TakeoffScreen() {
               </View>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </Modal>
 
         {/* Export Options Modal */}

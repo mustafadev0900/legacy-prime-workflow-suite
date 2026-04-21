@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
@@ -1088,6 +1088,10 @@ export default function FilesNavigationScreen() {
           animationType="slide"
           onRequestClose={() => { setUploadModalVisible(false); setModalCategory(''); }}
         >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+          >
           <View style={styles.modalOverlay}>
             <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
             <View style={styles.modalContent}>
@@ -1190,6 +1194,7 @@ export default function FilesNavigationScreen() {
               </View>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </Modal>
 
         <Modal
@@ -1198,6 +1203,10 @@ export default function FilesNavigationScreen() {
           animationType="slide"
           onRequestClose={() => setNewFolderModalVisible(false)}
         >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+          >
           <View style={styles.modalOverlay}>
             <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
             <View style={styles.modalContent}>
@@ -1230,6 +1239,7 @@ export default function FilesNavigationScreen() {
               </TouchableOpacity>
             </View>
           </View>
+          </KeyboardAvoidingView>
         </Modal>
 
         {/* File Viewer Modal */}

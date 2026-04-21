@@ -9,6 +9,7 @@ import {
   TextInput,
   Platform,
   Alert,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { X, Calendar, Bell, Clock, Plus } from 'lucide-react-native';
 import { useDailyTaskResponsive } from './hooks/useDailyTaskResponsive';
@@ -133,171 +134,176 @@ export default function AddTaskModal({ visible, onClose, onSubmit }: AddTaskModa
       transparent={true}
       onRequestClose={handleClose}
     >
-      <View style={styles.overlay}>
-        <View style={[styles.content, { maxWidth: responsive.isMobile ? '95%' : 480 }]}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <View style={styles.overlay}>
+          <View style={[styles.content, { maxWidth: responsive.isMobile ? '95%' : 480 }]}>
 
-          {/* Header */}
-          <View style={[styles.header, { paddingHorizontal: responsive.sidebarPadding, paddingVertical: 16 }]}>
-            <Text style={[styles.headerTitle, { fontSize: responsive.headerFontSize }]}>
-              Add New Task
-            </Text>
-            <TouchableOpacity style={styles.closeButton} onPress={handleClose} activeOpacity={0.7}>
-              <X size={20} color="#6B7280" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Scrollable form body */}
-          <ScrollView
-            style={styles.body}
-            contentContainerStyle={{ padding: responsive.sidebarPadding, paddingBottom: 8 }}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-
-            {/* ── Task Title ── */}
-            <View style={styles.field}>
-              <Text style={styles.label}>
-                Task Title <Text style={styles.required}>*</Text>
+            {/* Header */}
+            <View style={[styles.header, { paddingHorizontal: responsive.sidebarPadding, paddingVertical: 16 }]}>
+              <Text style={[styles.headerTitle, { fontSize: responsive.headerFontSize }]}>
+                Add New Task
               </Text>
-              <TextInput
-                style={styles.input}
-                placeholder="What needs to be done?"
-                placeholderTextColor="#9CA3AF"
-                value={title}
-                onChangeText={setTitle}
-                autoFocus={true}
-                returnKeyType="next"
-              />
+              <TouchableOpacity style={styles.closeButton} onPress={handleClose} activeOpacity={0.7}>
+                <X size={20} color="#6B7280" />
+              </TouchableOpacity>
             </View>
 
-            {/* ── Due Date ── */}
-            <View style={styles.field}>
-              <Text style={styles.label}>
-                Due Date <Text style={styles.required}>*</Text>
-              </Text>
+            {/* Scrollable form body */}
+            <ScrollView
+              style={styles.body}
+              contentContainerStyle={{ padding: responsive.sidebarPadding, paddingBottom: 8 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
 
-              {/* Date trigger row */}
-              <TouchableOpacity
-                style={[styles.inputWithIcon, showCalendar && styles.inputWithIconActive]}
-                onPress={() => { setShowTimePicker(false); setShowCalendar(prev => !prev); }}
-                activeOpacity={0.7}
-              >
-                <Calendar size={20} color={showCalendar ? '#10B981' : '#6B7280'} />
-                <Text style={[styles.inputText, !dateString && styles.inputPlaceholder]}>
-                  {dateString ? formatDisplayDate(dateString) : 'Select a date'}
+              {/* ── Task Title ── */}
+              <View style={styles.field}>
+                <Text style={styles.label}>
+                  Task Title <Text style={styles.required}>*</Text>
                 </Text>
-                {dateString && (
-                  <TouchableOpacity
-                    onPress={() => { setDateString(''); setShowCalendar(false); }}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    activeOpacity={0.7}
-                  >
-                    <X size={16} color="#9CA3AF" />
-                  </TouchableOpacity>
+                <TextInput
+                  style={styles.input}
+                  placeholder="What needs to be done?"
+                  placeholderTextColor="#9CA3AF"
+                  value={title}
+                  onChangeText={setTitle}
+                  autoFocus={true}
+                  returnKeyType="next"
+                />
+              </View>
+
+              {/* ── Due Date ── */}
+              <View style={styles.field}>
+                <Text style={styles.label}>
+                  Due Date <Text style={styles.required}>*</Text>
+                </Text>
+
+                {/* Date trigger row */}
+                <TouchableOpacity
+                  style={[styles.inputWithIcon, showCalendar && styles.inputWithIconActive]}
+                  onPress={() => { setShowTimePicker(false); setShowCalendar(prev => !prev); }}
+                  activeOpacity={0.7}
+                >
+                  <Calendar size={20} color={showCalendar ? '#10B981' : '#6B7280'} />
+                  <Text style={[styles.inputText, !dateString && styles.inputPlaceholder]}>
+                    {dateString ? formatDisplayDate(dateString) : 'Select a date'}
+                  </Text>
+                  {dateString && (
+                    <TouchableOpacity
+                      onPress={() => { setDateString(''); setShowCalendar(false); }}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      activeOpacity={0.7}
+                    >
+                      <X size={16} color="#9CA3AF" />
+                    </TouchableOpacity>
+                  )}
+                </TouchableOpacity>
+
+                {/* Custom calendar — pure RN, no native bridge, works on iPad */}
+                {showCalendar && (
+                  <CustomDatePicker
+                    value={dateString}
+                    onChange={handleDateSelect}
+                    minimumDate={new Date()}
+                  />
                 )}
-              </TouchableOpacity>
 
-              {/* Custom calendar — pure RN, no native bridge, works on iPad */}
-              {showCalendar && (
-                <CustomDatePicker
-                  value={dateString}
-                  onChange={handleDateSelect}
-                  minimumDate={new Date()}
+                {!isValidFutureDate() && dateString.length > 0 && (
+                  <Text style={styles.fieldError}>Must be today or a future date</Text>
+                )}
+              </View>
+
+              {/* ── Due Time ── */}
+              <View style={styles.field}>
+                <Text style={styles.label}>Due Time <Text style={styles.optional}>(optional)</Text></Text>
+
+                {/* Time trigger row */}
+                <TouchableOpacity
+                  style={[styles.inputWithIcon, showTimePicker && styles.inputWithIconActive]}
+                  onPress={() => { setShowCalendar(false); setShowTimePicker(prev => !prev); }}
+                  activeOpacity={0.7}
+                >
+                  <Clock size={20} color={showTimePicker ? '#10B981' : '#6B7280'} />
+                  <Text style={styles.inputText}>{formatTimeDisplay(time)}</Text>
+                </TouchableOpacity>
+
+                {/* Custom time picker — pure RN, works on iPad */}
+                {showTimePicker && (
+                  <CustomTimePicker
+                    value={time}
+                    onChange={setTime}
+                  />
+                )}
+              </View>
+
+              {/* ── Reminder Toggle ── */}
+              <View style={styles.field}>
+                <TouchableOpacity
+                  style={styles.reminderRow}
+                  onPress={() => setReminder(r => !r)}
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.reminderIcon, reminder && styles.reminderIconActive]}>
+                    <Bell size={20} color={reminder ? '#F59E0B' : '#9CA3AF'} />
+                  </View>
+                  <View style={styles.reminderText}>
+                    <Text style={styles.reminderLabel}>Set Reminder</Text>
+                    <Text style={styles.reminderHint}>Get notified when task is due</Text>
+                  </View>
+                  <View style={[styles.toggle, reminder && styles.toggleActive]}>
+                    <View style={[styles.toggleKnob, reminder && styles.toggleKnobActive]} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              {/* ── Notes ── */}
+              <View style={styles.field}>
+                <Text style={styles.label}>
+                  Notes <Text style={styles.optional}>(optional)</Text>
+                </Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Add any additional details..."
+                  placeholderTextColor="#9CA3AF"
+                  value={notes}
+                  onChangeText={setNotes}
+                  multiline
+                  numberOfLines={3}
+                  textAlignVertical="top"
                 />
-              )}
+              </View>
 
-              {!isValidFutureDate() && dateString.length > 0 && (
-                <Text style={styles.fieldError}>Must be today or a future date</Text>
-              )}
-            </View>
+            </ScrollView>
 
-            {/* ── Due Time ── */}
-            <View style={styles.field}>
-              <Text style={styles.label}>Due Time <Text style={styles.optional}>(optional)</Text></Text>
-
-              {/* Time trigger row */}
+            {/* Footer */}
+            <View style={[styles.footer, { padding: responsive.sidebarPadding }]}>
               <TouchableOpacity
-                style={[styles.inputWithIcon, showTimePicker && styles.inputWithIconActive]}
-                onPress={() => { setShowCalendar(false); setShowTimePicker(prev => !prev); }}
+                style={styles.cancelBtn}
+                onPress={handleClose}
                 activeOpacity={0.7}
+                disabled={isSubmitting}
               >
-                <Clock size={20} color={showTimePicker ? '#10B981' : '#6B7280'} />
-                <Text style={styles.inputText}>{formatTimeDisplay(time)}</Text>
+                <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
-
-              {/* Custom time picker — pure RN, works on iPad */}
-              {showTimePicker && (
-                <CustomTimePicker
-                  value={time}
-                  onChange={setTime}
-                />
-              )}
-            </View>
-
-            {/* ── Reminder Toggle ── */}
-            <View style={styles.field}>
               <TouchableOpacity
-                style={styles.reminderRow}
-                onPress={() => setReminder(r => !r)}
+                style={[styles.submitBtn, (!isFormValid || isSubmitting) && styles.submitBtnDisabled]}
+                onPress={handleSubmit}
                 activeOpacity={0.7}
+                disabled={!isFormValid || isSubmitting}
               >
-                <View style={[styles.reminderIcon, reminder && styles.reminderIconActive]}>
-                  <Bell size={20} color={reminder ? '#F59E0B' : '#9CA3AF'} />
-                </View>
-                <View style={styles.reminderText}>
-                  <Text style={styles.reminderLabel}>Set Reminder</Text>
-                  <Text style={styles.reminderHint}>Get notified when task is due</Text>
-                </View>
-                <View style={[styles.toggle, reminder && styles.toggleActive]}>
-                  <View style={[styles.toggleKnob, reminder && styles.toggleKnobActive]} />
-                </View>
+                <Plus size={18} color="#FFFFFF" />
+                <Text style={styles.submitBtnText}>
+                  {isSubmitting ? 'Adding...' : 'Add Task'}
+                </Text>
               </TouchableOpacity>
             </View>
 
-            {/* ── Notes ── */}
-            <View style={styles.field}>
-              <Text style={styles.label}>
-                Notes <Text style={styles.optional}>(optional)</Text>
-              </Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Add any additional details..."
-                placeholderTextColor="#9CA3AF"
-                value={notes}
-                onChangeText={setNotes}
-                multiline
-                numberOfLines={3}
-                textAlignVertical="top"
-              />
-            </View>
-
-          </ScrollView>
-
-          {/* Footer */}
-          <View style={[styles.footer, { padding: responsive.sidebarPadding }]}>
-            <TouchableOpacity
-              style={styles.cancelBtn}
-              onPress={handleClose}
-              activeOpacity={0.7}
-              disabled={isSubmitting}
-            >
-              <Text style={styles.cancelBtnText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.submitBtn, (!isFormValid || isSubmitting) && styles.submitBtnDisabled]}
-              onPress={handleSubmit}
-              activeOpacity={0.7}
-              disabled={!isFormValid || isSubmitting}
-            >
-              <Plus size={18} color="#FFFFFF" />
-              <Text style={styles.submitBtnText}>
-                {isSubmitting ? 'Adding...' : 'Add Task'}
-              </Text>
-            </TouchableOpacity>
           </View>
-
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
