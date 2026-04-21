@@ -262,9 +262,9 @@ export default function CRMCalendar({ appointments, clients, projects = [], onAd
                     const timeStr = a.time ? formatTime12(a.time).replace(':00 ', ' ').replace(/^0/, '') : '';
                     const label = `${timeStr}${c ? ' ' + c.name.split(' ')[0] : ''}`.trim();
                     return (
-                      <View key={a.id ?? i} style={[styles.cellApptBar, { backgroundColor: barBg }]}>
+                      <TouchableOpacity key={a.id ?? i} style={[styles.cellApptBar, { backgroundColor: barBg }]} onPress={(e) => { e.stopPropagation?.(); setDetailAppt(a); }} activeOpacity={0.7}>
                         <Text style={styles.cellApptText} numberOfLines={1}>{label || a.title.slice(0, 10)}</Text>
-                      </View>
+                      </TouchableOpacity>
                     );
                   })}
                   {dayAppts.length > 2 && (
@@ -471,6 +471,14 @@ export default function CRMCalendar({ appointments, clients, projects = [], onAd
                         <Text style={styles.detailAddressHint}>Tap to open in Maps</Text>
                       </View>
                     </TouchableOpacity>
+                  )}
+
+                  {/* Notes */}
+                  {detailAppt.notes && (
+                    <View style={styles.detailNotesCard}>
+                      <Text style={styles.detailNotesLabel}>NOTES</Text>
+                      <Text style={styles.detailNotesText}>{detailAppt.notes}</Text>
+                    </View>
                   )}
 
                   {/* Action buttons */}
@@ -776,6 +784,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#16A34A',
     marginTop: 2,
+  },
+  detailNotesCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 12,
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  detailNotesLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6B7280',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  detailNotesText: {
+    fontSize: 14,
+    color: '#1F2937',
+    lineHeight: 20,
   },
   detailActions: {
     flexDirection: 'row',
