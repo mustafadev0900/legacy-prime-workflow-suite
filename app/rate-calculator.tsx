@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Stack } from 'expo-router';
 import {
   ArrowLeft, TrendingUp, Grid3X3, Plus, Building,
+  DollarSign, Landmark, Target, Clock, TrendingUp as TrendUp,
 } from 'lucide-react-native';
 
 interface RateCalcSettings {
@@ -236,31 +237,41 @@ export default function RateCalculatorScreen() {
             <View style={styles.calcCard}>
               <Text style={styles.calcCardTitle}>How it's calculated</Text>
               <View style={styles.calcRow}>
-                <View style={[styles.calcDot, { backgroundColor: '#2563EB' }]} />
+                <View style={[styles.calcIconWrap, { backgroundColor: '#1E3A5F' }]}>
+                  <DollarSign size={16} color="#3B82F6" />
+                </View>
                 <Text style={styles.calcLabel}>Desired Salary</Text>
                 <Text style={styles.calcValue}>{fmt(settings.desiredSalary)}</Text>
               </View>
               <Text style={styles.calcOperator}>+</Text>
               <View style={styles.calcRow}>
-                <View style={[styles.calcDot, { backgroundColor: '#EF4444' }]} />
+                <View style={[styles.calcIconWrap, { backgroundColor: '#3B1A1A' }]}>
+                  <Landmark size={16} color="#EF4444" />
+                </View>
                 <Text style={styles.calcLabel}>Annual Overhead</Text>
                 <Text style={styles.calcValue}>{fmt(Math.round(overheadPerMonth * 12))}</Text>
               </View>
               <Text style={styles.calcOperator}>=</Text>
               <View style={styles.calcRow}>
-                <View style={[styles.calcDot, { backgroundColor: '#F59E0B' }]} />
+                <View style={[styles.calcIconWrap, { backgroundColor: '#3B2E10' }]}>
+                  <Target size={16} color="#F59E0B" />
+                </View>
                 <Text style={styles.calcLabel}>Total Annual Cost</Text>
                 <Text style={styles.calcValue}>{fmt(Math.round(settings.desiredSalary + overheadPerMonth * 12))}</Text>
               </View>
               <Text style={styles.calcOperator}>÷</Text>
               <View style={styles.calcRow}>
-                <View style={[styles.calcDot, { backgroundColor: '#3B82F6' }]} />
+                <View style={[styles.calcIconWrap, { backgroundColor: '#1E3A5F' }]}>
+                  <Clock size={16} color="#3B82F6" />
+                </View>
                 <Text style={styles.calcLabel}>Billable Hours/Year</Text>
                 <Text style={styles.calcValue}>{(settings.billableHoursPerWeek * settings.workingWeeksPerYear).toLocaleString()}</Text>
               </View>
               <Text style={styles.calcOperator}>→</Text>
               <View style={styles.calcRow}>
-                <View style={[styles.calcDot, { backgroundColor: '#10B981' }]} />
+                <View style={[styles.calcIconWrap, { backgroundColor: '#0F3026' }]}>
+                  <TrendUp size={16} color="#10B981" />
+                </View>
                 <Text style={[styles.calcLabel, { color: '#10B981' }]}>+ {settings.profitMargin}% Profit Margin</Text>
                 <Text style={[styles.calcValue, { color: '#10B981' }]}>{fmtDec(recommendedRate)}/hr</Text>
               </View>
@@ -469,7 +480,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#475569',
   },
-  calcDot: { width: 10, height: 10, borderRadius: 5, marginRight: 10 },
+  calcIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginRight: 12,
+  },
   calcLabel: { flex: 1, fontSize: 13, color: '#CBD5E1' },
   calcValue: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
   calcOperator: { fontSize: 14, color: '#64748B', textAlign: 'center', paddingVertical: 4 },
