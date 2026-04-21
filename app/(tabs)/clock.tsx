@@ -120,7 +120,7 @@ export default function ClockScreen() {
         {/* Active Projects */}
         <View style={styles.projectListCard}>
           <View style={styles.sectionHeaderInline}>
-            <HardHat size={20} color="#1F2937" />
+            <HardHat size={20} color="#16A34A" />
             <Text style={styles.projectListTitle}>Active Projects</Text>
           </View>
           {(isLoading || isCompanyReloading) && activeProjects.length === 0 ? (
@@ -151,7 +151,7 @@ export default function ClockScreen() {
         {/* Office / Business Operations */}
         <View style={styles.projectListCard}>
           <View style={styles.sectionHeaderInline}>
-            <Briefcase size={20} color="#1F2937" />
+            <Briefcase size={20} color="#4F46E5" />
             <View>
               <Text style={styles.projectListTitle}>Office / Business Operations</Text>
               <Text style={styles.officeSectionSubtitle}>Clock in as office staff</Text>
@@ -171,7 +171,7 @@ export default function ClockScreen() {
 
         <View style={styles.projectListCardWeb}>
           <View style={styles.sectionHeaderInline}>
-            <HardHat size={20} color="#1F2937" />
+            <HardHat size={20} color="#16A34A" />
             <Text style={styles.projectListTitle}>Active Projects</Text>
           </View>
           {activeProjects.map((project) => (
@@ -188,7 +188,7 @@ export default function ClockScreen() {
 
         <View style={styles.projectListCardWeb}>
           <View style={styles.sectionHeaderInline}>
-            <Briefcase size={20} color="#1F2937" />
+            <Briefcase size={20} color="#4F46E5" />
             <View>
               <Text style={styles.projectListTitle}>Office / Business Operations</Text>
               <Text style={styles.officeSectionSubtitle}>Clock in as office staff</Text>

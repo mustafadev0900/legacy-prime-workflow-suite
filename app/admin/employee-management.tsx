@@ -3,13 +3,30 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import { User, ClockEntry } from '@/types';
-import { Clock, DollarSign, CheckCircle, XCircle, FileText, Edit2, Download } from 'lucide-react-native';
+import { Clock, DollarSign, CheckCircle, XCircle, FileText, Edit2, Download, HardHat, ClipboardList, Send, Megaphone, Phone, Users, Building2, Monitor, Truck, MoreHorizontal, ChevronDown, Calendar, Tag } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system/legacy';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+
+const OFFICE_ROLES: { name: string; icon: React.ComponentType<any>; color: string; bg: string }[] = [
+  { name: 'Project Manager', icon: ClipboardList, color: '#4F46E5', bg: '#EEF2FF' },
+  { name: 'Bookkeeper', icon: ClipboardList, color: '#4F46E5', bg: '#EEF2FF' },
+  { name: 'Accountant', icon: ClipboardList, color: '#4F46E5', bg: '#EEF2FF' },
+  { name: 'Sales', icon: Send, color: '#16A34A', bg: '#F0FDF4' },
+  { name: 'Marketing', icon: Megaphone, color: '#DC2626', bg: '#FEF2F2' },
+  { name: 'Office Assistant', icon: ClipboardList, color: '#4F46E5', bg: '#EEF2FF' },
+  { name: 'Receptionist', icon: Phone, color: '#16A34A', bg: '#F0FDF4' },
+  { name: 'Project Coordinator', icon: ClipboardList, color: '#EA580C', bg: '#FFF7ED' },
+  { name: 'HR / Payroll Admin', icon: Users, color: '#DC2626', bg: '#FEF2F2' },
+  { name: 'Estimator', icon: FileText, color: '#4F46E5', bg: '#EEF2FF' },
+  { name: 'Office Manager', icon: Building2, color: '#4F46E5', bg: '#EEF2FF' },
+  { name: 'IT Support', icon: Monitor, color: '#0891B2', bg: '#ECFEFF' },
+  { name: 'Dispatcher', icon: Truck, color: '#EA580C', bg: '#FFF7ED' },
+  { name: 'Other', icon: MoreHorizontal, color: '#6B7280', bg: '#F3F4F6' },
+];
 
 export default function EmployeeManagementScreen() {
   const { user: currentUser, clockEntries, refreshClockEntries } = useApp();
@@ -25,6 +42,25 @@ export default function EmployeeManagementScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [usersData, setUsersData] = useState<{ users: User[] } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Classify modal
+  const [showClassifyModal, setShowClassifyModal] = useState(false);
+  const [classifyType, setClassifyType] = useState<'field' | 'office' | null>(null);
+  const [classifyOfficeRole, setClassifyOfficeRole] = useState<string>('');
+  const [showRolePicker, setShowRolePicker] = useState(false);
+  const [isSavingClassify, setIsSavingClassify] = useState(false);
+
+  // Timecard modal
+  const [showTimecardModal, setShowTimecardModal] = useState(false);
+  const [timecardPeriod, setTimecardPeriod] = useState<'weekly' | 'bi-weekly'>('weekly');
+  const [isGeneratingTimecard, setIsGeneratingTimecard] = useState(false);
+
+  // Timecard success modal
+  const [showTimecardSuccess, setShowTimecardSuccess] = useState(false);
+  const [timecardResult, setTimecardResult] = useState<{
+    employeeName: string; totalHours: number; regularHours: number;
+    overtimeHours: number; totalEarnings: number;
+  } | null>(null);
   // Tick every 60s so live hours for clocked-in employees update automatically
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -218,6 +254,120 @@ export default function EmployeeManagementScreen() {
   const openReportModal = (employee: User) => {
     setSelectedEmployee(employee);
     setShowReportModal(true);
+  };
+
+  const getEmployeeBadge = (emp: User): { label: string; color: string; bg: string } => {
+    if (officeEmployeeIds.has(emp.id)) {
+      const entry = clockEntries.find((e: ClockEntry) => e.employeeId === emp.id && e.officeRole);
+      const roleName = entry?.officeRole || 'Office';
+      if (roleName.toLowerCase().includes('sales')) return { label: 'SALES', color: '#16A34A', bg: '#F0FDF4' };
+      return { label: roleName.toUpperCase(), color: '#4F46E5', bg: '#EEF2FF' };
+    }
+    return { label: 'FIELD', color: '#16A34A', bg: '#F0FDF4' };
+  };
+
+  const openClassifyModal = (employee: User) => {
+    setSelectedEmployee(employee);
+    const isOffice = officeEmployeeIds.has(employee.id);
+    setClassifyType(isOffice ? 'office' : 'field');
+    const entry = clockEntries.find((e: ClockEntry) => e.employeeId === employee.id && e.officeRole);
+    setClassifyOfficeRole(entry?.officeRole || '');
+    setShowClassifyModal(true);
+  };
+
+  const handleSaveClassify = async () => {
+    if (!selectedEmployee) return;
+    setIsSavingClassify(true);
+    try {
+      if (classifyType === 'office' && classifyOfficeRole) {
+        const { data: entries } = await supabase
+          .from('clock_entries')
+          .select('id')
+          .eq('employee_id', selectedEmployee.id)
+          .order('clock_in', { ascending: false })
+          .limit(1);
+        if (entries && entries.length > 0) {
+          await supabase
+            .from('clock_entries')
+            .update({ office_role: classifyOfficeRole })
+            .eq('id', entries[0].id);
+        }
+      } else if (classifyType === 'field') {
+        await supabase
+          .from('clock_entries')
+          .update({ office_role: null })
+          .eq('employee_id', selectedEmployee.id);
+      }
+      await refreshClockEntries();
+      setShowClassifyModal(false);
+      setShowRolePicker(false);
+      Alert.alert('Success', `${selectedEmployee.name} classified as ${classifyType === 'field' ? 'Field Worker' : classifyOfficeRole}`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to classify employee');
+    } finally {
+      setIsSavingClassify(false);
+    }
+  };
+
+  const openTimecardModal = (employee: User) => {
+    setSelectedEmployee(employee);
+    setTimecardPeriod('weekly');
+    setShowTimecardModal(true);
+  };
+
+  const handleGenerateTimecard = async () => {
+    if (!selectedEmployee) return;
+    setIsGeneratingTimecard(true);
+    try {
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const periodDays = timecardPeriod === 'weekly' ? 7 : 14;
+
+      const start = new Date(now);
+      start.setDate(now.getDate() - diffToMonday - (timecardPeriod === 'bi-weekly' ? 7 : 0));
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(start.getDate() + periodDays - 1);
+      end.setHours(23, 59, 59, 999);
+
+      const empEntries = clockEntries.filter((e: ClockEntry) =>
+        e.employeeId === selectedEmployee.id &&
+        new Date(e.clockIn).getTime() >= start.getTime() &&
+        new Date(e.clockIn).getTime() <= end.getTime()
+      );
+
+      const entryMs = (entry: ClockEntry): number => {
+        const s = new Date(entry.clockIn).getTime();
+        const en = entry.clockOut ? new Date(entry.clockOut).getTime() : Date.now();
+        let ms = en - s;
+        if (entry.lunchBreaks) {
+          entry.lunchBreaks.forEach((lunch: any) => {
+            const ls = new Date(lunch.startTime).getTime();
+            const le = lunch.endTime ? new Date(lunch.endTime).getTime() : en;
+            if (!isNaN(ls) && !isNaN(le)) ms -= (le - ls);
+          });
+        }
+        return Math.max(0, ms);
+      };
+
+      const totalHours = empEntries.reduce((sum: number, e: ClockEntry) => sum + entryMs(e), 0) / 3_600_000;
+      const regularHours = Math.min(totalHours, 40);
+      const overtimeHours = Math.max(0, totalHours - 40);
+      const rate = selectedEmployee.hourlyRate || 0;
+      const totalEarnings = (regularHours * rate) + (overtimeHours * rate * 1.5);
+
+      setTimecardResult({
+        employeeName: selectedEmployee.name,
+        totalHours, regularHours, overtimeHours, totalEarnings,
+      });
+      setShowTimecardModal(false);
+      setShowTimecardSuccess(true);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to generate timecard');
+    } finally {
+      setIsGeneratingTimecard(false);
+    }
   };
 
   const getReportDateRange = (period: typeof reportPeriod): { start: Date; end: Date; label: string } => {
@@ -634,18 +784,19 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
           
           {filteredEmployees.map((employee: User) => {
             const stats = getEmployeeStats(employee.id);
-            const todayEarnings = employee.hourlyRate ? stats.todayHours * employee.hourlyRate : null;
-            const weekEarnings  = employee.hourlyRate ? stats.weekHours  * employee.hourlyRate : null;
-            const clockInLabel  = stats.clockInTime
-              ? stats.clockInTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              : null;
+            const badge = getEmployeeBadge(employee);
 
             return (
               <View key={employee.id} style={[styles.employeeCard, stats.isClockedIn && styles.employeeCardActive]}>
-                {/* Header row */}
+                {/* Header row: name + badges */}
                 <View style={styles.employeeHeader}>
                   <View style={styles.employeeInfo}>
-                    <Text style={styles.employeeName}>{employee.name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <Text style={styles.employeeName}>{employee.name}</Text>
+                      <View style={[styles.roleBadge, { backgroundColor: badge.bg }]}>
+                        <Text style={[styles.roleBadgeText, { color: badge.color }]}>{badge.label}</Text>
+                      </View>
+                    </View>
                     <Text style={styles.employeeEmail}>{employee.email}</Text>
                     {employee.phone && (
                       <Text style={styles.employeePhone}>{employee.phone}</Text>
@@ -663,60 +814,43 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
                   )}
                 </View>
 
-                {/* Live session banner when clocked in */}
-                {stats.isClockedIn && clockInLabel && (
-                  <View style={styles.sessionBanner}>
-                    <Clock size={13} color="#059669" />
-                    <Text style={styles.sessionText}>
-                      Clocked in at {clockInLabel} · {stats.todayHours.toFixed(1)}h today (live)
-                    </Text>
-                  </View>
-                )}
-
-                {/* Stats grid */}
-                <View style={styles.statsGrid}>
-                  <View style={styles.statBox}>
-                    <Text style={styles.statBoxLabel}>Today</Text>
-                    <Text style={[styles.statBoxValue, stats.isClockedIn && styles.statBoxValueLive]}>
-                      {stats.todayHours.toFixed(1)}h
-                    </Text>
-                    {todayEarnings !== null && (
-                      <Text style={styles.statBoxSub}>${todayEarnings.toFixed(2)}</Text>
-                    )}
-                  </View>
-                  <View style={styles.statBoxDivider} />
-                  <View style={styles.statBox}>
-                    <Text style={styles.statBoxLabel}>This Week</Text>
-                    <Text style={styles.statBoxValue}>{stats.weekHours.toFixed(1)}h</Text>
-                    {weekEarnings !== null && (
-                      <Text style={styles.statBoxSub}>${weekEarnings.toFixed(2)}</Text>
-                    )}
-                  </View>
-                  <View style={styles.statBoxDivider} />
-                  <View style={styles.statBox}>
-                    <Text style={styles.statBoxLabel}>Rate</Text>
-                    <Text style={[styles.statBoxValue, !employee.hourlyRate && styles.statBoxValueMuted]}>
-                      {employee.hourlyRate ? `$${employee.hourlyRate.toFixed(2)}` : '—'}
-                    </Text>
-                    {employee.hourlyRate && <Text style={styles.statBoxSub}>/hr</Text>}
-                  </View>
+                {/* Today hours + Rate row */}
+                <View style={styles.inlineStatsRow}>
+                  <Text style={styles.inlineStatText}>
+                    Today: <Text style={[styles.inlineStatValue, stats.isClockedIn && { color: '#059669' }]}>{stats.todayHours.toFixed(1)}h</Text>
+                  </Text>
+                  <Text style={styles.inlineStatText}>
+                    {employee.hourlyRate ? `$${employee.hourlyRate.toFixed(2)}/hr` : 'Rate not set'}
+                  </Text>
                 </View>
 
-                {/* Actions */}
+                {/* Actions: Timecard + Classify + Edit Rate + Report */}
                 <View style={styles.employeeActions}>
+                  <TouchableOpacity
+                    style={styles.greenActionButton}
+                    onPress={() => openTimecardModal(employee)}
+                  >
+                    <Calendar size={15} color="#16A34A" />
+                    <Text style={styles.greenActionText}>Timecard</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.greenActionButton}
+                    onPress={() => openClassifyModal(employee)}
+                  >
+                    <Tag size={15} color="#16A34A" />
+                    <Text style={styles.greenActionText}>Classify</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.actionButton}
                     onPress={() => openEditRateModal(employee)}
                   >
-                    <Edit2 size={16} color="#10B981" />
-                    <Text style={[styles.actionButtonText, { color: '#10B981' }]}>Edit Rate</Text>
+                    <Edit2 size={15} color="#6B7280" />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.actionButton}
                     onPress={() => openReportModal(employee)}
                   >
-                    <Download size={16} color="#2563EB" />
-                    <Text style={styles.actionButtonText}>Report</Text>
+                    <Download size={15} color="#6B7280" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -900,6 +1034,239 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Classify Employee Modal */}
+      <Modal
+        visible={showClassifyModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => { setShowClassifyModal(false); setShowRolePicker(false); }}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => { setShowClassifyModal(false); setShowRolePicker(false); }} />
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Classify Employee</Text>
+
+            {selectedEmployee && (
+              <View style={styles.modalInfo}>
+                <Text style={styles.modalInfoLabel}>Employee:</Text>
+                <Text style={styles.modalInfoValue}>{selectedEmployee.name}</Text>
+              </View>
+            )}
+
+            <Text style={styles.classifySectionLabel}>Employee Type</Text>
+            <View style={styles.classifyCardsRow}>
+              <TouchableOpacity
+                style={[styles.classifyCard, classifyType === 'field' && styles.classifyCardSelected]}
+                onPress={() => { setClassifyType('field'); setClassifyOfficeRole(''); }}
+              >
+                <View style={[styles.classifyIconWrap, classifyType === 'field' && { backgroundColor: '#F3E8FF' }]}>
+                  <HardHat size={28} color={classifyType === 'field' ? '#7C3AED' : '#9CA3AF'} />
+                </View>
+                <Text style={[styles.classifyCardTitle, classifyType === 'field' && { color: '#7C3AED' }]}>Field Worker</Text>
+                <Text style={styles.classifyCardSub}>Works on project sites</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.classifyCard, classifyType === 'office' && styles.classifyCardSelected]}
+                onPress={() => setClassifyType('office')}
+              >
+                <View style={[styles.classifyIconWrap, classifyType === 'office' && { backgroundColor: '#F3E8FF' }]}>
+                  <ClipboardList size={28} color={classifyType === 'office' ? '#7C3AED' : '#9CA3AF'} />
+                </View>
+                <Text style={[styles.classifyCardTitle, classifyType === 'office' && { color: '#7C3AED' }]}>Office Staff</Text>
+                <Text style={styles.classifyCardSub}>Works in the office</Text>
+              </TouchableOpacity>
+            </View>
+
+            {classifyType === 'office' && (
+              <View style={{ marginTop: 16 }}>
+                <Text style={styles.classifySectionLabel}>Office Role</Text>
+                <TouchableOpacity
+                  style={styles.roleDropdown}
+                  onPress={() => setShowRolePicker(true)}
+                >
+                  <Text style={[styles.roleDropdownText, !classifyOfficeRole && { color: '#9CA3AF' }]}>
+                    {classifyOfficeRole || 'Select a role...'}
+                  </Text>
+                  <ChevronDown size={20} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={[styles.modalButtons, { marginTop: 24 }]}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => { setShowClassifyModal(false); setShowRolePicker(false); }}
+              >
+                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmButton, { backgroundColor: '#7C3AED' }]}
+                onPress={handleSaveClassify}
+                disabled={isSavingClassify || (classifyType === 'office' && !classifyOfficeRole)}
+              >
+                <Text style={styles.modalConfirmButtonText}>
+                  {isSavingClassify ? 'Saving...' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Office Role Picker Modal */}
+      <Modal
+        visible={showRolePicker}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowRolePicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowRolePicker(false)} />
+          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
+            <Text style={styles.modalTitle}>Select Office Role</Text>
+            <ScrollView style={{ marginTop: 8 }}>
+              {OFFICE_ROLES.map((role) => {
+                const RoleIcon = role.icon;
+                const isSelected = classifyOfficeRole === role.name;
+                return (
+                  <TouchableOpacity
+                    key={role.name}
+                    style={[styles.rolePickerRow, isSelected && { backgroundColor: '#F3E8FF' }]}
+                    onPress={() => {
+                      setClassifyOfficeRole(role.name);
+                      setShowRolePicker(false);
+                    }}
+                  >
+                    <View style={[styles.rolePickerIcon, { backgroundColor: role.bg }]}>
+                      <RoleIcon size={20} color={role.color} />
+                    </View>
+                    <Text style={[styles.rolePickerName, isSelected && { color: '#7C3AED', fontWeight: '600' as const }]}>{role.name}</Text>
+                    {isSelected && <CheckCircle size={20} color="#7C3AED" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Generate Timecard Modal */}
+      <Modal
+        visible={showTimecardModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowTimecardModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowTimecardModal(false)} />
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Generate Timecard</Text>
+
+            {selectedEmployee && (
+              <>
+                <View style={styles.modalInfo}>
+                  <Text style={styles.modalInfoLabel}>Employee:</Text>
+                  <Text style={styles.modalInfoValue}>{selectedEmployee.name}</Text>
+                </View>
+                <View style={styles.modalInfo}>
+                  <Text style={styles.modalInfoLabel}>Hourly Rate:</Text>
+                  <Text style={styles.modalInfoValue}>
+                    {selectedEmployee.hourlyRate ? `$${selectedEmployee.hourlyRate.toFixed(2)}/hr` : 'Not set'}
+                  </Text>
+                </View>
+              </>
+            )}
+
+            <Text style={[styles.classifySectionLabel, { marginTop: 8 }]}>Period:</Text>
+            <View style={styles.timecardToggleRow}>
+              <TouchableOpacity
+                style={[styles.timecardToggle, timecardPeriod === 'weekly' && styles.timecardToggleActive]}
+                onPress={() => setTimecardPeriod('weekly')}
+              >
+                <Text style={[styles.timecardToggleText, timecardPeriod === 'weekly' && styles.timecardToggleTextActive]}>Weekly</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.timecardToggle, timecardPeriod === 'bi-weekly' && styles.timecardToggleActive]}
+                onPress={() => setTimecardPeriod('bi-weekly')}
+              >
+                <Text style={[styles.timecardToggleText, timecardPeriod === 'bi-weekly' && styles.timecardToggleTextActive]}>Bi-Weekly</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={[styles.modalButtons, { marginTop: 24 }]}>
+              <TouchableOpacity
+                style={styles.modalCancelButton}
+                onPress={() => setShowTimecardModal(false)}
+                disabled={isGeneratingTimecard}
+              >
+                <Text style={styles.modalCancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirmButton}
+                onPress={handleGenerateTimecard}
+                disabled={isGeneratingTimecard}
+              >
+                {isGeneratingTimecard ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalConfirmButtonText}>Generate</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Timecard Generated Success Modal */}
+      <Modal
+        visible={showTimecardSuccess}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowTimecardSuccess(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.successModal}>
+            <CheckCircle size={48} color="#10B981" style={{ marginBottom: 16 }} />
+            <Text style={styles.successTitle}>Timecard Generated</Text>
+
+            {timecardResult && (
+              <View style={styles.successStatsContainer}>
+                <View style={styles.successStatRow}>
+                  <Text style={styles.successStatLabel}>Employee</Text>
+                  <Text style={styles.successStatValue}>{timecardResult.employeeName}</Text>
+                </View>
+                <View style={styles.successStatRow}>
+                  <Text style={styles.successStatLabel}>Total Hours</Text>
+                  <Text style={styles.successStatValue}>{timecardResult.totalHours.toFixed(2)}h</Text>
+                </View>
+                <View style={styles.successStatRow}>
+                  <Text style={styles.successStatLabel}>Regular</Text>
+                  <Text style={styles.successStatValue}>{timecardResult.regularHours.toFixed(2)}h</Text>
+                </View>
+                <View style={styles.successStatRow}>
+                  <Text style={styles.successStatLabel}>Overtime</Text>
+                  <Text style={styles.successStatValue}>{timecardResult.overtimeHours.toFixed(2)}h</Text>
+                </View>
+                <View style={styles.successStatRow}>
+                  <Text style={styles.successStatLabel}>Total Earnings</Text>
+                  <Text style={[styles.successStatValue, { color: '#10B981' }]}>
+                    ${timecardResult.totalEarnings.toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={styles.successOkButton}
+              onPress={() => setShowTimecardSuccess(false)}
+            >
+              <Text style={styles.successOkText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1235,10 +1602,8 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#EFF6FF',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    backgroundColor: '#F3F4F6',
+    padding: 8,
     borderRadius: 6,
   },
   actionButtonText: {
@@ -1380,5 +1745,210 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     color: '#1F2937',
+  },
+  // Role badge on employee cards
+  roleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  roleBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    letterSpacing: 0.5,
+  },
+  // Inline stats row (Today + Rate)
+  inlineStatsRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  inlineStatText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  inlineStatValue: {
+    fontWeight: '700' as const,
+    color: '#1F2937',
+  },
+  // Green action buttons (Timecard, Classify)
+  greenActionButton: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 6,
+  },
+  greenActionText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#16A34A',
+  },
+  // Classify modal
+  classifySectionLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#1F2937',
+    marginBottom: 12,
+  },
+  classifyCardsRow: {
+    flexDirection: 'row' as const,
+    gap: 12,
+  },
+  classifyCard: {
+    flex: 1,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center' as const,
+  },
+  classifyCardSelected: {
+    borderColor: '#7C3AED',
+    backgroundColor: '#FAF5FF',
+  },
+  classifyIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: 10,
+  },
+  classifyCardTitle: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#1F2937',
+    marginBottom: 4,
+  },
+  classifyCardSub: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center' as const,
+  },
+  // Role dropdown
+  roleDropdown: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  roleDropdownText: {
+    fontSize: 15,
+    color: '#1F2937',
+  },
+  // Role picker rows
+  rolePickerRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 12,
+  },
+  rolePickerIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  rolePickerName: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  // Timecard toggle
+  timecardToggleRow: {
+    flexDirection: 'row' as const,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    padding: 3,
+  },
+  timecardToggle: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center' as const,
+  },
+  timecardToggleActive: {
+    backgroundColor: '#2563EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  timecardToggleText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#64748B',
+  },
+  timecardToggleTextActive: {
+    color: '#FFFFFF',
+  },
+  // Success modal
+  successModal: {
+    backgroundColor: '#1E293B',
+    borderRadius: 20,
+    padding: 32,
+    marginHorizontal: 24,
+    alignItems: 'center' as const,
+    alignSelf: 'center' as const,
+    marginTop: 'auto' as any,
+    marginBottom: 'auto' as any,
+    width: '90%' as any,
+    maxWidth: 400,
+  },
+  successTitle: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
+    marginBottom: 24,
+  },
+  successStatsContainer: {
+    width: '100%' as any,
+    marginBottom: 24,
+  },
+  successStatRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#334155',
+  },
+  successStatLabel: {
+    fontSize: 14,
+    color: '#94A3B8',
+  },
+  successStatValue: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
+  },
+  successOkButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    alignItems: 'center' as const,
+  },
+  successOkText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
   },
 });
