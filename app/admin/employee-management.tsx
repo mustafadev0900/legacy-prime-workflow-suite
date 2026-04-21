@@ -260,10 +260,9 @@ export default function EmployeeManagementScreen() {
     if (officeEmployeeIds.has(emp.id)) {
       const entry = clockEntries.find((e: ClockEntry) => e.employeeId === emp.id && e.officeRole);
       const roleName = entry?.officeRole || 'Office';
-      if (roleName.toLowerCase().includes('sales')) return { label: 'SALES', color: '#16A34A', bg: '#F0FDF4' };
       return { label: roleName.toUpperCase(), color: '#4F46E5', bg: '#EEF2FF' };
     }
-    return { label: 'FIELD', color: '#16A34A', bg: '#F0FDF4' };
+    return { label: 'FIELD', color: '#4F46E5', bg: '#EEF2FF' };
   };
 
   const openClassifyModal = (employee: User) => {
@@ -785,72 +784,73 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
           {filteredEmployees.map((employee: User) => {
             const stats = getEmployeeStats(employee.id);
             const badge = getEmployeeBadge(employee);
+            const isField = !officeEmployeeIds.has(employee.id);
 
             return (
               <View key={employee.id} style={[styles.employeeCard, stats.isClockedIn && styles.employeeCardActive]}>
-                {/* Header row: name + badges */}
+                {/* Name + Active badge (no badge when off) */}
                 <View style={styles.employeeHeader}>
-                  <View style={styles.employeeInfo}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                      <Text style={styles.employeeName}>{employee.name}</Text>
-                      <View style={[styles.roleBadge, { backgroundColor: badge.bg }]}>
-                        <Text style={[styles.roleBadgeText, { color: badge.color }]}>{badge.label}</Text>
-                      </View>
-                    </View>
-                    <Text style={styles.employeeEmail}>{employee.email}</Text>
-                    {employee.phone && (
-                      <Text style={styles.employeePhone}>{employee.phone}</Text>
-                    )}
-                  </View>
-                  {stats.isClockedIn ? (
-                    <View style={styles.clockedInBadge}>
-                      <View style={styles.pulseDot} />
-                      <Text style={styles.clockedInText}>Active</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.offBadge}>
-                      <Text style={styles.offBadgeText}>Off</Text>
+                  <Text style={styles.employeeName}>{employee.name}</Text>
+                  {stats.isClockedIn && (
+                    <View style={styles.activeBadge}>
+                      <View style={styles.activeDot} />
+                      <Text style={styles.activeText}>Active</Text>
                     </View>
                   )}
                 </View>
 
-                {/* Today hours + Rate row */}
-                <View style={styles.inlineStatsRow}>
-                  <Text style={styles.inlineStatText}>
-                    Today: <Text style={[styles.inlineStatValue, stats.isClockedIn && { color: '#059669' }]}>{stats.todayHours.toFixed(1)}h</Text>
-                  </Text>
-                  <Text style={styles.inlineStatText}>
-                    {employee.hourlyRate ? `$${employee.hourlyRate.toFixed(2)}/hr` : 'Rate not set'}
-                  </Text>
+                {/* Role badges row */}
+                <View style={styles.badgesRow}>
+                  <View style={[styles.roleBadge, { backgroundColor: badge.bg }]}>
+                    <Text style={[styles.roleBadgeText, { color: badge.color }]}>{badge.label}</Text>
+                  </View>
+                  {isField && (
+                    <View style={[styles.fieldTypeBadge]}>
+                      <HardHat size={12} color="#16A34A" />
+                      <Text style={[styles.roleBadgeText, { color: '#16A34A' }]}>FIELD</Text>
+                    </View>
+                  )}
                 </View>
 
-                {/* Actions: Timecard + Classify + Edit Rate + Report */}
+                {/* Email + Phone */}
+                <Text style={styles.employeeEmail}>{employee.email}</Text>
+                {employee.phone && (
+                  <Text style={styles.employeePhone}>{employee.phone}</Text>
+                )}
+
+                {/* Today hours + Rate inline with icons */}
+                <View style={styles.inlineStatsRow}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Clock size={14} color="#6B7280" />
+                    <Text style={styles.inlineStatText}>
+                      Today: {stats.todayHours.toFixed(1)}h
+                    </Text>
+                  </View>
+                  {employee.hourlyRate && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <DollarSign size={14} color="#6B7280" />
+                      <Text style={styles.inlineStatText}>
+                        ${employee.hourlyRate.toFixed(2)}/hr
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Actions: Timecard + Classify only */}
                 <View style={styles.employeeActions}>
                   <TouchableOpacity
                     style={styles.greenActionButton}
                     onPress={() => openTimecardModal(employee)}
                   >
-                    <Calendar size={15} color="#16A34A" />
+                    <FileText size={15} color="#16A34A" />
                     <Text style={styles.greenActionText}>Timecard</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.greenActionButton}
                     onPress={() => openClassifyModal(employee)}
                   >
-                    <Tag size={15} color="#16A34A" />
+                    <Building2 size={15} color="#16A34A" />
                     <Text style={styles.greenActionText}>Classify</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => openEditRateModal(employee)}
-                  >
-                    <Edit2 size={15} color="#6B7280" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => openReportModal(employee)}
-                  >
-                    <Download size={15} color="#6B7280" />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -1409,12 +1409,17 @@ const styles = StyleSheet.create({
   searchCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 16,
+    padding: 4,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   searchInput: {
     fontSize: 16,
     color: '#1F2937',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    outlineStyle: 'none' as any,
   },
   filterRow: {
     flexDirection: 'row' as const,
@@ -1471,16 +1476,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 6,
   },
   employeeInfo: {
     flex: 1,
   },
   employeeName: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+    fontSize: 17,
+    fontWeight: '700' as const,
     color: '#1F2937',
-    marginBottom: 4,
   },
   employeeEmail: {
     fontSize: 14,
@@ -1490,6 +1494,22 @@ const styles = StyleSheet.create({
   employeePhone: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  activeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  activeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: '#22C55E',
+  },
+  activeText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#22C55E',
   },
   clockedInBadge: {
     flexDirection: 'row',
@@ -1757,24 +1777,35 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     letterSpacing: 0.5,
   },
+  // Badges row below name
+  badgesRow: {
+    flexDirection: 'row' as const,
+    gap: 8,
+    marginBottom: 8,
+  },
+  // FIELD type badge (green with border + hardhat icon)
+  fieldTypeBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    backgroundColor: '#F0FDF4',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#86EFAC',
+  },
   // Inline stats row (Today + Rate)
   inlineStatsRow: {
     flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
     alignItems: 'center' as const,
-    backgroundColor: '#F9FAFB',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: 20,
+    marginTop: 10,
     marginBottom: 12,
   },
   inlineStatText: {
     fontSize: 14,
-    color: '#6B7280',
-  },
-  inlineStatValue: {
-    fontWeight: '700' as const,
-    color: '#1F2937',
+    color: '#4B5563',
   },
   // Green action buttons (Timecard, Classify)
   greenActionButton: {
@@ -1782,12 +1813,14 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     gap: 6,
     backgroundColor: '#F0FDF4',
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
   },
   greenActionText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600' as const,
     color: '#16A34A',
   },

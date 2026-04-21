@@ -256,7 +256,7 @@ export default function BusinessCostsScreen() {
                     style={styles.classifyBtn}
                     onPress={() => router.push('/admin/employee-management' as any)}
                   >
-                    <Text style={styles.classifyBtnText}>Manage Employees</Text>
+                    <Text style={styles.classifyBtnText}>Classify Employees</Text>
                   </TouchableOpacity>
                 </View>
               )}
