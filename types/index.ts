@@ -232,6 +232,7 @@ export interface Appointment {
   phone?: string;
   email?: string;
   notes?: string;
+  status?: 'scheduled' | 'completed' | 'cancelled';
   createdAt?: string;
 }
 

@@ -140,12 +140,19 @@ export default function CRMCalendar({ appointments, clients, projects = [], onAd
       <TouchableOpacity key={appt.id} style={[styles.blockApptRow, { backgroundColor: typeColor.bg }]} onPress={() => setDetailAppt(appt)} activeOpacity={0.7}>
         <View style={[styles.blockApptBar, { backgroundColor: typeColor.text }]} />
         <View style={styles.blockApptInfo}>
-          {/* Type badge */}
-          {appt.type && (
-            <View style={[styles.blockApptTypeBadge, { backgroundColor: typeColor.text }]}>
-              <Text style={styles.blockApptTypeBadgeText}>{appt.type}</Text>
-            </View>
-          )}
+          {/* Status + Type badges */}
+          <View style={styles.blockApptBadgesRow}>
+            {appt.status === 'completed' && (
+              <View style={styles.doneBadge}>
+                <Text style={styles.doneBadgeText}>Done</Text>
+              </View>
+            )}
+            {appt.type && (
+              <View style={[styles.blockApptTypeBadge, { backgroundColor: typeColor.text }]}>
+                <Text style={styles.blockApptTypeBadgeText}>{appt.type}</Text>
+              </View>
+            )}
+          </View>
           {/* Title */}
           <Text style={styles.blockApptTitle} numberOfLines={1}>{appt.title}</Text>
           {/* Time range */}
@@ -319,11 +326,18 @@ export default function CRMCalendar({ appointments, clients, projects = [], onAd
                           </TouchableOpacity>
                         ) : null}
                       </View>
-                      {appt.type && (
-                        <View style={[styles.apptTypeBadge, { backgroundColor: typeColor.bg, borderColor: typeColor.border }]}>
-                          <Text style={[styles.apptTypeBadgeText, { color: typeColor.text }]}>{appt.type}</Text>
-                        </View>
-                      )}
+                      <View style={styles.apptBadgesCol}>
+                        {appt.status === 'completed' && (
+                          <View style={styles.doneBadge}>
+                            <Text style={styles.doneBadgeText}>Done</Text>
+                          </View>
+                        )}
+                        {appt.type && (
+                          <View style={[styles.apptTypeBadge, { backgroundColor: typeColor.bg, borderColor: typeColor.border }]}>
+                            <Text style={[styles.apptTypeBadgeText, { color: typeColor.text }]}>{appt.type}</Text>
+                          </View>
+                        )}
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
@@ -487,7 +501,7 @@ export default function CRMCalendar({ appointments, clients, projects = [], onAd
                       {onUpdateAppointment && (
                         <TouchableOpacity
                           style={styles.detailCompleteBtn}
-                          onPress={() => { onUpdateAppointment(detailAppt.id, { status: 'completed' } as any); setDetailAppt(null); }}
+                          onPress={() => { onUpdateAppointment(detailAppt.id, { status: 'completed' }); setDetailAppt(null); }}
                           activeOpacity={0.7}
                         >
                           <CheckCircle size={16} color="#FFFFFF" />
@@ -504,7 +518,7 @@ export default function CRMCalendar({ appointments, clients, projects = [], onAd
                       {onUpdateAppointment && (
                         <TouchableOpacity
                           style={styles.detailCancelBtn}
-                          onPress={() => { onUpdateAppointment(detailAppt.id, { status: 'cancelled' } as any); setDetailAppt(null); }}
+                          onPress={() => { onUpdateAppointment(detailAppt.id, { status: 'cancelled' }); setDetailAppt(null); }}
                           activeOpacity={0.7}
                         >
                           <Text style={styles.detailCancelBtnText}>Cancel</Text>
@@ -574,8 +588,11 @@ const styles = StyleSheet.create({
   apptClient: { fontSize: 13, color: '#6B7280', marginTop: 3 },
   apptAddressRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   apptAddress: { fontSize: 13, color: '#2563EB', textDecorationLine: 'underline' },
-  apptTypeBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginLeft: 8, marginTop: 2 },
+  apptBadgesCol: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 8, flexShrink: 0 },
+  apptTypeBadge: { borderWidth: 1, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
   apptTypeBadgeText: { fontSize: 12, fontWeight: '600' },
+  doneBadge: { backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 },
+  doneBadgeText: { fontSize: 12, fontWeight: '700', color: '#16A34A' },
 
   // Day view
   dayViewScroll: { paddingHorizontal: 16, paddingTop: 4 },
@@ -682,12 +699,17 @@ const styles = StyleSheet.create({
     color: '#2563EB',
     textDecorationLine: 'underline',
   },
+  blockApptBadgesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+    flexWrap: 'wrap',
+  },
   blockApptTypeBadge: {
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    alignSelf: 'flex-start',
-    marginBottom: 6,
   },
   blockApptTypeBadgeText: {
     fontSize: 11,
