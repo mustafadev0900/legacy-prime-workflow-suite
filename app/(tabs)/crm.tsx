@@ -1501,10 +1501,16 @@ export default function CRMScreen() {
   return (
     <View style={styles.container}>
       <CompanyHeader />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -2239,6 +2245,7 @@ export default function CRMScreen() {
           )}
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Add Client Modal */}
       <Modal
@@ -2263,6 +2270,7 @@ export default function CRMScreen() {
 
             <ScrollView style={styles.modalBody}
           keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
         >
               <Text style={styles.inputLabel}>Full Name <Text style={styles.requiredStar}>*</Text></Text>
               <TextInput
@@ -2437,6 +2445,7 @@ export default function CRMScreen() {
 
             <ScrollView style={styles.modalBody}
           keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
         >
               <Text style={styles.inputLabel}>Full Name <Text style={styles.requiredStar}>*</Text></Text>
               <TextInput
