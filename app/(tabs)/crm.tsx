@@ -4189,21 +4189,28 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
             if (data.email) {
               const existingClient = clients.find(c => c.email?.toLowerCase() === data.email!.toLowerCase());
               if (!existingClient) {
-                const { generateUUID } = await import('@/utils/uuid');
-                const newClient: import('@/types').Client = {
-                  id: generateUUID(),
-                  name: data.title || data.email,
-                  email: data.email,
-                  phone: data.phone || '',
-                  address: data.address || '',
-                  source: 'Phone Call',
-                  status: 'Lead',
-                  lastContacted: new Date().toISOString().split('T')[0],
-                  lastContactDate: new Date().toISOString(),
-                };
                 try {
-                  await addClient(newClient);
-                  setApptSuccessMessage('Appointment created!\nClient added to CRM automatically.');
+                  const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+                  const resp = await fetch(`${API_BASE}/api/add-client`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      companyId: company?.id,
+                      name: data.title || data.email,
+                      email: data.email,
+                      phone: data.phone || '',
+                      address: data.address || '',
+                      source: 'Phone Call',
+                      status: 'Lead',
+                      lastContactDate: new Date().toISOString(),
+                    }),
+                  });
+                  if (resp.ok) {
+                    await refreshClients();
+                    setApptSuccessMessage('Appointment created!\nClient added to CRM automatically.');
+                  } else {
+                    setApptSuccessMessage('Appointment created!');
+                  }
                 } catch {
                   setApptSuccessMessage('Appointment created!');
                 }
