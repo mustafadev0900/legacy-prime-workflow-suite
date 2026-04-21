@@ -1,5 +1,6 @@
 import { ScrollView, StyleSheet, Text, View, TouchableOpacity, Platform } from 'react-native';
 import { router } from 'expo-router';
+import { ArrowLeft } from 'lucide-react-native';
 
 function Section({ number, title, children }: { number: string; title: string; children: React.ReactNode }) {
   return (
@@ -44,6 +45,9 @@ export default function TermsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerInner}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+            <ArrowLeft size={22} color="#1E3A5F" />
+          </TouchableOpacity>
           <Text style={styles.brandName}>Legacy Prime</Text>
           <View style={styles.nav}>
             <View style={styles.navActiveChip}>
@@ -327,6 +331,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     height: 64,
+  },
+  backBtn: {
+    padding: 8,
+    marginRight: 8,
   },
   brandName: {
     fontSize: 18,

@@ -240,7 +240,10 @@ function ChatWidgets() {
     // Schedule tab
     pathname === '/schedule' ||
     // Notifications screen
-    pathname?.startsWith('/notifications');
+    pathname?.startsWith('/notifications') ||
+    // Legal pages
+    pathname?.startsWith('/privacy') ||
+    pathname?.startsWith('/terms');
 
   if (shouldHideChat) {
     return null;
