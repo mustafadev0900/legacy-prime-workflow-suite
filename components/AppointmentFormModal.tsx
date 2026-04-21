@@ -34,22 +34,24 @@ export default function AppointmentFormModal({ visible, onClose, onSave, onDelet
   const [dateError, setDateError] = useState('');
 
   useEffect(() => {
-    if (visible) {
-      setTitle(initial?.title ?? '');
-      setType(initial?.type ?? undefined);
-      setDate(initial?.date ?? '');
-      setTime(initial?.time ?? '');
-      setEndTime(initial?.endTime ?? '');
-      setClientId(initial?.clientId);
-      setProjectId(initial?.projectId);
-      setAddress(initial?.address ?? '');
-      setPhone(initial?.phone ?? '');
-      setEmail(initial?.email ?? '');
-      setNotes(initial?.notes ?? '');
-      setTitleError('');
-      setDateError('');
-    }
-  }, [visible, initial]);
+    if (!visible) return;
+    setTitle(initial?.title ?? '');
+    setType(initial?.type ?? undefined);
+    setDate(initial?.date ?? '');
+    setTime(initial?.time ?? '');
+    setEndTime(initial?.endTime ?? '');
+    setClientId(initial?.clientId);
+    setProjectId(initial?.projectId);
+    setAddress(initial?.address ?? '');
+    setPhone(initial?.phone ?? '');
+    setEmail(initial?.email ?? '');
+    setNotes(initial?.notes ?? '');
+    setTitleError('');
+    setDateError('');
+    // Only reset when modal opens — not on `initial` reference changes,
+    // which would wipe user input mid-typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   const isValidDate = (val: string) => /^\d{4}-\d{2}-\d{2}$/.test(val);
   const isValidTime = (val: string) => val === '' || /^\d{2}:\d{2}$/.test(val);
