@@ -4187,7 +4187,7 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
             await addAppointment(data);
             // Auto-add client to CRM if email is provided and no existing client selected
             if (data.email && !data.clientId) {
-              const existingClient = clients.find(c => c.email.toLowerCase() === data.email!.toLowerCase());
+              const existingClient = clients.find(c => c.email?.toLowerCase() === data.email!.toLowerCase());
               if (!existingClient) {
                 const { generateUUID } = await import('@/utils/uuid');
                 const newClient: import('@/types').Client = {
