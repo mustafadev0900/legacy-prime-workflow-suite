@@ -163,46 +163,38 @@ export default function ClockScreen() {
     );
 
     const webContent = (
-      <View style={styles.webLayout}>
-        {/* Left sidebar */}
-        <View style={styles.webSidebar}>
-          <View style={styles.sidebarCard}>
-            <Text style={styles.sidebarSectionLabel}>Logged In As</Text>
-            <Text style={styles.sidebarEmployeeName}>{user?.name || 'Unknown Employee'}</Text>
-            <View style={styles.sidebarDivider} />
-            <Text style={styles.sidebarHint}>Select a project or office role to begin tracking your time.</Text>
-          </View>
+      <View style={styles.webContentWrap}>
+        <View style={styles.employeeCardWeb}>
+          <Text style={styles.cardLabel}>Employee</Text>
+          <Text style={styles.cardValue}>{user?.name || 'Unknown Employee'}</Text>
         </View>
 
-        {/* Right: lists */}
-        <View style={styles.webMain}>
-          <View style={styles.projectListCard}>
-            <View style={styles.sectionHeaderInline}>
-              <HardHat size={20} color="#1F2937" />
-              <Text style={styles.projectListTitle}>Active Projects</Text>
-            </View>
-            {activeProjects.map((project) => (
-              <TouchableOpacity
-                key={project.id}
-                style={[styles.projectItem, styles.projectItemWeb]}
-                onPress={() => handleSelectProject(project.id)}
-              >
-                <Text style={styles.projectName}>{project.name}</Text>
-                <ChevronRight size={20} color="#D1D5DB" />
-              </TouchableOpacity>
-            ))}
+        <View style={styles.projectListCardWeb}>
+          <View style={styles.sectionHeaderInline}>
+            <HardHat size={20} color="#1F2937" />
+            <Text style={styles.projectListTitle}>Active Projects</Text>
           </View>
+          {activeProjects.map((project) => (
+            <TouchableOpacity
+              key={project.id}
+              style={[styles.projectItem, styles.projectItemWeb]}
+              onPress={() => handleSelectProject(project.id)}
+            >
+              <Text style={styles.projectName}>{project.name}</Text>
+              <ChevronRight size={20} color="#D1D5DB" />
+            </TouchableOpacity>
+          ))}
+        </View>
 
-          <View style={styles.projectListCard}>
-            <View style={styles.sectionHeaderInline}>
-              <Briefcase size={20} color="#1F2937" />
-              <View>
-                <Text style={styles.projectListTitle}>Office / Business Operations</Text>
-                <Text style={styles.officeSectionSubtitle}>Clock in as office staff</Text>
-              </View>
+        <View style={styles.projectListCardWeb}>
+          <View style={styles.sectionHeaderInline}>
+            <Briefcase size={20} color="#1F2937" />
+            <View>
+              <Text style={styles.projectListTitle}>Office / Business Operations</Text>
+              <Text style={styles.officeSectionSubtitle}>Clock in as office staff</Text>
             </View>
-            {OFFICE_ROLES.map((role) => renderRoleRow(role, true))}
           </View>
+          {OFFICE_ROLES.map((role) => renderRoleRow(role, true))}
         </View>
       </View>
     );
@@ -210,18 +202,18 @@ export default function ClockScreen() {
     return (
       <View style={styles.container}>
         <ScrollView style={styles.scrollView} contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag">
-          <View style={isWeb ? styles.webWrapper : undefined}>
-            <View style={[styles.header, isWeb && styles.headerWeb]}>
-              <View style={styles.headerTop}>
-                <View style={styles.headerTitleRow}>
-                  {isWeb && <Clock size={22} color="#2563EB" style={{ marginRight: 10 }} />}
-                  <View>
-                    <Text style={[styles.title, isWeb && styles.titleWeb]}>Clock In/Out</Text>
-                    <Text style={styles.subtitle}>Select a project or office role</Text>
-                  </View>
+          <View style={[styles.header, isWeb && styles.headerWeb]}>
+            <View style={styles.headerTop}>
+              <View style={styles.headerTitleRow}>
+                {isWeb && <Clock size={22} color="#2563EB" style={{ marginRight: 10 }} />}
+                <View>
+                  <Text style={[styles.title, isWeb && styles.titleWeb]}>Clock In/Out</Text>
+                  <Text style={styles.subtitle}>Select a project or office role</Text>
                 </View>
               </View>
             </View>
+          </View>
+          <View style={isWeb ? styles.webWrapper : undefined}>
             {isWeb ? webContent : mobileContent}
           </View>
         </ScrollView>
@@ -240,34 +232,33 @@ export default function ClockScreen() {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={isWeb ? styles.scrollContentWeb : undefined} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag">
-        <View style={isWeb ? styles.webWrapper : undefined}>
-          <View style={[styles.header, isWeb && styles.headerWeb]}>
-            {isWeb ? (
-              <View style={styles.headerTop}>
-                <TouchableOpacity onPress={onChangeSelection} style={styles.backBtn}>
-                  <ArrowLeft size={20} color="#2563EB" />
-                </TouchableOpacity>
-                <View style={styles.headerTitleRow}>
-                  <Clock size={22} color="#2563EB" style={{ marginRight: 10 }} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.title, styles.titleWeb]}>Clock In/Out</Text>
-                    <Text style={styles.subtitle} numberOfLines={1}>{contextLabel}</Text>
-                  </View>
-                </View>
-              </View>
-            ) : (
-              <View style={styles.headerTop}>
-                <TouchableOpacity onPress={onChangeSelection} style={styles.backBtn}>
-                  <ArrowLeft size={22} color="#2563EB" />
-                </TouchableOpacity>
+        <View style={[styles.header, isWeb && styles.headerWeb]}>
+          {isWeb ? (
+            <View style={styles.headerTop}>
+              <TouchableOpacity onPress={onChangeSelection} style={styles.backBtn}>
+                <ArrowLeft size={20} color="#2563EB" />
+              </TouchableOpacity>
+              <View style={styles.headerTitleRow}>
+                <Clock size={22} color="#2563EB" style={{ marginRight: 10 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.title}>Clock In/Out</Text>
-                  <Text style={styles.subtitle} numberOfLines={2}>{contextLabel}</Text>
+                  <Text style={[styles.title, styles.titleWeb]}>Clock In/Out</Text>
+                  <Text style={styles.subtitle} numberOfLines={1}>{contextLabel}</Text>
                 </View>
               </View>
-            )}
-          </View>
-
+            </View>
+          ) : (
+            <View style={styles.headerTop}>
+              <TouchableOpacity onPress={onChangeSelection} style={styles.backBtn}>
+                <ArrowLeft size={22} color="#2563EB" />
+              </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.title}>Clock In/Out</Text>
+                <Text style={styles.subtitle} numberOfLines={2}>{contextLabel}</Text>
+              </View>
+            </View>
+          )}
+        </View>
+        <View style={isWeb ? styles.webWrapper : undefined}>
           {isWeb ? (
             <View style={styles.webLayout}>
               <View style={styles.webSidebar}>
@@ -312,6 +303,9 @@ const styles = StyleSheet.create({
   webLayout: { flexDirection: 'row', gap: 24, padding: 24, alignItems: 'flex-start' },
   webSidebar: { width: 240, flexShrink: 0 },
   webMain: { flex: 1, minWidth: 0 },
+  webContentWrap: { padding: 24, maxWidth: 900, width: '100%', alignSelf: 'center' },
+  employeeCardWeb: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB', marginBottom: 16 },
+  projectListCardWeb: { backgroundColor: '#FFFFFF', marginBottom: 16, padding: 20, borderRadius: 12, borderWidth: 1, borderColor: '#E5E7EB' },
   sidebarCard: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 20, borderWidth: 1, borderColor: '#E5E7EB' },
   sidebarSectionLabel: { fontSize: 11, fontWeight: '600' as const, color: '#9CA3AF', textTransform: 'uppercase' as const, letterSpacing: 0.8, marginBottom: 4 },
   sidebarEmployeeName: { fontSize: 18, fontWeight: '700' as const, color: '#1F2937', marginBottom: 16 },
