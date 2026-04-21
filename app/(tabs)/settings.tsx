@@ -947,6 +947,30 @@ export default function SettingsScreen() {
           )}
         </View>
 
+        {/* Legal */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Legal</Text>
+          <View style={styles.infoCard}>
+            <TouchableOpacity
+              style={styles.legalRow}
+              onPress={() => router.push('/privacy')}
+            >
+              <Shield size={18} color="#2563EB" />
+              <Text style={styles.legalRowText}>Privacy Policy</Text>
+              <ChevronRight size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+            <View style={styles.legalDivider} />
+            <TouchableOpacity
+              style={styles.legalRow}
+              onPress={() => router.push('/terms')}
+            >
+              <BookOpen size={18} color="#2563EB" />
+              <Text style={styles.legalRowText}>Terms & Conditions</Text>
+              <ChevronRight size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+          </View>
+        </View>
+
         <View style={styles.section}>
           <TouchableOpacity
             style={styles.logoutButton}
@@ -1590,6 +1614,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#16A34A',
     fontWeight: '600' as const,
+  },
+  legalRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  legalRowText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '500' as const,
+    color: '#1F2937',
+  },
+  legalDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
   },
   logoutButton: {
     flexDirection: 'row' as const,

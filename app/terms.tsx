@@ -151,6 +151,46 @@ export default function TermsScreen() {
         <Section number="7" title="Messaging &amp; Communications">
           <Text style={styles.p}>The platform may allow SMS, email, or automated communications. Customer must comply with the Telephone Consumer Protection Act (TCPA) and all applicable communication laws, including obtaining proper consent, maintaining opt-out systems, and ensuring all communications are lawful.</Text>
           <Text style={styles.p}>Service Provider acts only as a technology provider and is not responsible for the content of any communications sent by Customer.</Text>
+
+          <SubSection title="7.1 SMS / Text Messaging Terms">
+            <Text style={styles.p}>By providing a phone number and creating an account on Legacy Prime, you consent to receive automated SMS/text messages from Legacy Prime related to your use of the Services. These messages may include:</Text>
+            <Bullet>Account verification codes</Bullet>
+            <Bullet>Job assignment and schedule notifications</Bullet>
+            <Bullet>Subcontractor registration and onboarding invitations</Bullet>
+            <Bullet>Project updates and task reminders</Bullet>
+            <Bullet>Clock in/out confirmations</Bullet>
+          </SubSection>
+
+          <SubSection title="7.2 Message Frequency">
+            <Text style={styles.p}>Message frequency varies based on your account activity. You may receive up to approximately 10 messages per month depending on project activity, job assignments, and account events. Message frequency is not fixed and depends on platform usage.</Text>
+          </SubSection>
+
+          <SubSection title="7.3 Message &amp; Data Rates">
+            <Callout>
+              <Text style={styles.calloutText}><Text style={styles.calloutBold}>Msg &amp; Data rates may apply.</Text> Your mobile carrier's standard messaging and data rates apply to all SMS/text messages sent and received. Legacy Prime is not responsible for any charges from your carrier.</Text>
+            </Callout>
+          </SubSection>
+
+          <SubSection title="7.4 Opt-Out / How to Stop Messages">
+            <Text style={styles.p}>You may opt out of receiving SMS messages at any time by replying <Text style={styles.bold}>STOP</Text> to any message. After opting out, you will receive a confirmation message and no further SMS messages will be sent unless you re-subscribe.</Text>
+            <Text style={styles.p}>You may also opt out by contacting us at support@legacyprime.com.</Text>
+          </SubSection>
+
+          <SubSection title="7.5 Help">
+            <Text style={styles.p}>For help with SMS messaging, reply <Text style={styles.bold}>HELP</Text> to any message, or contact support@legacyprime.com.</Text>
+          </SubSection>
+
+          <SubSection title="7.6 Consent">
+            <Text style={styles.p}>By signing up for Legacy Prime and providing your phone number, you expressly consent to receive transactional and operational SMS/text messages. Consent is not required as a condition of purchase. You can opt out at any time.</Text>
+          </SubSection>
+
+          <SubSection title="7.7 Supported Carriers">
+            <Text style={styles.p}>Messages are supported on all major U.S. carriers including AT&amp;T, T-Mobile, Verizon, Sprint, and others. Service availability may vary by carrier.</Text>
+          </SubSection>
+
+          <SubSection title="7.8 Privacy">
+            <Text style={styles.p}>Your phone number and messaging data are handled in accordance with our Privacy Policy. We do not sell, rent, or share your phone number or opt-in data with third parties for marketing purposes. Your information is used solely to deliver SMS messages related to your use of the Legacy Prime platform.</Text>
+          </SubSection>
         </Section>
 
         {/* Section 8 */}
