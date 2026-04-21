@@ -111,8 +111,15 @@ export default function DashboardScreen() {
         return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
       })
       .reduce((sum, e) => {
-        const ms = new Date(e.clockOut!).getTime() - new Date(e.clockIn).getTime();
-        return sum + ms / 3600000;
+        let ms = new Date(e.clockOut!).getTime() - new Date(e.clockIn).getTime();
+        if (e.lunchBreaks) {
+          e.lunchBreaks.forEach(lunch => {
+            if (lunch.endTime) {
+              ms -= new Date(lunch.endTime).getTime() - new Date(lunch.startTime).getTime();
+            }
+          });
+        }
+        return sum + Math.max(0, ms) / 3600000;
       }, 0);
   }, [clockEntries]);
 
