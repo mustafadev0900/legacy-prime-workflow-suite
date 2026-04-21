@@ -2225,7 +2225,7 @@ export default function CRMScreen() {
               </ScrollView>
 
               <TouchableOpacity
-                style={[styles.submitButton, isAddingClient && styles.submitButtonDisabled]}
+                style={[styles.submitButton, isAddingClient && styles.submitButtonDisabled, { marginBottom: 80 }]}
                 onPress={() => handleAddClient(false)}
                 disabled={isAddingClient}
               >
