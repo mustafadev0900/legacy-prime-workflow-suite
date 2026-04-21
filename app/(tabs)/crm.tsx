@@ -381,6 +381,7 @@ export default function CRMScreen() {
   const [calendarExpanded, setCalendarExpanded] = useState<boolean>(false);
   const [appointmentFormVisible, setAppointmentFormVisible] = useState<boolean>(false);
   const [appointmentFormDate, setAppointmentFormDate] = useState<string>('');
+  const [appointmentFormTime, setAppointmentFormTime] = useState<string>('');
   const [editingAppointment, setEditingAppointment] = useState<import('@/types').Appointment | undefined>();
 
   const salespersons = companyUsers.filter(u => u.role === 'salesperson');
@@ -1563,8 +1564,9 @@ export default function CRMScreen() {
               <CRMCalendar
                 appointments={appointments}
                 clients={clients}
-                onAddAppointment={(date) => {
+                onAddAppointment={(date, time) => {
                   setAppointmentFormDate(date);
+                  setAppointmentFormTime(time || '');
                   setEditingAppointment(undefined);
                   setAppointmentFormVisible(true);
                 }}
@@ -4172,7 +4174,7 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
 
       <AppointmentFormModal
         visible={appointmentFormVisible}
-        onClose={() => { setAppointmentFormVisible(false); setEditingAppointment(undefined); setAppointmentFormDate(''); }}
+        onClose={() => { setAppointmentFormVisible(false); setEditingAppointment(undefined); setAppointmentFormDate(''); setAppointmentFormTime(''); }}
         onSave={async (data) => {
           if (editingAppointment) {
             await updateAppointment(editingAppointment.id, data);
@@ -4185,7 +4187,7 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
           setAppointmentFormVisible(false);
           setEditingAppointment(undefined);
         } : undefined}
-        initial={editingAppointment ?? (appointmentFormDate ? { id: '', companyId: company?.id ?? '', title: '', date: appointmentFormDate } as import('@/types').Appointment : undefined)}
+        initial={editingAppointment ?? (appointmentFormDate ? { id: '', companyId: company?.id ?? '', title: '', date: appointmentFormDate, time: appointmentFormTime || undefined } as import('@/types').Appointment : undefined)}
         clients={clients}
         projects={projects}
         companyId={company?.id ?? ''}
