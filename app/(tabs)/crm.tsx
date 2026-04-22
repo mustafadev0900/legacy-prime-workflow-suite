@@ -1503,14 +1503,16 @@ export default function CRMScreen() {
       <CompanyHeader />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
       >
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets={true}
+        contentContainerStyle={{ paddingBottom: 40 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -2255,7 +2257,7 @@ export default function CRMScreen() {
         onRequestClose={() => setShowAddClientModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <View style={styles.modalOverlay}>
@@ -2271,6 +2273,8 @@ export default function CRMScreen() {
             <ScrollView style={styles.modalBody}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
               <Text style={styles.inputLabel}>Full Name <Text style={styles.requiredStar}>*</Text></Text>
               <TextInput
@@ -2430,7 +2434,7 @@ export default function CRMScreen() {
         onRequestClose={() => setShowEditClientModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <View style={styles.modalOverlay}>
@@ -2446,6 +2450,8 @@ export default function CRMScreen() {
             <ScrollView style={styles.modalBody}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
               <Text style={styles.inputLabel}>Full Name <Text style={styles.requiredStar}>*</Text></Text>
               <TextInput
@@ -2559,7 +2565,7 @@ export default function CRMScreen() {
         onRequestClose={() => setShowMessageModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <View style={styles.modalOverlay}>
@@ -2574,7 +2580,7 @@ export default function CRMScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" style={{ flex: 1 }}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" style={{ flex: 1 }} automaticallyAdjustKeyboardInsets={true} contentContainerStyle={{ paddingBottom: 40 }}>
             <View style={styles.recipientInfo}>
               <Text style={styles.recipientLabel}>Recipients:</Text>
               <Text style={styles.recipientText}>
@@ -2927,7 +2933,7 @@ export default function CRMScreen() {
         onRequestClose={() => setShowAIModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <View style={styles.modalOverlay}>
@@ -2949,6 +2955,8 @@ export default function CRMScreen() {
 
             <ScrollView style={styles.aiMessagesContainer} showsVerticalScrollIndicator={false}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
               {messages.length === 0 && (
                 <View style={styles.aiEmptyState}>
@@ -3054,7 +3062,7 @@ export default function CRMScreen() {
         onRequestClose={() => setShowCallAssistantModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <View style={styles.modalOverlay}>
@@ -3072,6 +3080,8 @@ export default function CRMScreen() {
 
             <ScrollView style={styles.callAssistantScroll} showsVerticalScrollIndicator={false}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
               <View style={styles.callAssistantDescription}>
                 <Text style={styles.callAssistantDescText}>
@@ -4126,7 +4136,7 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
 
       {/* Cold Leads Modal */}
       <Modal
-        visible={showColdLeadsModal}
+        visible={showColdLeadsModal && restoreConfirmClient === null && !restoreSuccessName && coldLeadConfirmClient === null && coldLeadDoneClient === null}
         animationType="fade"
         transparent={true}
         onRequestClose={() => setShowColdLeadsModal(false)}

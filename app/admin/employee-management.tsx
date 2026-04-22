@@ -972,7 +972,7 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
         onRequestClose={() => setShowEditRateModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           <View style={styles.modalOverlay}>

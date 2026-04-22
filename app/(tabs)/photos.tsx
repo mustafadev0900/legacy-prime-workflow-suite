@@ -656,7 +656,7 @@ export default function PhotosScreen() {
         onRequestClose={() => setShowManageCategoriesModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           <Pressable
@@ -690,6 +690,8 @@ export default function PhotosScreen() {
               <Text style={styles.modalLabel}>Existing Categories</Text>
               <ScrollView style={styles.categoriesList} showsVerticalScrollIndicator={false}
             keyboardDismissMode="on-drag"
+            automaticallyAdjustKeyboardInsets={true}
+            contentContainerStyle={{ paddingBottom: 40 }}
           >
                 {photoCategories.map((cat) => (
                   <View key={cat} style={styles.categoryManageItem}>
@@ -761,7 +763,7 @@ export default function PhotosScreen() {
         onRequestClose={handleCancelPreview}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <View style={styles.previewModalOverlay}>
@@ -775,6 +777,8 @@ export default function PhotosScreen() {
 
             <ScrollView style={styles.previewModalScroll} showsVerticalScrollIndicator={false}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
               {selectedImage && (
                 <View style={styles.previewImageContainer}>

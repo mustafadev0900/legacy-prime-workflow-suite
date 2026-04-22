@@ -2321,7 +2321,7 @@ ${pdfDates.length > 0 ? `
       {/* Edit Task Modal */}
       <Modal visible={!!editingTask} transparent animationType="slide" onRequestClose={() => setEditingTask(null)}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.modalOverlay}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
@@ -2341,9 +2341,10 @@ ${pdfDates.length > 0 ? `
                 style={styles.editModalBody}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-              
-          keyboardDismissMode="on-drag"
-        >
+                automaticallyAdjustKeyboardInsets={true}
+                contentContainerStyle={{ paddingBottom: 40 }}
+                keyboardDismissMode="on-drag"
+              >
                 <Text style={styles.editLabel}>Date Range</Text>
                 {(() => {
                   const dur = Math.max(1, parseInt(editDuration) || 1);

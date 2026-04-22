@@ -489,7 +489,7 @@ export default function ChangeOrdersScreen() {
           onRequestClose={() => setModalVisible(false)}
         >
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ flex: 1 }}
           >
             <TouchableOpacity
@@ -497,7 +497,7 @@ export default function ChangeOrdersScreen() {
               activeOpacity={1}
               onPress={() => setModalVisible(false)}
             >
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.modal}
               activeOpacity={1}
               onPress={(e) => e.stopPropagation()}
@@ -511,6 +511,8 @@ export default function ChangeOrdersScreen() {
 
               <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
                 <Text style={styles.modalLabel}>Description *</Text>
                 <TextInput

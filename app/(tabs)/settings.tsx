@@ -362,7 +362,7 @@ export default function SettingsScreen() {
           onRequestClose={() => setShowRateChangeModal(false)}
         >
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ flex: 1 }}
           >
             <View style={styles.modalOverlay}>
@@ -1001,7 +1001,7 @@ export default function SettingsScreen() {
         onRequestClose={() => setShowCompanyProfileModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           <View style={styles.modalOverlay}>
@@ -1016,6 +1016,8 @@ export default function SettingsScreen() {
 
             <ScrollView style={styles.companyFormScroll} showsVerticalScrollIndicator={true}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
               <Text style={styles.formLabel}>Company Logo</Text>
               <View style={styles.logoUploadSection}>

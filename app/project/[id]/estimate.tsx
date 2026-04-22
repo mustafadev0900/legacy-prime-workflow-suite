@@ -3158,7 +3158,7 @@ export default function EstimateScreen() {
         }}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <TouchableOpacity
@@ -3194,6 +3194,8 @@ export default function EstimateScreen() {
             {/* Results List */}
             <ScrollView style={styles.spotlightResults}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
               {spotlightFilteredItems.length === 0 ? (
                 <View style={styles.spotlightEmptyState}>
@@ -4249,7 +4251,7 @@ NEVER respond with plain text. ALWAYS use JSON format above.`;
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={{ flex: 1 }}
       >
       <View style={styles.modalOverlay}>

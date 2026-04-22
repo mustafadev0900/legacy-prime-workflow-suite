@@ -2215,7 +2215,7 @@ export default function TakeoffScreen() {
           onRequestClose={() => setScaleDialogVisible(false)}
         >
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ flex: 1 }}
           >
           <View style={[styles.modalOverlay, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -2226,13 +2226,15 @@ export default function TakeoffScreen() {
                   <X size={24} color="#6B7280" />
                 </TouchableOpacity>
               </View>
-              
+
               <Text style={styles.scaleDialogDescription}>
                 Select a common architectural scale or enter a custom ratio
               </Text>
-              
+
               <ScrollView style={styles.scalePresetsScroll} showsVerticalScrollIndicator={false}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
                 <Text style={styles.scalePresetsTitle}>Common Scales</Text>
                 <View style={styles.scalePresetsGrid}>
@@ -2568,7 +2570,7 @@ export default function TakeoffScreen() {
           onRequestClose={() => setShowAIReview(false)}
         >
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ flex: 1 }}
           >
           <View style={styles.modalOverlay}>
@@ -2597,6 +2599,8 @@ export default function TakeoffScreen() {
 
               <ScrollView style={styles.aiResultsScroll}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
                 <View style={styles.aiItemsTable}>
                   <View style={styles.aiItemsHeader}>

@@ -2850,7 +2850,7 @@ export default function ProjectDetailScreen() {
               onRequestClose={() => setUploadModalVisible(false)}
             >
               <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 style={{ flex: 1 }}
               >
               <TouchableOpacity
@@ -2858,7 +2858,7 @@ export default function ProjectDetailScreen() {
                 activeOpacity={1}
                 onPress={() => setUploadModalVisible(false)}
               >
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.uploadModal}
                   activeOpacity={1}
                   onPress={(e) => e.stopPropagation()}
@@ -2873,6 +2873,8 @@ export default function ProjectDetailScreen() {
                   <Text style={styles.uploadModalLabel}>Category</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categorySelector}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
                     {(['receipts', 'photos', 'reports', 'plans', 'estimates', 'documentation', 'other'] as FileCategory[]).map(cat => {
                       const CategoryIcon = getCategoryIcon(cat);
@@ -3463,7 +3465,7 @@ export default function ProjectDetailScreen() {
         onRequestClose={() => setShowAddPaymentModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1, justifyContent: 'flex-end' }}
         >
           {/* Backdrop */}
@@ -3496,6 +3498,8 @@ export default function ProjectDetailScreen() {
 
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
               {/* Amount */}
               <Text style={{ fontSize: 12, fontWeight: '600', color: '#374151', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 }}>
@@ -3672,7 +3676,7 @@ export default function ProjectDetailScreen() {
         onRequestClose={() => setShowBudgetModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <TouchableOpacity

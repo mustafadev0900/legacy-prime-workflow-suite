@@ -1091,7 +1091,7 @@ export default function FilesNavigationScreen() {
           onRequestClose={() => { setUploadModalVisible(false); setModalCategory(''); }}
         >
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ flex: 1 }}
           >
           <View style={styles.modalOverlay}>
@@ -1219,7 +1219,7 @@ export default function FilesNavigationScreen() {
           onRequestClose={() => setNewFolderModalVisible(false)}
         >
           <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={{ flex: 1 }}
           >
           <View style={styles.modalOverlay}>

@@ -1149,7 +1149,7 @@ ${company?.officePhone || ''}`;
 
       <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <View style={styles.modalContainer}>
@@ -1162,6 +1162,8 @@ ${company?.officePhone || ''}`;
 
           <ScrollView style={styles.modalContent}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
             {/* Error Banner for Web */}
             {formError && Platform.OS === 'web' && (
@@ -1401,7 +1403,7 @@ ${company?.officePhone || ''}`;
 
       <Modal visible={showRequestModal} animationType="slide" presentationStyle="pageSheet">
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <View style={styles.modalContainer}>
@@ -1419,6 +1421,8 @@ ${company?.officePhone || ''}`;
 
           <ScrollView style={styles.modalContent}
           keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+          contentContainerStyle={{ paddingBottom: 40 }}
         >
             {selectedSubcontractor && (
               <View style={styles.requestSubInfo}>
@@ -1762,7 +1766,7 @@ ${company?.officePhone || ''}`;
         onRequestClose={() => setShowSmsPhoneModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <View style={styles.modalOverlay}>
@@ -1859,7 +1863,7 @@ ${company?.officePhone || ''}`;
         onRequestClose={() => setShowEmailModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
         <View style={styles.modalOverlay}>

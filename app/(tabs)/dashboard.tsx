@@ -1714,16 +1714,16 @@ export default function DashboardScreen() {
         onRequestClose={() => setShowCreateModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           <View style={styles.modalOverlay}>
             <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
             <ScrollView
               style={styles.modalScrollView}
-              contentContainerStyle={styles.modalScrollContent}
+              contentContainerStyle={[styles.modalScrollContent, { paddingBottom: 40 }]}
               showsVerticalScrollIndicator={false}
-
+              automaticallyAdjustKeyboardInsets={true}
             keyboardDismissMode="on-drag"
           >
               <View style={styles.modalContent}>
@@ -1856,7 +1856,7 @@ export default function DashboardScreen() {
         }}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           <View style={styles.modalOverlay}>
@@ -1878,6 +1878,8 @@ export default function DashboardScreen() {
               </View>
 
               <ScrollView style={styles.aiModalScroll} showsVerticalScrollIndicator={false}
+                automaticallyAdjustKeyboardInsets={true}
+                contentContainerStyle={{ paddingBottom: 40 }}
             keyboardDismissMode="on-drag"
           >
                 <View style={styles.modalBody}>
@@ -2352,7 +2354,7 @@ export default function DashboardScreen() {
         onRequestClose={() => setShowDashEditClientModal(false)}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={{ flex: 1 }}
         >
           <View style={styles.modalOverlay}>
@@ -2366,6 +2368,8 @@ export default function DashboardScreen() {
               </View>
 
               <ScrollView style={styles.modalBody}
+                automaticallyAdjustKeyboardInsets={true}
+                contentContainerStyle={{ paddingBottom: 40 }}
             keyboardDismissMode="on-drag"
           >
                 <Text style={styles.inputLabel}>Full Name *</Text>
