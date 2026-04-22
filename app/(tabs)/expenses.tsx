@@ -1,6 +1,6 @@
 import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import SkeletonBox from '@/components/SkeletonBox';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 // priceListCategories now comes from AppContext
@@ -25,6 +25,8 @@ export default function ExpensesScreen() {
   }, [user?.role]);
 
   const [refreshing, setRefreshing] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const notesFieldY = useRef(0);
   const onRefresh = useCallback(async () => {
     if (refreshing) return;
     setRefreshing(true);
@@ -656,6 +658,7 @@ export default function ExpensesScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollView}
         contentContainerStyle={{ paddingBottom: 200 }}
         showsVerticalScrollIndicator={false}
@@ -842,6 +845,7 @@ export default function ExpensesScreen() {
             onChangeText={setStore}
           />
 
+          <View onLayout={(e) => { notesFieldY.current = e.nativeEvent.layout.y; }}>
           <Text style={styles.label}>Notes (optional)</Text>
           <TextInput
             style={[styles.input, { minHeight: 60, textAlignVertical: 'top' }]}
@@ -850,7 +854,13 @@ export default function ExpensesScreen() {
             value={notes}
             onChangeText={setNotes}
             multiline
+            onFocus={() => {
+              setTimeout(() => {
+                scrollViewRef.current?.scrollTo({ y: notesFieldY.current - 80, animated: true });
+              }, 300);
+            }}
           />
+          </View>
 
           {validationError && (
             <View style={styles.errorContainer}>

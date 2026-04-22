@@ -2,7 +2,7 @@ import { ActivityIndicator, Alert, Dimensions, Keyboard, KeyboardAvoidingView, L
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 import SkeletonBox from '@/components/SkeletonBox';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import DailyTasksButton from '@/components/DailyTasksButton';
 import { Plus, Mail, MessageSquare, Send, X, CheckSquare, Square, Paperclip, FileText, Calculator, FileSignature, DollarSign, CheckCircle, CreditCard, ClipboardList, Sparkles, Phone, Settings, PhoneIncoming, PhoneOutgoing, Clock, Trash2, Calendar, ChevronDown, ChevronUp, TrendingUp, Users, FileCheck, DollarSign as DollarSignIcon, Camera, Pencil, PauseCircle, PlayCircle, Snowflake, RotateCcw } from 'lucide-react-native';
@@ -323,6 +323,7 @@ export default function CRMScreen() {
 
   const [showAddForm, setShowAddForm] = useState<boolean>(true);
   const [showAddClientModal, setShowAddClientModal] = useState<boolean>(false);
+  const addClientScrollRef = useRef<ScrollView>(null);
   const [isAddingClient, setIsAddingClient] = useState<boolean>(false);
   const [newClientName, setNewClientName] = useState<string>('');
   const [newClientAddress, setNewClientAddress] = useState<string>('');
@@ -2206,6 +2207,11 @@ export default function CRMScreen() {
                 value={newClientJobDetails}
                 onChangeText={setNewClientJobDetails}
                 multiline
+                onFocus={() => {
+                  setTimeout(() => {
+                    addClientScrollRef.current?.scrollToEnd({ animated: true });
+                  }, 300);
+                }}
               />
 
               <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E3A5F', marginTop: 10, marginBottom: 6 }}>Assign Sales Rep</Text>
@@ -2264,7 +2270,7 @@ export default function CRMScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}
+            <ScrollView ref={addClientScrollRef} style={styles.modalBody}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 100 }}
@@ -2372,6 +2378,11 @@ export default function CRMScreen() {
                 value={newClientJobDetails}
                 onChangeText={setNewClientJobDetails}
                 multiline
+                onFocus={() => {
+                  setTimeout(() => {
+                    addClientScrollRef.current?.scrollToEnd({ animated: true });
+                  }, 300);
+                }}
               />
 
               <Text style={[styles.inputLabel, { marginTop: 16 }]}>Assign Sales Rep</Text>
@@ -2572,7 +2583,7 @@ export default function CRMScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 100 }}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" style={{ maxHeight: 500 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 100 }}>
             <View style={styles.recipientInfo}>
               <Text style={styles.recipientLabel}>Recipients:</Text>
               <Text style={styles.recipientText}>
@@ -6533,7 +6544,7 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
   },
   modalBody: {
-    flex: 1,
+    maxHeight: 500,
     paddingBottom: 16,
   },
   modalFooter: {
