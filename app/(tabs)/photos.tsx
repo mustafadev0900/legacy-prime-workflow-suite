@@ -2,7 +2,7 @@ import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platfo
 import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { Camera, Upload, Edit2, X, Check, Plus, Trash2, Settings, LayoutGrid, LayoutList } from 'lucide-react-native';
+import { Camera, Upload, Edit2, X, Check, Plus, Trash2, Settings, LayoutGrid, LayoutList, Monitor, Info } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Photo } from '@/types';
@@ -50,6 +50,7 @@ export default function PhotosScreen() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showProjectPickerModal, setShowProjectPickerModal] = useState<boolean>(false);
   const [isPickingMedia, setIsPickingMedia] = useState<boolean>(false);
+  const [showWebCameraBanner, setShowWebCameraBanner] = useState<boolean>(false);
 
   // Upload progress state
   const uploadProgress = useUploadProgress();
@@ -102,7 +103,8 @@ export default function PhotosScreen() {
     }
 
     if (Platform.OS === 'web') {
-      console.log('Camera not available on web');
+      setShowWebCameraBanner(true);
+      setTimeout(() => setShowWebCameraBanner(false), 4000);
       return;
     }
 
@@ -374,6 +376,19 @@ export default function PhotosScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        {showWebCameraBanner && (
+          <View style={styles.webCameraBanner}>
+            <Monitor size={18} color="#2563EB" />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.webCameraBannerTitle}>Camera not available on web</Text>
+              <Text style={styles.webCameraBannerText}>To take photos, please use the mobile app on your phone or tablet.</Text>
+            </View>
+            <TouchableOpacity onPress={() => setShowWebCameraBanner(false)}>
+              <X size={16} color="#6B7280" />
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.form}>
           <View style={styles.categoryHeader}>
@@ -1716,5 +1731,27 @@ const styles = StyleSheet.create({
   projectOptionBudget: {
     fontSize: 14,
     color: '#6B7280',
+  },
+  webCameraBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    padding: 14,
+    marginHorizontal: 20,
+    marginTop: 12,
+  },
+  webCameraBannerTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#1E40AF',
+    marginBottom: 2,
+  },
+  webCameraBannerText: {
+    fontSize: 13,
+    color: '#3B82F6',
+    lineHeight: 18,
   },
 });

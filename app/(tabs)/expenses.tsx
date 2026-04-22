@@ -8,7 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image } from 'expo-image';
-import { X, Scan, Image as ImageIcon, ChevronDown, Receipt, Upload, File, Package, Wrench, Truck, HardHat, Fuel, Building, Shield, ShieldCheck, FileCheck, FileText, Layers, Car, Monitor, Paperclip, Zap, Phone, Megaphone, Check, Calculator, Scale, BadgeDollarSign, GraduationCap, Hammer, PlaneTakeoff, Coffee, Shirt, Trash2, Warehouse, MoreHorizontal } from 'lucide-react-native';
+import { X, Scan, Image as ImageIcon, ChevronDown, Receipt, Upload, File, Package, Wrench, Truck, HardHat, Fuel, Building, Shield, ShieldCheck, FileCheck, FileText, Layers, Car, Monitor, Paperclip, Zap, Phone, Megaphone, Check, Calculator, Scale, BadgeDollarSign, GraduationCap, Hammer, PlaneTakeoff, Coffee, Shirt, Trash2, Warehouse, MoreHorizontal, Info } from 'lucide-react-native';
 import { generateImageHash, generateOCRFingerprint, getBase64ByteSize } from '@/lib/receipt-duplicate-detection';
 import UploaderBadge from '@/components/UploaderBadge';
 import DocumentScannerModal, { DocumentScanResult } from '@/components/DocumentScannerModal';
@@ -51,6 +51,7 @@ export default function ExpensesScreen() {
   const [ocrData, setOcrData] = useState<any>(null);
   const [serverImageHash, setServerImageHash] = useState<string | null>(null);
   const [showDocumentScanner, setShowDocumentScanner] = useState<boolean>(false);
+  const [showWebScannerBanner, setShowWebScannerBanner] = useState<boolean>(false);
   const [isCompanyExpense, setIsCompanyExpense] = useState<boolean>(false);
   const [overheadCategory, setOverheadCategory] = useState<string>('');
   const [showOverheadPicker, setShowOverheadPicker] = useState<boolean>(false);
@@ -329,6 +330,11 @@ export default function ExpensesScreen() {
   };
 
   const handleScanReceipt = () => {
+    if (Platform.OS === 'web') {
+      setShowWebScannerBanner(true);
+      setTimeout(() => setShowWebScannerBanner(false), 4000);
+      return;
+    }
     setShowDocumentScanner(true);
   };
 
@@ -721,6 +727,18 @@ export default function ExpensesScreen() {
 
 
         <View style={styles.form}>
+          {showWebScannerBanner && (
+            <View style={styles.webScannerBanner}>
+              <Monitor size={18} color="#2563EB" />
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <Text style={styles.webScannerBannerTitle}>Receipt scanner not available on web</Text>
+                <Text style={styles.webScannerBannerText}>To scan receipts with your camera, please use the mobile app. You can still upload receipt images manually.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowWebScannerBanner(false)}>
+                <X size={16} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+          )}
           {/* Prominent AI Scanner — shown when no receipt has been captured yet */}
           {!receiptImage && (
             <>
@@ -1551,5 +1569,26 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontSize: 14,
     fontWeight: '600' as const,
+  },
+  webScannerBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+  },
+  webScannerBannerTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#1E40AF',
+    marginBottom: 2,
+  },
+  webScannerBannerText: {
+    fontSize: 13,
+    color: '#3B82F6',
+    lineHeight: 18,
   },
 });

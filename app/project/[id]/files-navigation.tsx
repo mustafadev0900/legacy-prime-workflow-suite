@@ -2,7 +2,7 @@ import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platfo
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { Folder, Image as ImageIcon, Receipt, FileText, FileCheck, FileSignature, File as FileIcon, ArrowLeft, Plus, Upload, X, Camera, Trash2, ChevronRight, LayoutGrid, LayoutList } from 'lucide-react-native';
+import { Folder, Image as ImageIcon, Receipt, FileText, FileCheck, FileSignature, File as FileIcon, ArrowLeft, Plus, Upload, X, Camera, Trash2, ChevronRight, LayoutGrid, LayoutList, Monitor } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -95,6 +95,7 @@ export default function FilesNavigationScreen() {
   const [s3ProjectFiles, setS3ProjectFiles] = useState<ProjectFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
+  const [showWebCameraBanner, setShowWebCameraBanner] = useState<boolean>(false);
 
   const project = projects.find(p => p.id === id);
 
@@ -382,7 +383,8 @@ export default function FilesNavigationScreen() {
 
   const handleTakePhoto = async () => {
     if (Platform.OS === 'web') {
-      Alert.alert('Not Available', 'Camera is not available on web');
+      setShowWebCameraBanner(true);
+      setTimeout(() => setShowWebCameraBanner(false), 4000);
       return;
     }
 
@@ -1151,6 +1153,19 @@ export default function FilesNavigationScreen() {
                 onChangeText={setFileNotes}
                 textAlignVertical="top"
               />
+
+              {showWebCameraBanner && (
+                <View style={styles.webCameraBanner}>
+                  <Monitor size={18} color="#2563EB" />
+                  <View style={{ flex: 1, marginLeft: 10 }}>
+                    <Text style={styles.webCameraBannerTitle}>Camera not available on web</Text>
+                    <Text style={styles.webCameraBannerText}>To take photos, please use the mobile app. You can still upload files from your computer.</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setShowWebCameraBanner(false)}>
+                    <X size={16} color="#6B7280" />
+                  </TouchableOpacity>
+                </View>
+              )}
 
               <View style={styles.modalActions}>
                 {selectedFolder === 'photos' ? (
@@ -1957,5 +1972,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: '#1F2937',
+  },
+  webCameraBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+  },
+  webCameraBannerTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#1E40AF',
+    marginBottom: 2,
+  },
+  webCameraBannerText: {
+    fontSize: 13,
+    color: '#3B82F6',
+    lineHeight: 18,
   },
 });

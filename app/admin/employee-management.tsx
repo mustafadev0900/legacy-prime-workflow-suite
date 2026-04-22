@@ -1234,42 +1234,26 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
       >
         <View style={styles.modalOverlay}>
           <View style={styles.successModal}>
-            <CheckCircle size={48} color="#10B981" style={{ marginBottom: 16 }} />
             <Text style={styles.successTitle}>Timecard Generated</Text>
 
             {timecardResult && (
               <View style={styles.successStatsContainer}>
-                <View style={styles.successStatRow}>
-                  <Text style={styles.successStatLabel}>Employee</Text>
-                  <Text style={styles.successStatValue}>{timecardResult.employeeName}</Text>
-                </View>
-                <View style={styles.successStatRow}>
-                  <Text style={styles.successStatLabel}>Total Hours</Text>
-                  <Text style={styles.successStatValue}>{timecardResult.totalHours.toFixed(2)}h</Text>
-                </View>
-                <View style={styles.successStatRow}>
-                  <Text style={styles.successStatLabel}>Regular</Text>
-                  <Text style={styles.successStatValue}>{timecardResult.regularHours.toFixed(2)}h</Text>
-                </View>
-                <View style={styles.successStatRow}>
-                  <Text style={styles.successStatLabel}>Overtime</Text>
-                  <Text style={styles.successStatValue}>{timecardResult.overtimeHours.toFixed(2)}h</Text>
-                </View>
-                <View style={styles.successStatRow}>
-                  <Text style={styles.successStatLabel}>Total Earnings</Text>
-                  <Text style={[styles.successStatValue, { color: '#10B981' }]}>
-                    ${timecardResult.totalEarnings.toFixed(2)}
-                  </Text>
-                </View>
+                <Text style={styles.successStatsText}>
+                  Employee: {timecardResult.employeeName}  Total Hours: {timecardResult.totalHours.toFixed(2)}h  Regular: {timecardResult.regularHours.toFixed(2)}h  Overtime: {timecardResult.overtimeHours.toFixed(2)}h  Total Earnings: ${timecardResult.totalEarnings.toFixed(2)}
+                </Text>
               </View>
             )}
 
-            <TouchableOpacity
-              style={styles.successOkButton}
-              onPress={() => setShowTimecardSuccess(false)}
-            >
-              <Text style={styles.successOkText}>OK</Text>
-            </TouchableOpacity>
+            <View style={styles.successDivider} />
+
+            <View style={styles.successFooter}>
+              <TouchableOpacity
+                style={styles.successOkButton}
+                onPress={() => setShowTimecardSuccess(false)}
+              >
+                <Text style={styles.successOkText}>OK</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1950,52 +1934,49 @@ const styles = StyleSheet.create({
   // Success modal
   successModal: {
     backgroundColor: '#1E293B',
-    borderRadius: 20,
-    padding: 32,
+    borderRadius: 12,
+    padding: 20,
     marginHorizontal: 24,
-    alignItems: 'center' as const,
     alignSelf: 'center' as const,
     marginTop: 'auto' as any,
     marginBottom: 'auto' as any,
     width: '90%' as any,
-    maxWidth: 400,
+    maxWidth: 360,
   },
   successTitle: {
-    fontSize: 22,
-    fontWeight: '700' as const,
-    color: '#FFFFFF',
-    marginBottom: 24,
-  },
-  successStatsContainer: {
-    width: '100%' as any,
-    marginBottom: 24,
-  },
-  successStatRow: {
-    flexDirection: 'row' as const,
-    justifyContent: 'space-between' as const,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#334155',
-  },
-  successStatLabel: {
-    fontSize: 14,
-    color: '#94A3B8',
-  },
-  successStatValue: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#FFFFFF',
-  },
-  successOkButton: {
-    backgroundColor: '#10B981',
-    borderRadius: 8,
-    paddingVertical: 14,
-    paddingHorizontal: 48,
-    alignItems: 'center' as const,
-  },
-  successOkText: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: '#FFFFFF',
+    marginBottom: 12,
+  },
+  successStatsContainer: {
+    marginBottom: 12,
+  },
+  successStatsText: {
+    fontSize: 13,
+    color: '#94A3B8',
+    lineHeight: 20,
+  },
+  successDivider: {
+    height: 1,
+    backgroundColor: '#334155',
+    marginBottom: 12,
+  },
+  successFooter: {
+    flexDirection: 'row' as const,
+    justifyContent: 'flex-end' as const,
+  },
+  successOkButton: {
+    borderWidth: 1,
+    borderColor: '#475569',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 20,
+    backgroundColor: '#1E293B',
+  },
+  successOkText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#E2E8F0',
   },
 });
