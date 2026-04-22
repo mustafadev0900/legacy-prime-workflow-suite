@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Dimensions, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Keyboard, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 import SkeletonBox from '@/components/SkeletonBox';
@@ -2207,11 +2207,6 @@ export default function CRMScreen() {
                 value={newClientJobDetails}
                 onChangeText={setNewClientJobDetails}
                 multiline
-                onFocus={() => {
-                  setTimeout(() => {
-                    addClientScrollRef.current?.scrollToEnd({ animated: true });
-                  }, 300);
-                }}
               />
 
               <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E3A5F', marginTop: 10, marginBottom: 6 }}>Assign Sales Rep</Text>
@@ -2256,10 +2251,6 @@ export default function CRMScreen() {
         transparent={true}
         onRequestClose={() => setShowAddClientModal(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
-        >
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
           <View style={styles.modalContent}>
@@ -2273,6 +2264,7 @@ export default function CRMScreen() {
             <ScrollView ref={addClientScrollRef} style={styles.modalBody}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={true}
           contentContainerStyle={{ paddingBottom: 100 }}
         >
               <Text style={styles.inputLabel}>Full Name <Text style={styles.requiredStar}>*</Text></Text>
@@ -2378,11 +2370,6 @@ export default function CRMScreen() {
                 value={newClientJobDetails}
                 onChangeText={setNewClientJobDetails}
                 multiline
-                onFocus={() => {
-                  setTimeout(() => {
-                    addClientScrollRef.current?.scrollToEnd({ animated: true });
-                  }, 300);
-                }}
               />
 
               <Text style={[styles.inputLabel, { marginTop: 16 }]}>Assign Sales Rep</Text>
@@ -2427,7 +2414,6 @@ export default function CRMScreen() {
             </View>
           </View>
         </View>
-        </KeyboardAvoidingView>
       </Modal>
 
       {/* Edit Client Modal */}
@@ -2436,10 +2422,6 @@ export default function CRMScreen() {
         animationType="slide"
         transparent={true}
         onRequestClose={() => setShowEditClientModal(false)}
-        >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
         >
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
@@ -2454,6 +2436,7 @@ export default function CRMScreen() {
             <ScrollView style={styles.modalBody}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={true}
           contentContainerStyle={{ paddingBottom: 100 }}
         >
               <Text style={styles.inputLabel}>Full Name <Text style={styles.requiredStar}>*</Text></Text>
@@ -2558,7 +2541,6 @@ export default function CRMScreen() {
             </View>
           </View>
         </View>
-        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -2567,10 +2549,6 @@ export default function CRMScreen() {
         transparent={true}
         onRequestClose={() => setShowMessageModal(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
-        >
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
           <View style={[styles.modalContent, { overflow: 'hidden' }]}>
@@ -2583,7 +2561,7 @@ export default function CRMScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" style={{ maxHeight: 500 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 100 }}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag" style={styles.modalBody} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={true} contentContainerStyle={{ paddingBottom: 100 }}>
             <View style={styles.recipientInfo}>
               <Text style={styles.recipientLabel}>Recipients:</Text>
               <Text style={styles.recipientText}>
@@ -2695,7 +2673,6 @@ export default function CRMScreen() {
             </View>
           </View>
         </View>
-        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -2935,10 +2912,6 @@ export default function CRMScreen() {
         transparent={true}
         onRequestClose={() => setShowAIModal(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
-        >
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
           <View style={styles.aiModalContent}>
@@ -3054,7 +3027,6 @@ export default function CRMScreen() {
             </View>
           </View>
         </View>
-        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -3063,10 +3035,6 @@ export default function CRMScreen() {
         transparent={true}
         onRequestClose={() => setShowCallAssistantModal(false)}
       >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={{ flex: 1 }}
-        >
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={Keyboard.dismiss} />
           <View style={styles.callAssistantModalContent}>
@@ -3354,7 +3322,6 @@ export default function CRMScreen() {
             </View>
           </View>
         </View>
-        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
