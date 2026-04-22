@@ -1050,7 +1050,8 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
       >
         <View style={styles.modalOverlay}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => { setShowClassifyModal(false); setShowRolePicker(false); }} />
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <Text style={styles.modalTitle}>Classify Employee</Text>
 
             {selectedEmployee && (
@@ -1064,7 +1065,7 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
             <View style={styles.classifyCardsRow}>
               <TouchableOpacity
                 style={[styles.classifyCard, classifyType === 'field' && styles.classifyCardSelected]}
-                onPress={() => { setClassifyType('field'); setClassifyOfficeRole(''); }}
+                onPress={() => { setClassifyType('field'); setClassifyOfficeRole(''); setShowRolePicker(false); }}
               >
                 <View style={[styles.classifyIconWrap, classifyType === 'field' && { backgroundColor: '#F3E8FF' }]}>
                   <HardHat size={28} color={classifyType === 'field' ? '#7C3AED' : '#9CA3AF'} />
@@ -1090,13 +1091,38 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
                 <Text style={styles.classifySectionLabel}>Office Role</Text>
                 <TouchableOpacity
                   style={styles.roleDropdown}
-                  onPress={() => setShowRolePicker(true)}
+                  onPress={() => setShowRolePicker(!showRolePicker)}
                 >
                   <Text style={[styles.roleDropdownText, !classifyOfficeRole && { color: '#9CA3AF' }]}>
                     {classifyOfficeRole || 'Select a role...'}
                   </Text>
-                  <ChevronDown size={20} color="#6B7280" />
+                  <ChevronDown size={20} color="#6B7280" style={showRolePicker ? { transform: [{ rotate: '180deg' }] } : undefined} />
                 </TouchableOpacity>
+
+                {showRolePicker && (
+                  <View style={styles.rolePickerInline}>
+                    {OFFICE_ROLES.map((role) => {
+                      const RoleIcon = role.icon;
+                      const isSelected = classifyOfficeRole === role.name;
+                      return (
+                        <TouchableOpacity
+                          key={role.name}
+                          style={[styles.rolePickerRow, isSelected && { backgroundColor: '#F3E8FF' }]}
+                          onPress={() => {
+                            setClassifyOfficeRole(role.name);
+                            setShowRolePicker(false);
+                          }}
+                        >
+                          <View style={[styles.rolePickerIcon, { backgroundColor: role.bg }]}>
+                            <RoleIcon size={20} color={role.color} />
+                          </View>
+                          <Text style={[styles.rolePickerName, isSelected && { color: '#7C3AED', fontWeight: '600' as const }]}>{role.name}</Text>
+                          {isSelected && <CheckCircle size={20} color="#7C3AED" />}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
               </View>
             )}
 
@@ -1117,42 +1143,6 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
                 </Text>
               </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Office Role Picker Modal */}
-      <Modal
-        visible={showRolePicker}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowRolePicker(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowRolePicker(false)} />
-          <View style={[styles.modalContent, { maxHeight: '80%' }]}>
-            <Text style={styles.modalTitle}>Select Office Role</Text>
-            <ScrollView style={{ marginTop: 8 }}>
-              {OFFICE_ROLES.map((role) => {
-                const RoleIcon = role.icon;
-                const isSelected = classifyOfficeRole === role.name;
-                return (
-                  <TouchableOpacity
-                    key={role.name}
-                    style={[styles.rolePickerRow, isSelected && { backgroundColor: '#F3E8FF' }]}
-                    onPress={() => {
-                      setClassifyOfficeRole(role.name);
-                      setShowRolePicker(false);
-                    }}
-                  >
-                    <View style={[styles.rolePickerIcon, { backgroundColor: role.bg }]}>
-                      <RoleIcon size={20} color={role.color} />
-                    </View>
-                    <Text style={[styles.rolePickerName, isSelected && { color: '#7C3AED', fontWeight: '600' as const }]}>{role.name}</Text>
-                    {isSelected && <CheckCircle size={20} color="#7C3AED" />}
-                  </TouchableOpacity>
-                );
-              })}
             </ScrollView>
           </View>
         </View>
@@ -1880,6 +1870,15 @@ const styles = StyleSheet.create({
   roleDropdownText: {
     fontSize: 15,
     color: '#1F2937',
+  },
+  rolePickerInline: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    maxHeight: 280,
+    overflow: 'hidden' as const,
   },
   // Role picker rows
   rolePickerRow: {
