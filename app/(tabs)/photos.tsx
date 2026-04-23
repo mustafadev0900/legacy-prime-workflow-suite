@@ -385,16 +385,15 @@ export default function PhotosScreen() {
       const fileName = urlParts[urlParts.length - 1]?.split('?')[0] || `photo-${Date.now()}.jpg`;
 
       if (Platform.OS === 'web') {
-        const response = await fetch(fullScreenPhoto.url);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
+        // Direct link avoids CORS — S3 doesn't set Access-Control-Allow-Origin
         const link = document.createElement('a');
-        link.href = blobUrl;
+        link.href = fullScreenPhoto.url;
         link.download = fileName;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        URL.revokeObjectURL(blobUrl);
       } else {
         const file = new File(Paths.cache, fileName);
         const response = await fetch(fullScreenPhoto.url);
