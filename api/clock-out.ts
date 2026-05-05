@@ -1,12 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { getActorName, notifyCompanyAdmins } from '../backend/lib/notifyAdmins.js';
+import { applyCors } from './lib/cors.js';
 
 export const config = {
   maxDuration: 30,
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return;
   console.log('[ClockOut] ===== API ROUTE STARTED =====');
   console.log('[ClockOut] Method:', req.method);
 
@@ -16,9 +18,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { entryId, workPerformed, lunchBreaks, category } = req.body;
+    const { entryId, workPerformed, lunchBreaks, category, clockOutLocation } = req.body;
 
     console.log('[ClockOut] Clocking out entry:', entryId);
+    console.log('[ClockOut] clockOutLocation received:', clockOutLocation
+      ? `lat=${clockOutLocation.latitude ?? clockOutLocation.lat}, lng=${clockOutLocation.longitude ?? clockOutLocation.lng}`
+      : 'NOT PROVIDED');
 
     // Validate required fields
     if (!entryId) {
@@ -56,6 +61,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updateData.category = category;
     }
 
+    // Only persist location if it's a real GPS fix — (0,0) means the device
+    // could not obtain a position (permission denied, timeout, etc.).
+    const lat = clockOutLocation?.latitude ?? clockOutLocation?.lat ?? 0;
+    const lng = clockOutLocation?.longitude ?? clockOutLocation?.lng ?? 0;
+    if (clockOutLocation && (lat !== 0 || lng !== 0)) {
+      updateData.clock_out_location = { latitude: lat, longitude: lng };
+      console.log('[ClockOut] Storing clock_out_location:', lat, lng);
+    } else {
+      console.warn('[ClockOut] clock_out_location NOT stored — location is (0,0) or missing. lat:', lat, 'lng:', lng);
+    }
+
     const { data, error } = await supabase
       .from('clock_entries')
       .update(updateData)
@@ -77,6 +93,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('[ClockOut] ===== API ROUTE COMPLETED =====');
     console.log('[ClockOut] Clock entry updated:', data.id);
+
+    // Remove live location row so the employee disappears from project maps immediately.
+    await supabase.from('worker_live_locations').delete().eq('employee_id', data.employee_id);
 
     // Notify admins — must complete BEFORE responding (Vercel freezes after res.json)
     try {
@@ -110,6 +129,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         clockIn: data.clock_in,
         clockOut: data.clock_out,
         location: data.location,
+        clockOutLocation: data.clock_out_location || undefined,
         workPerformed: data.work_performed || undefined,
         category: data.category || undefined,
         lunchBreaks: data.lunch_breaks || undefined,

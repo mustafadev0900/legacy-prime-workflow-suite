@@ -1,8 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { applyCors } from './lib/cors.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Only allow GET
+  if (applyCors(req, res)) return;
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
