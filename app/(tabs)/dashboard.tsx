@@ -1546,7 +1546,7 @@ export default function DashboardScreen() {
           </ScrollView>
         )}
 
-        {isAdmin && workerPins.length > 0 && (
+        {/* {isAdmin && workerPins.length > 0 && (
           <View style={styles.liveWorkersSection}>
             <View style={styles.liveWorkersHeader}>
               <View style={styles.liveWorkersDot} />
@@ -1555,7 +1555,7 @@ export default function DashboardScreen() {
             </View>
             <WorkerLocationMap workers={workerPins} height={260} />
           </View>
-        )}
+        )} */}
 
         <CompactBusinessCosts
           expenses={expenses}
