@@ -2,12 +2,14 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { requireAuth } from './lib/auth-helper.js';
 import { getActorName, notifyCompanyAdmins } from '../backend/lib/notifyAdmins.js';
+import { applyCors } from './lib/cors.js';
 
 export const config = {
   maxDuration: 30,
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return;
   console.log('[AddExpense] ===== API ROUTE STARTED =====');
   console.log('[AddExpense] Method:', req.method);
 

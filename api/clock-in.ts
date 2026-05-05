@@ -1,12 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { getActorName, notifyCompanyAdmins } from '../backend/lib/notifyAdmins.js';
+import { applyCors } from './lib/cors.js';
 
 export const config = {
   maxDuration: 30,
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return;
   console.log('[ClockIn] ===== API ROUTE STARTED =====');
   console.log('[ClockIn] Method:', req.method);
 
@@ -61,7 +63,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         project_id: projectId || null,
         office_role: officeRole || null,
         clock_in: new Date().toISOString(),
-        location: location || { latitude: 0, longitude: 0 },
+        location: (location?.latitude || location?.lat)
+          ? { latitude: location.latitude ?? location.lat, longitude: location.longitude ?? location.lng }
+          : null,
         work_performed: workPerformed || null,
         category: category || null,
         hourly_rate: snapshotRate,
