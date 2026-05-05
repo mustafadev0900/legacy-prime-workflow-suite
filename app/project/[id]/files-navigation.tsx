@@ -17,6 +17,8 @@ import { compressImage } from '@/lib/upload-utils';
 import { generateUUID } from '@/utils/uuid';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
+import { DownloadResultModal, type DownloadResult } from '@/components/DownloadResultModal';
+import { DesktopSavableImage } from '@/components/DesktopSavableImage';
 
 type FolderType = 'photos' | 'receipts' | 'permit-files' | 'inspections' | 'agreements' | 'videos';
 
@@ -106,6 +108,7 @@ export default function FilesNavigationScreen() {
   const [fullScreenImage, setFullScreenImage] = useState<ViewableImageItem | null>(null);
   const [fullScreenImageList, setFullScreenImageList] = useState<ViewableImageItem[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadResult, setDownloadResult] = useState<DownloadResult>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [modalCategory, setModalCategory] = useState<string>('');
   const [photoViewMode, setPhotoViewMode] = useState<'grid' | 'list'>('grid');
@@ -167,6 +170,14 @@ export default function FilesNavigationScreen() {
     uploader: null,
   }), []);
 
+  // Zoom callbacks must be declared before any callback that lists them as a dependency.
+  const updateZoomPercent = useCallback((s: number) => { setZoomPercent(Math.round(s * 100)); }, []);
+  const resetZoomImmediate = useCallback(() => {
+    zScale.value = 1; zTranslateX.value = 0; zTranslateY.value = 0;
+    zSavedScale.value = 1; zSavedTranslateX.value = 0; zSavedTranslateY.value = 0;
+    setZoomPercent(100);
+  }, []);
+
   const openImageFullScreen = useCallback((item: ViewableImageItem, list: ViewableImageItem[]) => {
     setFullScreenImageList(list);
     setFullScreenImage(item);
@@ -205,6 +216,7 @@ export default function FilesNavigationScreen() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        setDownloadResult({ status: 'success', message: `Saved as ${fileName}` });
       } else {
         const file = new FSFile(Paths.cache, fileName);
         const response = await fetch(fullScreenImage.uri);
@@ -219,29 +231,21 @@ export default function FilesNavigationScreen() {
         const canShare = await Sharing.isAvailableAsync();
         if (canShare) {
           await Sharing.shareAsync(file.uri);
-        } else {
-          Alert.alert('Downloaded', `File saved to: ${file.uri}`);
         }
+        setDownloadResult({ status: 'success', message: `Saved as ${fileName}` });
       }
     } catch (error: any) {
       console.error('[FilesNav] Download error:', error);
-      if (Platform.OS === 'web') {
-        window.alert('Failed to download file. Please try again.');
-      } else {
-        Alert.alert('Download Failed', 'Could not download the file. Please try again.');
-      }
+      setDownloadResult({
+        status: 'error',
+        message: error?.message || 'Could not download the file. Please try again.',
+      });
     } finally {
       setIsDownloading(false);
     }
   }, [fullScreenImage, isDownloading]);
 
   // Zoom handlers
-  const updateZoomPercent = useCallback((s: number) => { setZoomPercent(Math.round(s * 100)); }, []);
-  const resetZoomImmediate = useCallback(() => {
-    zScale.value = 1; zTranslateX.value = 0; zTranslateY.value = 0;
-    zSavedScale.value = 1; zSavedTranslateX.value = 0; zSavedTranslateY.value = 0;
-    setZoomPercent(100);
-  }, []);
   const handleZoomIn = useCallback(() => {
     const next = Math.min(MAX_ZOOM, zScale.value + ZOOM_STEP);
     zScale.value = withSpring(next, { damping: 20, stiffness: 200 });
@@ -268,15 +272,47 @@ export default function FilesNavigationScreen() {
       zSavedTranslateX.value = zTranslateX.value; zSavedTranslateY.value = zTranslateY.value;
       runOnJS(updateZoomPercent)(zScale.value);
     }), [updateZoomPercent]);
+  // Keep stable references for swipe-nav triggers inside the pan worklet.
+  const handleNextImageRef = useRef<() => void>(() => {});
+  const handlePrevImageRef = useRef<() => void>(() => {});
+  handleNextImageRef.current = handleNextImage;
+  handlePrevImageRef.current = handlePrevImage;
+  const triggerNextImage = useCallback(() => { handleNextImageRef.current(); }, []);
+  const triggerPrevImage = useCallback(() => { handlePrevImageRef.current(); }, []);
+
   const panGesture = useMemo(() => Gesture.Pan()
     .onStart(() => { 'worklet'; zSavedTranslateX.value = zTranslateX.value; zSavedTranslateY.value = zTranslateY.value; })
-    .onUpdate((e) => { 'worklet'; if (zScale.value <= 1) return; zTranslateX.value = zSavedTranslateX.value + e.translationX; zTranslateY.value = zSavedTranslateY.value + e.translationY; })
-    .onEnd(() => { 'worklet';
-      const maxTx = zContainerWidth.value * (zScale.value - 1) / 2;
-      const maxTy = zContainerHeight.value * (zScale.value - 1) / 2;
-      if (Math.abs(zTranslateX.value) > maxTx) zTranslateX.value = withSpring(Math.sign(zTranslateX.value) * maxTx);
-      if (Math.abs(zTranslateY.value) > maxTy) zTranslateY.value = withSpring(Math.sign(zTranslateY.value) * maxTy);
-      zSavedTranslateX.value = zTranslateX.value; zSavedTranslateY.value = zTranslateY.value;
+    .onUpdate((e) => {
+      'worklet';
+      if (zScale.value <= 1) {
+        zTranslateX.value = e.translationX;
+      } else {
+        zTranslateX.value = zSavedTranslateX.value + e.translationX;
+        zTranslateY.value = zSavedTranslateY.value + e.translationY;
+      }
+    })
+    .onEnd((e) => { 'worklet';
+      if (zScale.value <= 1) {
+        const SWIPE_DIST = 80;
+        const SWIPE_VEL = 500;
+        const tx = zTranslateX.value;
+        const vx = e.velocityX;
+        if (tx < -SWIPE_DIST || vx < -SWIPE_VEL) {
+          runOnJS(triggerNextImage)();
+        } else if (tx > SWIPE_DIST || vx > SWIPE_VEL) {
+          runOnJS(triggerPrevImage)();
+        }
+        zTranslateX.value = withSpring(0, { damping: 22, stiffness: 220 });
+        zTranslateY.value = withSpring(0, { damping: 22, stiffness: 220 });
+        zSavedTranslateX.value = 0;
+        zSavedTranslateY.value = 0;
+      } else {
+        const maxTx = zContainerWidth.value * (zScale.value - 1) / 2;
+        const maxTy = zContainerHeight.value * (zScale.value - 1) / 2;
+        if (Math.abs(zTranslateX.value) > maxTx) zTranslateX.value = withSpring(Math.sign(zTranslateX.value) * maxTx);
+        if (Math.abs(zTranslateY.value) > maxTy) zTranslateY.value = withSpring(Math.sign(zTranslateY.value) * maxTy);
+        zSavedTranslateX.value = zTranslateX.value; zSavedTranslateY.value = zTranslateY.value;
+      }
     }), []);
   const doubleTapGesture = useMemo(() => Gesture.Tap().numberOfTaps(2).onEnd(() => {
     'worklet';
@@ -1585,11 +1621,12 @@ export default function FilesNavigationScreen() {
                     onLayout={onImageContainerLayout}
                   >
                     <Animated.View style={[styles.fsImage, animatedImageStyle]}>
-                      <Image
+                      <DesktopSavableImage
                         source={{ uri: fullScreenImage.uri }}
                         style={{ width: '100%', height: '100%' }}
                         contentFit="contain"
                         transition={200}
+                        alt={fullScreenImage.name || 'Image'}
                       />
                     </Animated.View>
                   </View>
@@ -1653,6 +1690,8 @@ export default function FilesNavigationScreen() {
                 ) : null}
               </View>
             )}
+
+            <DownloadResultModal result={downloadResult} onDismiss={() => setDownloadResult(null)} />
           </View>
         </Modal>
       </View>

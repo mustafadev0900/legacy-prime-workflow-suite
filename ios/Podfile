@@ -55,6 +55,16 @@ target 'LegacyPrimeWorkflowSuite' do
   )
 
   post_install do |installer|
+    # Fix STPPaymentStatus enum type mismatch in stripe-react-native 0.50.3.
+    # The ObjC forward declaration in StripeSwiftInterop.h uses NSUInteger but
+    # the Swift compiler generates NSInteger, causing a redeclaration error.
+    Dir.glob("#{installer.sandbox.root}/**/*.h").each do |header|
+      content = File.read(header) rescue next
+      if content.include?('NS_ENUM(NSUInteger, STPPaymentStatus)')
+        File.write(header, content.gsub('NS_ENUM(NSUInteger, STPPaymentStatus)', 'NS_ENUM(NSInteger, STPPaymentStatus)'))
+      end
+    end
+
     react_native_post_install(
       installer,
       config[:reactNativePath],

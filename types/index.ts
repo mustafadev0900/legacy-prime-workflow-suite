@@ -179,6 +179,11 @@ export interface DailyLogReminder {
   notifiedAt?: string;
 }
 
+export interface GeoPoint {
+  latitude: number;
+  longitude: number;
+}
+
 export interface ClockEntry {
   id: string;
   employeeId: string;
@@ -187,15 +192,19 @@ export interface ClockEntry {
   officeRole?: string;
   clockIn: string;
   clockOut?: string;
-  location: {
-    latitude: number;
-    longitude: number;
-  };
+  /** GPS coords captured at the moment of clock-in. */
+  location: GeoPoint;
+  /** GPS coords captured at the moment of clock-out. Absent on legacy entries. */
+  clockOutLocation?: GeoPoint;
   workPerformed?: string;
   category?: string;
   lunchBreaks?: {
     startTime: string;
     endTime?: string;
+    /** GPS coords captured when the lunch break started. */
+    startLocation?: GeoPoint;
+    /** GPS coords captured when the lunch break ended. */
+    endLocation?: GeoPoint;
   }[];
   /** Rate snapshotted at clock-in time. Null for legacy entries (pre-migration). */
   hourlyRate?: number;
@@ -516,6 +525,7 @@ export interface ScheduledTask {
   updatedAt?: string;
   assignedEmployeeIds?: string[];       // IDs of employees assigned to this task
   assignedSubcontractorIds?: string[];  // IDs of subcontractors assigned to this task
+  reminderSent?: boolean;               // True once the day-before reminder has fired
 }
 
 /**

@@ -1,8 +1,8 @@
-import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, InputAccessoryView, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { Camera, Upload, Edit2, X, Check, Plus, Trash2, Settings, LayoutGrid, LayoutList, Monitor, Info, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react-native';
+import { Camera, Upload, Edit2, X, Check, Plus, Trash2, Settings, LayoutGrid, LayoutList, Monitor, Info, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Calendar } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Photo } from '@/types';
@@ -13,6 +13,11 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
+import { DownloadResultModal, type DownloadResult } from '@/components/DownloadResultModal';
+import { DesktopSavableImage } from '@/components/DesktopSavableImage';
+import { ExpandableNotes } from '@/components/ExpandableNotes';
+
+const KEYBOARD_ACCESSORY_ID = 'photos-preview-keyboard-done';
 
 export default function PhotosScreen() {
   const { user, photos, addPhoto, updatePhoto, deletePhoto, photoCategories, priceListCategories, addPhotoCategory, updatePhotoCategory, deletePhotoCategory, company, projects, refreshPhotos, isLoading, isCompanyReloading } = useApp();
@@ -54,12 +59,14 @@ export default function PhotosScreen() {
   const [previewNotes, setPreviewNotes] = useState<string>('');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showProjectPickerModal, setShowProjectPickerModal] = useState<boolean>(false);
-  const [isPickingMedia, setIsPickingMedia] = useState<boolean>(false);
+  const [isPickingMedia, setIsPickingMedia] = useState<'camera' | 'gallery' | false>(false);
   const [showWebCameraBanner, setShowWebCameraBanner] = useState<boolean>(false);
 
   // Full-screen photo preview
   const [fullScreenPhoto, setFullScreenPhoto] = useState<Photo | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadResult, setDownloadResult] = useState<DownloadResult>(null);
+
 
   // Zoom state
   const [zoomPercent, setZoomPercent] = useState(100);
@@ -72,9 +79,13 @@ export default function PhotosScreen() {
   const containerWidth = useSharedValue(0);
   const containerHeight = useSharedValue(0);
   const fsImageWebRef = useRef<View>(null);
+  const galleryScrollRef = useRef<ScrollView>(null);
+  const galleryScrollY = useRef(0);
 
   const filteredPhotos = useMemo(() => {
-    return photos.filter(photo => !selectedProjectId || photo.projectId === selectedProjectId);
+    return photos
+      .filter(photo => !selectedProjectId || photo.projectId === selectedProjectId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [photos, selectedProjectId]);
 
   const fullScreenIndex = useMemo(() => {
@@ -101,7 +112,7 @@ export default function PhotosScreen() {
       return;
     }
 
-    setIsPickingMedia(true);
+    setIsPickingMedia('gallery');
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
@@ -138,7 +149,7 @@ export default function PhotosScreen() {
       return;
     }
 
-    setIsPickingMedia(true);
+    setIsPickingMedia('camera');
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
@@ -423,6 +434,14 @@ export default function PhotosScreen() {
     containerHeight.value = e.nativeEvent.layout.height;
   }, []);
 
+  // Refs used inside the pan worklet so the gesture never captures stale
+  // handlers. handleNextPhoto/handlePrevPhoto are defined later and change
+  // whenever fullScreenIndex changes; direct deps would cause a TDZ error.
+  const handleNextPhotoRef = useRef<() => void>(() => {});
+  const handlePrevPhotoRef = useRef<() => void>(() => {});
+  const triggerNextPhoto = useCallback(() => { handleNextPhotoRef.current(); }, []);
+  const triggerPrevPhoto = useCallback(() => { handlePrevPhotoRef.current(); }, []);
+
   const pinchGesture = useMemo(() =>
     Gesture.Pinch()
       .onStart(() => {
@@ -462,22 +481,45 @@ export default function PhotosScreen() {
       })
       .onUpdate((e) => {
         'worklet';
-        if (scale.value <= 1) return;
-        translateX.value = savedTranslateX.value + e.translationX;
-        translateY.value = savedTranslateY.value + e.translationY;
+        if (scale.value <= 1) {
+          // Not zoomed — follow finger horizontally for swipe-nav preview
+          translateX.value = e.translationX;
+        } else {
+          // Zoomed — pan the image in both axes
+          translateX.value = savedTranslateX.value + e.translationX;
+          translateY.value = savedTranslateY.value + e.translationY;
+        }
       })
-      .onEnd(() => {
+      .onEnd((e) => {
         'worklet';
-        const maxTx = containerWidth.value * (scale.value - 1) / 2;
-        const maxTy = containerHeight.value * (scale.value - 1) / 2;
-        if (Math.abs(translateX.value) > maxTx) {
-          translateX.value = withSpring(Math.sign(translateX.value) * maxTx);
+        if (scale.value <= 1) {
+          // Swipe-nav: distance or velocity threshold triggers next/prev
+          const SWIPE_DIST = 80;
+          const SWIPE_VEL = 500;
+          const tx = translateX.value;
+          const vx = e.velocityX;
+          if (tx < -SWIPE_DIST || vx < -SWIPE_VEL) {
+            runOnJS(triggerNextPhoto)();
+          } else if (tx > SWIPE_DIST || vx > SWIPE_VEL) {
+            runOnJS(triggerPrevPhoto)();
+          }
+          translateX.value = withSpring(0, { damping: 22, stiffness: 220 });
+          translateY.value = withSpring(0, { damping: 22, stiffness: 220 });
+          savedTranslateX.value = 0;
+          savedTranslateY.value = 0;
+        } else {
+          // Clamp pan within zoom bounds
+          const maxTx = containerWidth.value * (scale.value - 1) / 2;
+          const maxTy = containerHeight.value * (scale.value - 1) / 2;
+          if (Math.abs(translateX.value) > maxTx) {
+            translateX.value = withSpring(Math.sign(translateX.value) * maxTx);
+          }
+          if (Math.abs(translateY.value) > maxTy) {
+            translateY.value = withSpring(Math.sign(translateY.value) * maxTy);
+          }
+          savedTranslateX.value = translateX.value;
+          savedTranslateY.value = translateY.value;
         }
-        if (Math.abs(translateY.value) > maxTy) {
-          translateY.value = withSpring(Math.sign(translateY.value) * maxTy);
-        }
-        savedTranslateX.value = translateX.value;
-        savedTranslateY.value = translateY.value;
       }),
     []
   );
@@ -551,6 +593,10 @@ export default function PhotosScreen() {
   const handleCloseFullScreen = useCallback(() => {
     resetZoomImmediate();
     setFullScreenPhoto(null);
+    const y = galleryScrollY.current;
+    requestAnimationFrame(() => {
+      galleryScrollRef.current?.scrollTo({ y, animated: false });
+    });
   }, [resetZoomImmediate]);
 
   const handleNextPhoto = useCallback(() => {
@@ -564,6 +610,10 @@ export default function PhotosScreen() {
     resetZoomImmediate();
     setFullScreenPhoto(filteredPhotos[fullScreenIndex - 1]);
   }, [fullScreenIndex, filteredPhotos, resetZoomImmediate]);
+
+  // Keep the pan-gesture worklet in sync with the latest handlers.
+  handleNextPhotoRef.current = handleNextPhoto;
+  handlePrevPhotoRef.current = handlePrevPhoto;
 
   const handleDownloadPhoto = useCallback(async () => {
     if (!fullScreenPhoto?.url || isDownloading) return;
@@ -582,6 +632,7 @@ export default function PhotosScreen() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        setDownloadResult({ status: 'success', message: `Saved as ${fileName}` });
       } else {
         const file = new File(Paths.cache, fileName);
         const response = await fetch(fullScreenPhoto.url);
@@ -596,17 +647,15 @@ export default function PhotosScreen() {
         const canShare = await Sharing.isAvailableAsync();
         if (canShare) {
           await Sharing.shareAsync(file.uri);
-        } else {
-          Alert.alert('Downloaded', `Photo saved to: ${file.uri}`);
         }
+        setDownloadResult({ status: 'success', message: `Saved as ${fileName}` });
       }
     } catch (error: any) {
       console.error('[Photos] Download error:', error);
-      if (Platform.OS === 'web') {
-        window.alert('Failed to download photo. Please try again.');
-      } else {
-        Alert.alert('Download Failed', 'Could not download the photo. Please try again.');
-      }
+      setDownloadResult({
+        status: 'error',
+        message: error?.message || 'Could not download the photo. Please try again.',
+      });
     } finally {
       setIsDownloading(false);
     }
@@ -615,30 +664,34 @@ export default function PhotosScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
+        ref={galleryScrollRef}
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
+        contentInsetAdjustmentBehavior="never"
+        onScroll={(e) => { galleryScrollY.current = e.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={16}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.header}>
           <Text style={styles.title}>Photos</Text>
           <View style={styles.headerButtons}>
             <TouchableOpacity
-              style={[styles.headerButton, isPickingMedia && styles.headerButtonDisabled]}
+              style={[styles.headerButton, isPickingMedia !== false && styles.headerButtonDisabled]}
               onPress={takePhoto}
-              disabled={isPickingMedia}
+              disabled={isPickingMedia !== false}
             >
-              {isPickingMedia
+              {isPickingMedia === 'camera'
                 ? <ActivityIndicator size="small" color="#FFFFFF" />
                 : <Camera size={20} color="#FFFFFF" />}
               <Text style={styles.headerButtonText}>Take Photo</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.headerButton, isPickingMedia && styles.headerButtonDisabled]}
+              style={[styles.headerButton, isPickingMedia !== false && styles.headerButtonDisabled]}
               onPress={pickImage}
-              disabled={isPickingMedia}
+              disabled={isPickingMedia !== false}
             >
-              {isPickingMedia
+              {isPickingMedia === 'gallery'
                 ? <ActivityIndicator size="small" color="#FFFFFF" />
                 : <Upload size={20} color="#FFFFFF" />}
               <Text style={styles.headerButtonText}>Upload Photo</Text>
@@ -730,7 +783,12 @@ export default function PhotosScreen() {
             {filteredPhotos.map((photo) => (
               <View key={photo.id} style={styles.galleryItem}>
                 <TouchableOpacity activeOpacity={0.8} onPress={() => handlePhotoPress(photo)}>
-                  <Image source={{ uri: photo.url }} style={styles.thumbnail} contentFit="cover" />
+                  <DesktopSavableImage
+                    source={{ uri: photo.url }}
+                    style={styles.thumbnail}
+                    contentFit="cover"
+                    alt={photo.notes || photo.category || 'Photo'}
+                  />
                 </TouchableOpacity>
 
                 <View style={styles.thumbnailFooter}>
@@ -803,6 +861,19 @@ export default function PhotosScreen() {
                   {photo.notes && (
                     <Text style={styles.photoNotes} numberOfLines={2}>{photo.notes}</Text>
                   )}
+
+                  {photo.date && (
+                    <View style={styles.photoDateRow}>
+                      <Calendar size={12} color="#6B7280" />
+                      <Text style={styles.photoDateText}>
+                        {new Date(photo.date).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
             ))}
@@ -811,12 +882,25 @@ export default function PhotosScreen() {
           <View>
             {filteredPhotos.map((photo) => (
               <TouchableOpacity key={photo.id} style={styles.listRow} activeOpacity={0.7} onPress={() => handlePhotoPress(photo)}>
-                <Image source={{ uri: photo.url }} style={styles.listThumbnail} contentFit="cover" />
+                <DesktopSavableImage
+                  source={{ uri: photo.url }}
+                  style={styles.listThumbnail}
+                  contentFit="cover"
+                  alt={photo.notes || photo.category || 'Photo'}
+                />
                 <View style={styles.listInfo}>
                   <Text style={styles.listCategory} numberOfLines={1}>{photo.category}</Text>
                   {photo.uploader && <Text style={styles.listUploader} numberOfLines={1}>{photo.uploader.name}</Text>}
                   {photo.notes && <Text style={styles.listNotes} numberOfLines={1}>{photo.notes}</Text>}
-                  <Text style={styles.listDate}>{photo.date}</Text>
+                  {photo.date && (
+                    <Text style={styles.listDate}>
+                      {new Date(photo.date).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </Text>
+                  )}
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   {photo.uploadedBy === user?.id && <TouchableOpacity onPress={() => handleEditCategory(photo)} style={styles.editButton}>
@@ -1030,11 +1114,11 @@ export default function PhotosScreen() {
         onRequestClose={handleCancelPreview}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? undefined : 'height'}
           style={{ flex: 1 }}
         >
-        <View style={styles.previewModalOverlay}>
-          <View style={styles.previewModalContent}>
+        <Pressable style={styles.previewModalOverlay} onPress={Keyboard.dismiss}>
+          <Pressable style={styles.previewModalContent} onPress={(e) => e.stopPropagation()}>
             <View style={styles.previewModalHeader}>
               <Text style={styles.previewModalTitle}>Preview Photo</Text>
               <TouchableOpacity onPress={handleCancelPreview}>
@@ -1042,11 +1126,14 @@ export default function PhotosScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.previewModalScroll} showsVerticalScrollIndicator={false}
-          keyboardDismissMode="on-drag"
-          automaticallyAdjustKeyboardInsets={true}
-          contentContainerStyle={{ paddingBottom: 40 }}
-        >
+            <ScrollView
+              style={styles.previewModalScroll}
+              showsVerticalScrollIndicator={false}
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+              contentContainerStyle={{ paddingBottom: 40 }}
+            >
               {selectedImage && (
                 <View style={styles.previewImageContainer}>
                   <Image
@@ -1065,6 +1152,7 @@ export default function PhotosScreen() {
                   onChangeText={setTempCategory}
                   placeholder="Enter or edit category..."
                   placeholderTextColor="#9CA3AF"
+                  inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_ACCESSORY_ID : undefined}
                 />
                 
                 <Text style={styles.previewLabel}>Quick Select</Text>
@@ -1103,6 +1191,7 @@ export default function PhotosScreen() {
                   onChangeText={setPreviewNotes}
                   multiline
                   numberOfLines={4}
+                  inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_ACCESSORY_ID : undefined}
                 />
               </View>
             </ScrollView>
@@ -1143,39 +1232,9 @@ export default function PhotosScreen() {
                 </View>
               </View>
             )}
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
         </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Upload Progress Modal */}
-      <Modal
-        visible={uploadProgress.isUploading}
-        transparent
-        animationType="fade"
-      >
-        <View style={styles.uploadOverlay}>
-          <View style={styles.uploadModal}>
-            <ActivityIndicator size="large" color="#2563EB" />
-            <Text style={styles.uploadTitle}>
-              {uploadProgress.phase === 'compressing' && 'Compressing image...'}
-              {uploadProgress.phase === 'uploading' && 'Uploading to cloud...'}
-              {uploadProgress.phase === 'complete' && 'Upload complete!'}
-            </Text>
-            <Text style={styles.uploadProgress}>{uploadProgress.progress}%</Text>
-            <View style={styles.progressBarContainer}>
-              <View
-                style={[
-                  styles.progressBar,
-                  { width: `${uploadProgress.progress}%` }
-                ]}
-              />
-            </View>
-            {uploadProgress.error && (
-              <Text style={styles.uploadError}>{uploadProgress.error}</Text>
-            )}
-          </View>
-        </View>
       </Modal>
 
       {/* Project Picker Modal */}
@@ -1298,11 +1357,12 @@ export default function PhotosScreen() {
                   onLayout={onImageContainerLayout}
                 >
                   <Animated.View style={[styles.fsImage, animatedImageStyle]}>
-                    <Image
+                    <DesktopSavableImage
                       source={{ uri: fullScreenPhoto.url }}
                       style={{ width: '100%', height: '100%' }}
                       contentFit="contain"
                       transition={200}
+                      alt={fullScreenPhoto.notes || fullScreenPhoto.category || 'Photo'}
                     />
                   </Animated.View>
                 </View>
@@ -1374,14 +1434,31 @@ export default function PhotosScreen() {
 
               {/* Notes */}
               {fullScreenPhoto.notes ? (
-                <Text style={styles.fsNotes} numberOfLines={3}>
-                  {fullScreenPhoto.notes}
-                </Text>
+                <ExpandableNotes
+                  text={fullScreenPhoto.notes}
+                  maxLines={3}
+                  maxExpandedHeight={180}
+                  textStyle={styles.fsNotes}
+                  toggleStyle={styles.fsNotesToggle}
+                />
               ) : null}
             </View>
           )}
+
+          <DownloadResultModal result={downloadResult} onDismiss={() => setDownloadResult(null)} />
         </View>
       </Modal>
+
+      {Platform.OS === 'ios' && (
+        <InputAccessoryView nativeID={KEYBOARD_ACCESSORY_ID}>
+          <View style={styles.keyboardToolbar}>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity onPress={Keyboard.dismiss} style={styles.keyboardDoneBtn}>
+              <Text style={styles.keyboardDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </InputAccessoryView>
+      )}
     </View>
   );
 }
@@ -1669,6 +1746,17 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 16,
   },
+  photoDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+  },
+  photoDateText: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500' as const,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1919,10 +2007,28 @@ const styles = StyleSheet.create({
   },
   previewImageContainer: {
     width: '100%',
-    height: 300,
+    height: 160,
     backgroundColor: '#F9FAFB',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  keyboardToolbar: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#F1F1F1',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#C8C8C8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  keyboardDoneBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  keyboardDoneText: {
+    color: '#2563EB',
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
   previewModalImage: {
     width: '100%',
@@ -2064,52 +2170,6 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#2563EB',
     borderRadius: 3,
-  },
-  // Upload Progress Modal Styles
-  uploadOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  uploadModal: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 32,
-    alignItems: 'center',
-    minWidth: 280,
-    maxWidth: '80%',
-  },
-  uploadTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: '#1F2937',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  uploadProgress: {
-    fontSize: 32,
-    fontWeight: '700' as const,
-    color: '#2563EB',
-    marginBottom: 16,
-  },
-  progressBarContainer: {
-    width: '100%',
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: '#2563EB',
-    borderRadius: 4,
-  },
-  uploadError: {
-    fontSize: 14,
-    color: '#EF4444',
-    marginTop: 12,
-    textAlign: 'center',
   },
   projectSection: {
     marginBottom: 24,
@@ -2303,6 +2363,11 @@ const styles = StyleSheet.create({
     color: '#E5E7EB',
     fontSize: 13,
     lineHeight: 18,
+  },
+  fsNotesToggle: {
+    color: '#93C5FD',
+    fontSize: 12,
+    fontWeight: '600' as const,
   },
   fsZoomControls: {
     position: 'absolute',

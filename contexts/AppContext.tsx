@@ -17,17 +17,11 @@ import { generateUUID } from '@/utils/uuid';
 const PRODUCTION_URL = 'https://legacy-prime-workflow-suite.vercel.app';
 
 const getApiBaseUrl = (): string => {
-  const rorkApi = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
-
-  if (rorkApi) {
-    return rorkApi;
-  }
-
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
-  }
-
-  return PRODUCTION_URL;
+  return (
+    process.env.EXPO_PUBLIC_RORK_API_BASE_URL ||
+    process.env.EXPO_PUBLIC_API_URL ||
+    PRODUCTION_URL
+  );
 };
 
 // Snake_case → camelCase mappers for Supabase rows
@@ -138,11 +132,14 @@ const mapClockEntry = (row: any) => ({
   clockIn: row.clock_in ?? row.clockIn ?? '',
   clockOut: row.clock_out ?? row.clockOut,
   location: row.location ?? { latitude: 0, longitude: 0 },
+  clockOutLocation: row.clock_out_location ?? row.clockOutLocation ?? undefined,
   workPerformed: row.work_performed ?? row.workPerformed,
   category: row.category,
   lunchBreaks: (row.lunch_breaks ?? row.lunchBreaks)?.map((lb: any) => ({
-    startTime: lb.startTime ?? lb.start ?? '',
-    endTime:   lb.endTime   ?? lb.end   ?? '',
+    startTime:     lb.startTime     ?? lb.start        ?? '',
+    endTime:       lb.endTime       ?? lb.end          ?? '',
+    startLocation: lb.startLocation ?? lb.start_location ?? undefined,
+    endLocation:   lb.endLocation   ?? lb.end_location   ?? undefined,
   })),
   hourlyRate: row.hourly_rate != null ? Number(row.hourly_rate) : undefined,
 });
@@ -1569,7 +1566,12 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
         (payload) => {
           const updated = mapClockEntry(payload.new);
           console.log('[Realtime] Clock entry UPDATE:', updated.id, 'clockOut:', updated.clockOut);
-          setClockEntries(prev => prev.map(e => e.id === updated.id ? { ...e, ...updated } : e));
+          // Realtime payload lacks the employee JOIN — preserve the existing name so
+          // lunch start/end events don't wipe out the employee's display name.
+          setClockEntries(prev => prev.map(e => {
+            if (e.id !== updated.id) return e;
+            return { ...e, ...updated, employeeName: updated.employeeName || e.employeeName };
+          }));
         }
       )
       .subscribe((status) => {
@@ -1719,7 +1721,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
       ...photo,
       uploader: user ? { id: user.id, name: user.name, email: user.email, avatar: user.avatar } : null,
     };
-    setPhotos(prev => [...prev, optimisticPhoto]);
+    setPhotos(prev => [optimisticPhoto, ...prev]);
 
     // Save to backend if company exists
     if (company?.id) {
@@ -1919,13 +1921,18 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
         console.log('[App] Calling /api/clock-out...');
         const apiUrl = getApiBaseUrl();
 
-        // Transform lunchBreaks to match backend schema (startTime/endTime -> start/end)
+        // Preserve all location fields when transforming for the backend.
         const transformedLunchBreaks = updates.lunchBreaks?.map(lb => ({
           start: lb.startTime,
           end: lb.endTime || '',
+          startLocation: lb.startLocation,
+          endLocation: lb.endLocation,
         })).filter(lb => lb.start && lb.end);
 
         console.log('[App] Clock out data:', { entryId: id, workPerformed: updates.workPerformed, lunchBreaks: transformedLunchBreaks });
+        console.log('[App] clockOutLocation being sent to API:', updates.clockOutLocation
+          ? `lat=${updates.clockOutLocation.latitude}, lng=${updates.clockOutLocation.longitude}`
+          : 'UNDEFINED — location will NOT be stored');
 
         const response = await fetch(`${apiUrl}/api/clock-out`, {
           method: 'POST',
@@ -1935,6 +1942,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
             workPerformed: updates.workPerformed,
             lunchBreaks: transformedLunchBreaks,
             category: updates.category,
+            clockOutLocation: updates.clockOutLocation,
           }),
         });
 

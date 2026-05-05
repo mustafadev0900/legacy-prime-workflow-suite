@@ -1080,6 +1080,7 @@ export default function ScheduleScreen() {
         const rawStart = editingTask.startDate;
         const _d = new Date(rawStart);
         const sentStart = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
+        const assignProject = projects.find(p => p.id === editingTask.projectId);
         Promise.all(
           newlyAddedEmps.map(empId =>
             fetch(`${SMS_API_BASE}/api/send-task-assignment-notification`, {
@@ -1091,6 +1092,8 @@ export default function ScheduleScreen() {
                 taskName: editingTask.category,
                 startDate: sentStart,
                 companyName,
+                projectName: assignProject?.name,
+                notes: editNoteText || undefined,
               }),
             }).then(r => r.json()).then(r => ({ success: r.success, empId }))
               .catch(() => ({ success: false, empId }))

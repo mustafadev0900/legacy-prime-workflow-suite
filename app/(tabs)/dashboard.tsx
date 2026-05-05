@@ -11,6 +11,7 @@ import DailyTaskCard from '@/components/DailyTasks/DailyTaskCard';
 import AddTaskModal from '@/components/DailyTasks/AddTaskModal';
 import DashboardSkeleton from '@/components/DashboardSkeleton';
 import CompactBusinessCosts from '@/components/CompactBusinessCosts';
+import WorkerLocationMap, { type WorkerPin } from '@/components/WorkerLocationMap';
 import * as ImagePicker from 'expo-image-picker';
 import { compressImage } from '@/lib/upload-utils';
 import { supabase } from '@/lib/supabase';
@@ -134,6 +135,40 @@ export default function DashboardScreen() {
       });
   }, [company?.id]);
 
+  const isAdmin = user?.role === 'admin' || user?.role === 'super-admin';
+
+  // Live worker locations across all active projects (admin-only)
+  const [workerLocations, setWorkerLocations] = useState<any[]>([]);
+  useEffect(() => {
+    if (!company?.id || !isAdmin) return;
+
+    const activeIds = projects.filter(p => p.status === 'active').map(p => p.id);
+    if (activeIds.length === 0) return;
+
+    const fetch = () =>
+      supabase.from('worker_live_locations').select('*').in('project_id', activeIds)
+        .then(({ data }) => { if (data) setWorkerLocations(data); });
+
+    fetch();
+
+    const channel = supabase.channel('dash-live-locs')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'worker_live_locations' }, fetch)
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [company?.id, isAdmin, projects]);
+
+  const workerPins = useMemo<WorkerPin[]>(() =>
+    workerLocations.map(loc => ({
+      employeeId: loc.employee_id,
+      employeeName: usersMap.get(loc.employee_id)?.name || loc.employee_name || 'Unknown',
+      avatarUrl: usersMap.get(loc.employee_id)?.avatar,
+      latitude: loc.latitude,
+      longitude: loc.longitude,
+      status: loc.status as 'working' | 'on_break',
+      updatedAt: loc.updated_at,
+    })),
+  [workerLocations, usersMap]);
 
   // Non-archived projects are the source of truth for all financial stats —
   // mirrors the monthly revenue chart scope so totals are consistent.
@@ -1509,6 +1544,17 @@ export default function DashboardScreen() {
               );
             })}
           </ScrollView>
+        )}
+
+        {isAdmin && workerPins.length > 0 && (
+          <View style={styles.liveWorkersSection}>
+            <View style={styles.liveWorkersHeader}>
+              <View style={styles.liveWorkersDot} />
+              <Text style={styles.liveWorkersTitle}>Live Workers</Text>
+              <Text style={styles.liveWorkersCount}>{workerPins.length} on site</Text>
+            </View>
+            <WorkerLocationMap workers={workerPins} height={260} />
+          </View>
         )}
 
         <CompactBusinessCosts
@@ -2932,6 +2978,33 @@ const styles = StyleSheet.create({
   projectImage: {
     width: '100%',
     flex: 1,
+  },
+  liveWorkersSection: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  liveWorkersHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginBottom: 10,
+  },
+  liveWorkersDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  liveWorkersTitle: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: '#0F172A',
+    flex: 1,
+  },
+  liveWorkersCount: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#6B7280',
   },
   statsContainer: {
     flexDirection: 'column',
