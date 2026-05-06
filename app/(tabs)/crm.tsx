@@ -9,6 +9,7 @@ import DailyTasksButton from '@/components/DailyTasksButton';
 import { Plus, Mail, MessageSquare, Send, X, CheckSquare, Square, Paperclip, FileText, Calculator, FileSignature, DollarSign, CheckCircle, CreditCard, ClipboardList, Sparkles, Phone, Settings, PhoneIncoming, PhoneOutgoing, Clock, Trash2, Calendar, ChevronDown, ChevronUp, TrendingUp, Users, FileCheck, DollarSign as DollarSignIcon, Camera, Pencil, PauseCircle, PlayCircle, Snowflake, RotateCcw } from 'lucide-react-native';
 import { Project, Client, CallLog } from '@/types';
 import * as DocumentPicker from 'expo-document-picker';
+import { uriToBase64 } from '@/lib/upload-utils';
 import * as Print from 'expo-print';
 import * as MailComposer from 'expo-mail-composer';
 import { useRouter } from 'expo-router';
@@ -344,6 +345,7 @@ export default function CRMScreen() {
   const [messageBody, setMessageBody] = useState<string>('');
   const [singleRecipient, setSingleRecipient] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<{ uri: string; name: string; type: string }[]>([]);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [showEstimateModal, setShowEstimateModal] = useState<boolean>(false);
   const [selectedClientForEstimate, setSelectedClientForEstimate] = useState<string | null>(null);
   const [showEstimateTypeModal, setShowEstimateTypeModal] = useState<boolean>(false);
@@ -757,7 +759,11 @@ export default function CRMScreen() {
 
   const applyTemplate = (template: MessageTemplate) => {
     if (template.subject) setMessageSubject(template.subject);
-    setMessageBody(template.body);
+    const client = singleRecipient ? clients.find(c => c.id === singleRecipient) : null;
+    const previewBody = client
+      ? template.body.replace(/\{name\}/gi, client.name.split(' ')[0])
+      : template.body;
+    setMessageBody(previewBody);
   };
 
   const pickDocument = async () => {
@@ -802,7 +808,6 @@ export default function CRMScreen() {
     }
 
     if (messageType === 'email') {
-      // Guard: drop any recipients with no email address
       const emailRecipients = recipients.filter(c => c.email && c.email.trim());
       const skipped = recipients.length - emailRecipients.length;
 
@@ -811,37 +816,59 @@ export default function CRMScreen() {
         return;
       }
 
-      const attachmentNote = attachments.length > 0
-        ? `\n\n--- Attachments (${attachments.length}) ---\n${attachments.map(a => a.name).join('\n')}\n\nNote: Please attach these files manually to your email.`
-        : '';
-
-      if (emailRecipients.length === 1) {
-        // Single recipient — personalized mailto
-        const client = emailRecipients[0];
-        const personalizedBody = messageBody.replace('{name}', client.name.split(' ')[0]) + attachmentNote;
-        const emailUrl = `mailto:${client.email}?subject=${encodeURIComponent(messageSubject)}&body=${encodeURIComponent(personalizedBody)}`;
-        if (Platform.OS === 'web') {
-          window.location.href = emailUrl;
-        } else {
-          Linking.openURL(emailUrl).catch(() => showAlert('Error', 'Unable to open email client'));
-        }
-      } else {
-        // Multiple recipients — single mailto with BCC to avoid one-tab-per-client popup blocking
-        const bccList = emailRecipients.map(c => c.email).join(',');
-        const genericBody = messageBody.replace('{name}', 'there') + attachmentNote;
-        const emailUrl = `mailto:?bcc=${encodeURIComponent(bccList)}&subject=${encodeURIComponent(messageSubject)}&body=${encodeURIComponent(genericBody)}`;
-        if (Platform.OS === 'web') {
-          window.location.href = emailUrl;
-        } else {
-          Linking.openURL(emailUrl).catch(() => showAlert('Error', 'Unable to open email client'));
-        }
+      if (!messageSubject.trim()) {
+        showAlert('Missing Subject', 'Please enter a subject line before sending.');
+        return;
       }
 
-      const attachmentWarning = attachments.length > 0 ? ' Remember to manually attach your files.' : '';
-      const skippedNote = skipped > 0 ? ` (${skipped} client${skipped > 1 ? 's' : ''} skipped — no email on file)` : '';
-      showAlert('Email Prepared', `Your email client has been opened for ${emailRecipients.length} recipient${emailRecipients.length > 1 ? 's' : ''}.${skippedNote}${attachmentWarning}`);
-      setShowMessageModal(false);
-      setSelectedClients(new Set());
+      const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+      console.log('[CRM Send] API_BASE:', API_BASE);
+      console.log('[CRM Send] recipients:', emailRecipients.map(c => c.email));
+      console.log('[CRM Send] subject:', messageSubject);
+      setIsSendingEmail(true);
+      try {
+        // Read any attachments as base64
+        const encodedAttachments = await Promise.all(
+          attachments.map(async (file) => {
+            const content = await uriToBase64(file.uri);
+            return { filename: file.name, content, type: file.type };
+          })
+        );
+
+        const payload = {
+          recipients: emailRecipients.map(c => ({ email: c.email, name: c.name })),
+          subject: messageSubject,
+          body: messageBody,
+          companyName: company?.name,
+          attachments: encodedAttachments.length > 0 ? encodedAttachments : undefined,
+        };
+        console.log('[CRM Send] Calling:', `${API_BASE}/api/send-crm-email`);
+        console.log('[CRM Send] Payload:', JSON.stringify({ ...payload, attachments: payload.attachments?.map(a => ({ filename: a.filename, type: a.type, size: a.content?.length })) }));
+        const response = await fetch(`${API_BASE}/api/send-crm-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        console.log('[CRM Send] Response status:', response.status);
+        const data = await response.json();
+        console.log('[CRM Send] Response data:', JSON.stringify(data));
+        if (!response.ok) throw new Error(data.error || 'Failed to send');
+        const skippedNote = skipped > 0 ? ` (${skipped} skipped — no email on file)` : '';
+        if (data.failed > 0 && data.sent > 0) {
+          showAlert('Partially Sent', `Sent to ${data.sent} recipient${data.sent !== 1 ? 's' : ''}, but ${data.failed} failed.${skippedNote}`);
+        } else if (data.senderWarning) {
+          showAlert('Email Accepted', `Queued for ${data.sent} recipient${data.sent !== 1 ? 's' : ''}.${skippedNote}\n\n⚠️ ${data.senderWarning}`);
+        } else {
+          showAlert('Email Sent', `Successfully sent to ${data.sent} recipient${data.sent !== 1 ? 's' : ''}.${skippedNote}`);
+        }
+        setShowMessageModal(false);
+        setSelectedClients(new Set());
+      } catch (err: any) {
+        console.error('[CRM Send] Error:', err.message, err);
+        showAlert('Send Failed', err.message || 'Unable to send email. Please try again.');
+      } finally {
+        setIsSendingEmail(false);
+      }
 
     } else {
       // SMS via Twilio
@@ -2660,8 +2687,8 @@ export default function CRMScreen() {
               💡 Tip: Use {'{name}'} in your message to automatically personalize with first name
             </Text>
             {messageType === 'email' && attachments.length > 0 && (
-              <Text style={styles.warningText}>
-                ⚠️ You&apos;ll need to manually attach files to your email client
+              <Text style={[styles.tipText, { color: '#059669' }]}>
+                ✓ {attachments.length} file{attachments.length !== 1 ? 's' : ''} will be attached to the email.
               </Text>
             )}
             {messageType === 'sms' && attachments.length > 0 && (
@@ -2679,11 +2706,18 @@ export default function CRMScreen() {
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.sendButton}
+                style={[styles.sendButton, (isSendingEmail || isSendingSMS) && { opacity: 0.7 }]}
                 onPress={sendMessage}
+                disabled={isSendingEmail || isSendingSMS}
               >
-                <Send size={18} color="#FFFFFF" />
-                <Text style={styles.sendButtonText}>Send</Text>
+                {isSendingEmail ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Send size={18} color="#FFFFFF" />
+                )}
+                <Text style={styles.sendButtonText}>
+                  {isSendingEmail ? 'Sending…' : 'Send'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>

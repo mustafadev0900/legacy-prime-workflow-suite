@@ -7,7 +7,7 @@ import { Calendar, X, BookOpen, Plus, Trash2, Check, Users, History, Download, C
 import { ScheduledTask, DailyLog, DailyLogTask, DailyLogPhoto, DailyTaskReminder } from '@/types';
 import * as Clipboard from 'expo-clipboard';
 import { Gesture, GestureDetector, ScrollView as GHScrollView } from 'react-native-gesture-handler';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 
 const SMS_API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 
@@ -55,31 +55,36 @@ async function sendSubAssignmentSMS(
 
 /** Open mail composer for subcontractor task assignment email. */
 async function sendSubAssignmentEmail(
-  email: string,
-  subName: string,
+  subs: Array<{ email: string; name: string }>,
   taskName: string,
   startDate: string,
   companyName: string,
-): Promise<void> {
-  if (!email?.trim()) {
-    console.log('[Schedule Email] Skipped — no email for', subName);
-    return;
-  }
-  const firstName = subName?.trim() || ''; // caller pre-computes correct greeting name(s)
-  const _emailD = new Date(startDate);
-  const dateStr = new Date(_emailD.getFullYear(), _emailD.getMonth(), _emailD.getDate()).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const subject = `Job Assignment — ${taskName}`;
-  const body = `Hi ${firstName},\n\n${companyName} has assigned you to: ${taskName} on ${dateStr}.\n\n— ${companyName}`;
+  apiBase: string,
+): Promise<{ sent: number; failed: number }> {
+  const _d = new Date(startDate);
+  const dateStr = new Date(_d.getFullYear(), _d.getMonth(), _d.getDate())
+    .toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-  const recipientList = email.split(',').map(e => e.trim()).filter(Boolean);
-  const mailtoUrl = `mailto:${recipientList.join(',')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  const body = `Hi {name},\n\n${companyName} has assigned you to: ${taskName} on ${dateStr}.\n\nPlease confirm your availability and contact us if you have any questions.\n\n— ${companyName}`;
 
+  console.log('[Sub Email] Sending to', subs.map(s => s.email));
   try {
-    await Linking.openURL(mailtoUrl);
-    console.log('[Schedule Email] mailto opened for', subName);
-  } catch (err) {
-    console.error('[Schedule Email] Failed for', subName, err);
-    Alert.alert('No Email App', `Please email:\n${recipientList.join(', ')}`);
+    const response = await fetch(`${apiBase}/api/send-crm-email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        recipients: subs.map(s => ({ email: s.email, name: s.name })),
+        subject: `Job Assignment — ${taskName} on ${dateStr}`,
+        body,
+        companyName,
+      }),
+    });
+    const data = await response.json();
+    console.log('[Sub Email] Result:', JSON.stringify(data));
+    return { sent: data.sent ?? 0, failed: data.failed ?? 0 };
+  } catch (err: any) {
+    console.error('[Sub Email] Error:', err.message);
+    return { sent: 0, failed: subs.length };
   }
 }
 
@@ -162,6 +167,16 @@ const hexToRgba = (hex: string, alpha: number): string => {
   return `rgba(${r},${g},${b},${alpha})`;
 };
 
+// Converts a Date to a UTC-midnight ISO string using LOCAL date components.
+// e.g. May 7 00:00 local (UTC+5) → "2026-05-07T00:00:00.000Z" (not "2026-05-06T19:00:00Z").
+// This prevents timezone drift when Gantt dates are saved to Supabase TIMESTAMPTZ columns.
+function localDateToUTC(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}T00:00:00.000Z`;
+}
+
 const SIDEBAR_WIDTH = 154;
 const ROW_HEIGHT = 46;
 const BAR_HEIGHT = 34;
@@ -173,11 +188,19 @@ const ZOOM_STEP = 0.1;
 export default function ScheduleScreen() {
   const { user, projects, dailyLogs, addDailyLog, loadScheduledTasks, addDailyTaskReminder, updateDailyTaskReminder, deleteDailyTaskReminder, getDailyTaskReminders, generateShareLink, disableShareLink, regenerateShareLink, getShareLinkByProject, updateScheduledTasks, scheduledTasks: contextScheduledTasks, subcontractors, company } = useApp();
   const router = useRouter();
+  const { projectId: paramProjectId } = useLocalSearchParams<{ projectId?: string }>();
   const insets = useSafeAreaInsets();
 
   const [selectedProject, setSelectedProject] = useState<string | null>(
-    projects.length > 0 ? projects[0].id : null
+    paramProjectId || (projects.length > 0 ? projects[0].id : null)
   );
+
+  // When navigated here from a notification with a projectId param, select that project
+  useEffect(() => {
+    if (paramProjectId && projects.some(p => p.id === paramProjectId)) {
+      setSelectedProject(paramProjectId);
+    }
+  }, [paramProjectId, projects]);
   const [scheduledTasks, setScheduledTasksLocal] = useState<ScheduledTask[]>([]);
 
   const pendingSyncRef = useRef<ScheduledTask[] | null>(null);
@@ -943,8 +966,8 @@ export default function ScheduleScreen() {
       id: Date.now().toString(),
       projectId: selectedProject,
       category: phase.name,
-      startDate: startDate.toISOString(),
-      endDate: endDate.toISOString(),
+      startDate: localDateToUTC(startDate),
+      endDate: localDateToUTC(endDate),
       duration: 1,
       workType: 'in-house',
       notes: '',
@@ -1008,7 +1031,7 @@ export default function ScheduleScreen() {
       notes: editNoteText,
       workType: editWorkType,
       duration: newDuration,
-      endDate: newEndDate.toISOString(),
+      endDate: localDateToUTC(newEndDate),
       visibleToClient: editClientVisibleNote,
       completed: editCompleted,
       completedAt: editCompleted ? editCompletedDate : (null as any),
@@ -1053,19 +1076,21 @@ export default function ScheduleScreen() {
         });
       }
 
-      // Email — batch all newly assigned subs into one composer open
+      // Email — send via Resend API (no mail app needed)
       const emailSubs = newlyAdded
         .map(id => subcontractors.find(s => s.id === id))
         .filter((s): s is typeof subcontractors[0] => !!s?.email?.trim());
       if (emailSubs.length > 0) {
-        const firstNames = emailSubs.map(s => s.name.split(' ')[0]);
-        const greetingName = firstNames.join(' & '); // "Blake" or "Blake & James"
-        const displayNames = firstNames.join(', ');
-        // Delay so the task edit modal fully dismisses before presenting the
-        // mail composer — iOS blocks sheet-on-sheet presentation otherwise.
-        showNotif(`📧 Opening email for ${displayNames}…`, false, 4000);
-        const _emailArgs = [emailSubs.map(s => s.email).join(','), greetingName, editingTask.category, editingTask.startDate, companyName] as const;
-        setTimeout(() => sendSubAssignmentEmail(..._emailArgs), 500);
+        sendSubAssignmentEmail(
+          emailSubs.map(s => ({ email: s.email, name: s.name })),
+          editingTask.category,
+          editingTask.startDate,
+          companyName,
+          SMS_API_BASE,
+        ).then(({ sent, failed }) => {
+          if (sent > 0) showNotif(`📧 Email sent to ${sent} subcontractor${sent !== 1 ? 's' : ''} ✓`, false, 3000);
+          if (failed > 0) showNotif(`📧 Email failed for ${failed} subcontractor${failed !== 1 ? 's' : ''}`, false, 3000);
+        });
       }
     }
 
@@ -1076,33 +1101,52 @@ export default function ScheduleScreen() {
       const companyName = company?.name || 'Legacy Prime';
 
       if (newlyAddedEmps.length > 0) {
-        showNotif(`🔔 Notifying ${newlyAddedEmps.length} employee(s)...`, true);
-        const rawStart = editingTask.startDate;
-        const _d = new Date(rawStart);
-        const sentStart = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
-        Promise.all(
-          newlyAddedEmps.map(empId =>
-            fetch(`${SMS_API_BASE}/api/send-task-assignment-notification`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                employeeId: empId,
-                companyId: company?.id,
-                taskName: editingTask.category,
-                startDate: sentStart,
-                companyName,
-              }),
-            }).then(r => r.json()).then(r => ({ success: r.success, empId }))
-              .catch(() => ({ success: false, empId }))
-          )
-        ).then(results => {
-          const allOk = results.every(r => r.success);
-          if (allOk) {
-            showNotif(`🔔 Employees notified ✓`, false, 3000);
-          } else {
-            showNotif(`🔔 Some notifications failed`, false, 3000);
-          }
-        });
+        if (newlyAddedEmps.length > 5) {
+          Alert.alert(
+            'Too Many Employees',
+            `You can assign a maximum of 5 employees at a time to send automatic notifications. You selected ${newlyAddedEmps.length}.\n\nPlease assign up to 5 at a time.`,
+            [{ text: 'OK' }]
+          );
+        } else {
+          showNotif(`🔔 Notifying ${newlyAddedEmps.length} employee(s)...`, true);
+          const rawStart = editingTask.startDate;
+          const _d = new Date(rawStart);
+          const sentStart = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, '0')}-${String(_d.getDate()).padStart(2, '0')}`;
+          const assignProject = projects.find(p => p.id === editingTask.projectId);
+
+          // Send sequentially with 300ms delay to stay under Resend's 5 req/sec limit
+          (async () => {
+            let succeeded = 0;
+            for (const empId of newlyAddedEmps) {
+              try {
+                const r = await fetch(`${SMS_API_BASE}/api/send-task-assignment-notification`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    employeeId: empId,
+                    companyId: company?.id,
+                    taskName: editingTask.category,
+                    startDate: sentStart,
+                    companyName,
+                    projectName: assignProject?.name,
+                    projectId: editingTask.projectId,
+                    notes: editNoteText || undefined,
+                  }),
+                });
+                const data = await r.json();
+                if (data.success) succeeded++;
+              } catch {
+                // individual failure — continue with next
+              }
+              await new Promise(res => setTimeout(res, 300));
+            }
+            if (succeeded === newlyAddedEmps.length) {
+              showNotif(`🔔 Employees notified ✓`, false, 3000);
+            } else {
+              showNotif(`🔔 ${succeeded}/${newlyAddedEmps.length} employees notified`, false, 3000);
+            }
+          })();
+        }
       }
     }
     setIsSaving(false);
@@ -1495,7 +1539,7 @@ ${pdfDates.length > 0 ? `
           const newEndDate = new Date(initStart);
           newEndDate.setDate(initStart.getDate() + newDuration);
           setScheduledTasks(prev => prev.map(t =>
-            t.id === task.id ? { ...t, duration: newDuration, endDate: newEndDate.toISOString() } : t
+            t.id === task.id ? { ...t, duration: newDuration, endDate: localDateToUTC(newEndDate) } : t
           ));
         } else {
           const newDuration = Math.max(1, initDur - days);
@@ -1507,8 +1551,8 @@ ${pdfDates.length > 0 ? `
             t.id === task.id ? {
               ...t,
               duration: newDuration,
-              startDate: newStartDate.toISOString(),
-              endDate: newEndDate.toISOString(),
+              startDate: localDateToUTC(newStartDate),
+              endDate: localDateToUTC(newEndDate),
             } : t
           ));
         }
@@ -1537,7 +1581,7 @@ ${pdfDates.length > 0 ? `
         const newEndDate = new Date(initialStartDate);
         newEndDate.setDate(initialStartDate.getDate() + newDuration);
         setScheduledTasks(prev => prev.map(t =>
-          t.id === task.id ? { ...t, duration: newDuration, endDate: newEndDate.toISOString() } : t
+          t.id === task.id ? { ...t, duration: newDuration, endDate: localDateToUTC(newEndDate) } : t
         ));
       } else {
         const newDuration = Math.max(1, initialDuration - daysDelta);
@@ -1546,7 +1590,7 @@ ${pdfDates.length > 0 ? `
         const newEnd = new Date(newStart);
         newEnd.setDate(newStart.getDate() + newDuration);
         setScheduledTasks(prev => prev.map(t =>
-          t.id === task.id ? { ...t, duration: newDuration, startDate: newStart.toISOString(), endDate: newEnd.toISOString() } : t
+          t.id === task.id ? { ...t, duration: newDuration, startDate: localDateToUTC(newStart), endDate: localDateToUTC(newEnd) } : t
         ));
       }
     };

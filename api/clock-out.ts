@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { entryId, workPerformed, lunchBreaks, category, clockOutLocation } = req.body;
+    const { entryId, workPerformed, lunchBreaks, category, clockOutLocation, clockOut } = req.body;
 
     console.log('[ClockOut] Clocking out entry:', entryId);
     console.log('[ClockOut] clockOutLocation received:', clockOutLocation
@@ -46,7 +46,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const updateStart = Date.now();
 
     const updateData: any = {
-      clock_out: new Date().toISOString(),
+      clock_out: clockOut || new Date().toISOString(),
     };
 
     if (workPerformed !== undefined) {

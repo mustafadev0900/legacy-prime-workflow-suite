@@ -17,17 +17,11 @@ import { generateUUID } from '@/utils/uuid';
 const PRODUCTION_URL = 'https://legacy-prime-workflow-suite.vercel.app';
 
 const getApiBaseUrl = (): string => {
-  const rorkApi = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
-
-  if (rorkApi) {
-    return rorkApi;
-  }
-
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
-  }
-
-  return PRODUCTION_URL;
+  return (
+    process.env.EXPO_PUBLIC_RORK_API_BASE_URL ||
+    process.env.EXPO_PUBLIC_API_URL ||
+    PRODUCTION_URL
+  );
 };
 
 // Snake_case → camelCase mappers for Supabase rows
@@ -138,11 +132,14 @@ const mapClockEntry = (row: any) => ({
   clockIn: row.clock_in ?? row.clockIn ?? '',
   clockOut: row.clock_out ?? row.clockOut,
   location: row.location ?? { latitude: 0, longitude: 0 },
+  clockOutLocation: row.clock_out_location ?? row.clockOutLocation ?? undefined,
   workPerformed: row.work_performed ?? row.workPerformed,
   category: row.category,
   lunchBreaks: (row.lunch_breaks ?? row.lunchBreaks)?.map((lb: any) => ({
-    startTime: lb.startTime ?? lb.start ?? '',
-    endTime:   lb.endTime   ?? lb.end   ?? '',
+    startTime:     lb.startTime     ?? lb.start        ?? '',
+    endTime:       lb.endTime       ?? lb.end          ?? '',
+    startLocation: lb.startLocation ?? lb.start_location ?? undefined,
+    endLocation:   lb.endLocation   ?? lb.end_location   ?? undefined,
   })),
   hourlyRate: row.hourly_rate != null ? Number(row.hourly_rate) : undefined,
 });
@@ -398,167 +395,116 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
         setIsCompanyReloading(true);
         try {
           console.log('[App] Loading data from backend for company:', company.id);
-          // Use direct HTTP fetch instead of tRPC dynamic import (which breaks in production)
           const baseUrl = getApiBaseUrl();
+          const companyId = company.id;
 
-          // Load clients
-          try {
-            const { data: clientRows } = await supabase.from('clients').select('*').eq('company_id', company.id).order('name');
-            setClients((clientRows ?? []).map(mapClient));
-            console.log('[App] ✅ Loaded', clientRows?.length ?? 0, 'clients');
-          } catch (error: any) {
-            console.error('[App] ❌ Error loading clients:', error?.message || error);
-            setClients([]);
-          }
+          // Run all queries in parallel
+          const [
+            clientsRes,
+            usersRes,
+            appointmentsRes,
+            projectsRes,
+            expensesRes,
+            photosRes,
+            photoCatsRes,
+            tasksRes,
+            clockRes,
+            priceListRes,
+            estimatesRes,
+            subcontractorsRes,
+            notificationsRes,
+          ] = await Promise.allSettled([
+            supabase.from('clients').select('*').eq('company_id', companyId).order('name'),
+            supabase.from('users').select('*').eq('company_id', companyId).eq('is_active', true),
+            supabase.from('appointments').select('*').eq('company_id', companyId).order('date', { ascending: true }),
+            supabase.from('projects').select('*').eq('company_id', companyId),
+            supabase.from('expenses').select('*, uploader:uploaded_by(id,name,email,avatar)').eq('company_id', companyId).order('date', { ascending: false }),
+            supabase.from('photos').select('*, uploader:uploaded_by(id,name,email,avatar)').eq('company_id', companyId).order('created_at', { ascending: false }),
+            supabase.from('photo_categories').select('name').eq('company_id', companyId).order('name'),
+            supabase.from('tasks').select('*').eq('company_id', companyId),
+            supabase.from('clock_entries').select('*, employee:employee_id(id,name,email)').eq('company_id', companyId).order('clock_in', { ascending: false }),
+            supabase.from('price_list_items').select('*').or(`is_custom.eq.false,company_id.eq.${companyId}`),
+            fetch(`${baseUrl}/api/get-estimates?companyId=${companyId}`).then(r => r.ok ? r.json() : null).catch(() => null),
+            fetch(`${baseUrl}/api/get-subcontractors?companyId=${companyId}`).then(r => r.ok ? r.json() : null).catch(() => null),
+            user?.id
+              ? supabase.from('notifications').select('*').eq('user_id', user.id).eq('company_id', companyId).order('created_at', { ascending: false }).limit(50)
+              : Promise.resolve({ data: null, error: null }),
+          ]);
 
-          // Load company users
-          try {
-            const { data: userRows } = await supabase.from('users').select('*').eq('company_id', company.id).eq('is_active', true);
-            setCompanyUsers(userRows?.map(mapUser) ?? []);
-          } catch (error) {
-            console.error('[App] Error loading company users:', error);
-            setCompanyUsers([]);
-          }
+          if (clientsRes.status === 'fulfilled') {
+            setClients((clientsRes.value.data ?? []).map(mapClient));
+            console.log('[App] ✅ Loaded', clientsRes.value.data?.length ?? 0, 'clients');
+          } else { console.error('[App] ❌ Error loading clients:', clientsRes.reason); setClients([]); }
 
-          // Load appointments
-          try {
-            const { data: appointmentRows } = await supabase.from('appointments').select('*').eq('company_id', company.id).order('date', { ascending: true });
-            setAppointments(appointmentRows?.map(mapAppointment) ?? []);
-          } catch (error) {
-            console.error('[App] Error loading appointments:', error);
-            setAppointments([]);
-          }
+          if (usersRes.status === 'fulfilled') {
+            setCompanyUsers(usersRes.value.data?.map(mapUser) ?? []);
+          } else { console.error('[App] Error loading company users:', usersRes.reason); setCompanyUsers([]); }
 
-          // Load projects
-          try {
-            const { data: projectRows } = await supabase.from('projects').select('*').eq('company_id', company.id);
-            setProjects((projectRows ?? []).map(mapProject));
-            console.log('[App] ✅ Loaded', projectRows?.length ?? 0, 'projects');
-          } catch (error: any) {
-            console.error('[App] Error loading projects:', error?.message || error);
-            setProjects([]);
-          }
+          if (appointmentsRes.status === 'fulfilled') {
+            setAppointments(appointmentsRes.value.data?.map(mapAppointment) ?? []);
+          } else { console.error('[App] Error loading appointments:', appointmentsRes.reason); setAppointments([]); }
 
-          // Load expenses
-          try {
-            const { data: expenseRows } = await supabase.from('expenses').select('*, uploader:uploaded_by(id,name,email,avatar)').eq('company_id', company.id).order('date', { ascending: false });
-            setExpenses((expenseRows ?? []).map(mapExpense));
-            console.log('[App] ✅ Loaded', expenseRows?.length ?? 0, 'expenses');
-          } catch (error: any) {
-            console.error('[App] Error loading expenses:', error?.message || error);
-            setExpenses([]);
-          }
+          if (projectsRes.status === 'fulfilled') {
+            setProjects((projectsRes.value.data ?? []).map(mapProject));
+            console.log('[App] ✅ Loaded', projectsRes.value.data?.length ?? 0, 'projects');
+          } else { console.error('[App] Error loading projects:', projectsRes.reason); setProjects([]); }
 
-          // Load photos
-          try {
-            const { data: photoRows } = await supabase.from('photos').select('*, uploader:uploaded_by(id,name,email,avatar)').eq('company_id', company.id).order('created_at', { ascending: false });
-            setPhotos((photoRows ?? []).map(mapPhoto));
-            console.log('[App] ✅ Loaded', photoRows?.length ?? 0, 'photos');
-          } catch (error: any) {
-            console.error('[App] Error loading photos:', error?.message || error);
-            setPhotos([]);
-          }
+          if (expensesRes.status === 'fulfilled') {
+            setExpenses((expensesRes.value.data ?? []).map(mapExpense));
+            console.log('[App] ✅ Loaded', expensesRes.value.data?.length ?? 0, 'expenses');
+          } else { console.error('[App] Error loading expenses:', expensesRes.reason); setExpenses([]); }
 
-          // Load photo categories from database
-          try {
-            const { data: catRows } = await supabase.from('photo_categories').select('name').eq('company_id', company.id).order('name');
-            setPhotoCategories((catRows ?? []).map((r: any) => r.name));
-            console.log('[App] ✅ Loaded', catRows?.length ?? 0, 'photo categories');
-          } catch (error: any) {
-            console.error('[App] Error loading photo categories:', error?.message || error);
-            setPhotoCategories([]);
-          }
+          if (photosRes.status === 'fulfilled') {
+            setPhotos((photosRes.value.data ?? []).map(mapPhoto));
+            console.log('[App] ✅ Loaded', photosRes.value.data?.length ?? 0, 'photos');
+          } else { console.error('[App] Error loading photos:', photosRes.reason); setPhotos([]); }
 
-          // Load tasks
-          try {
-            const { data: taskRows } = await supabase.from('tasks').select('*').eq('company_id', company.id);
-            setTasks((taskRows ?? []).map(mapTask));
-            console.log('[App] ✅ Loaded', taskRows?.length ?? 0, 'tasks');
-          } catch (error: any) {
-            console.error('[App] Error loading tasks:', error?.message || error);
-            setTasks([]);
-          }
+          if (photoCatsRes.status === 'fulfilled') {
+            setPhotoCategories((photoCatsRes.value.data ?? []).map((r: any) => r.name));
+            console.log('[App] ✅ Loaded', photoCatsRes.value.data?.length ?? 0, 'photo categories');
+          } else { console.error('[App] Error loading photo categories:', photoCatsRes.reason); setPhotoCategories([]); }
 
-          // Load clock entries
-          try {
-            const { data: clockRows } = await supabase.from('clock_entries').select('*, employee:employee_id(id,name,email)').eq('company_id', company.id).order('clock_in', { ascending: false });
-            setClockEntries((clockRows ?? []).map(mapClockEntry));
-            console.log('[App] ✅ Loaded', clockRows?.length ?? 0, 'clock entries');
-          } catch (error: any) {
-            console.error('[App] Error loading clock entries:', error?.message || error);
-            setClockEntries([]);
-          }
+          if (tasksRes.status === 'fulfilled') {
+            setTasks((tasksRes.value.data ?? []).map(mapTask));
+            console.log('[App] ✅ Loaded', tasksRes.value.data?.length ?? 0, 'tasks');
+          } else { console.error('[App] Error loading tasks:', tasksRes.reason); setTasks([]); }
 
-          // Load ALL price list items (master + custom)
-          try {
-            const { data: plRows } = await supabase.from('price_list_items').select('*').or(`is_custom.eq.false,company_id.eq.${company.id}`);
-            setPriceListItems((plRows ?? []).map(mapPriceListItem));
-            console.log('[App] ✅ Loaded', plRows?.length ?? 0, 'price list items');
-          } catch (error: any) {
-            console.error('[App] Error loading price list items:', error?.message || error);
-            setPriceListItems([]);
-          }
+          if (clockRes.status === 'fulfilled') {
+            setClockEntries((clockRes.value.data ?? []).map(mapClockEntry));
+            console.log('[App] ✅ Loaded', clockRes.value.data?.length ?? 0, 'clock entries');
+          } else { console.error('[App] Error loading clock entries:', clockRes.reason); setClockEntries([]); }
 
-          // Load estimates
-          try {
-            const estimatesResponse = await fetch(`${baseUrl}/api/get-estimates?companyId=${company.id}`);
-            if (estimatesResponse.ok) {
-              const estimatesData = await estimatesResponse.json();
-              if (estimatesData.success && estimatesData.estimates) {
-                setEstimates(estimatesData.estimates);
-                console.log('[App] ✅ Loaded', estimatesData.estimates.length, 'estimates');
-              } else {
-                setEstimates([]);
-              }
-            } else {
-              setEstimates([]);
-            }
-          } catch (error: any) {
-            console.error('[App] Error loading estimates:', error?.message || error);
+          if (priceListRes.status === 'fulfilled') {
+            setPriceListItems((priceListRes.value.data ?? []).map(mapPriceListItem));
+            console.log('[App] ✅ Loaded', priceListRes.value.data?.length ?? 0, 'price list items');
+          } else { console.error('[App] Error loading price list items:', priceListRes.reason); setPriceListItems([]); }
+
+          if (estimatesRes.status === 'fulfilled' && estimatesRes.value?.success && estimatesRes.value?.estimates) {
+            setEstimates(estimatesRes.value.estimates);
+            console.log('[App] ✅ Loaded', estimatesRes.value.estimates.length, 'estimates');
+          } else {
+            if (estimatesRes.status === 'rejected') console.error('[App] Error loading estimates:', estimatesRes.reason);
             setEstimates([]);
           }
 
-          // Load subcontractors
-          try {
-            const subcontractorsResponse = await fetch(
-              `${baseUrl}/api/get-subcontractors?companyId=${company.id}`
-            );
-            if (subcontractorsResponse.ok) {
-              const subcontractorsResult = await subcontractorsResponse.json();
-              if (subcontractorsResult.subcontractors) {
-                setSubcontractors(subcontractorsResult.subcontractors);
-                console.log('[App] ✅ Loaded', subcontractorsResult.subcontractors.length, 'subcontractors');
-              } else {
-                setSubcontractors([]);
-              }
-            } else {
-              console.error('[App] Error loading subcontractors:', subcontractorsResponse.status);
-              setSubcontractors([]);
-            }
-          } catch (error: any) {
-            console.error('[App] Error loading subcontractors:', error?.message || error);
+          if (subcontractorsRes.status === 'fulfilled' && subcontractorsRes.value?.subcontractors) {
+            setSubcontractors(subcontractorsRes.value.subcontractors);
+            console.log('[App] ✅ Loaded', subcontractorsRes.value.subcontractors.length, 'subcontractors');
+          } else {
+            if (subcontractorsRes.status === 'rejected') console.error('[App] Error loading subcontractors:', subcontractorsRes.reason);
             setSubcontractors([]);
           }
 
-          // Load notifications
-          try {
-            const { data: notifRows, error: notifErr } = await supabase
-              .from('notifications').select('*')
-              .eq('user_id', user?.id ?? '')
-              .eq('company_id', company.id)
-              .order('created_at', { ascending: false }).limit(50);
-            if (notifErr) {
-              console.warn('[App] Notifications load error:', notifErr.message);
-            } else {
-              setNotifications(prev => {
-                const dbIds = new Set((notifRows ?? []).map((n: any) => n.id));
-                const localOnly = prev.filter((n: any) => !dbIds.has(n.id));
-                return [...(notifRows ?? []).map(mapNotification), ...localOnly];
-              });
-              console.log('[App] ✅ Loaded', notifRows?.length ?? 0, 'notifications');
-            }
-          } catch (error: any) {
-            console.error('[App] Error loading notifications:', error?.message || error);
+          if (user?.id && notificationsRes.status === 'fulfilled' && notificationsRes.value.data) {
+            const notifRows = notificationsRes.value.data;
+            setNotifications(prev => {
+              const dbIds = new Set(notifRows.map((n: any) => n.id));
+              const localOnly = prev.filter((n: any) => !dbIds.has(n.id));
+              return [...notifRows.map(mapNotification), ...localOnly];
+            });
+            console.log('[App] ✅ Loaded', notifRows.length, 'notifications');
+          } else if (notificationsRes.status === 'rejected') {
+            console.error('[App] Error loading notifications:', notificationsRes.reason);
           }
 
           console.log('[App] ✅ Finished reloading data after company change');
@@ -751,221 +697,146 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
         setNotifications(parsedNotifications);
       }
 
-      // Load all data from backend if company exists (reusing parsedCompany from above)
+      // Load all data from backend if company exists — all queries run in parallel
       if (parsedCompany && parsedCompany.id) {
         console.log('[App] Loading data from backend for company:', parsedCompany.id);
-        try {
-          // Use direct HTTP fetch instead of tRPC dynamic import (which breaks in production)
-          const baseUrl = getApiBaseUrl();
+        const baseUrl = getApiBaseUrl();
+        const companyId = parsedCompany.id;
 
-          // Load clients
-          try {
-            const { data: clientRows } = await supabase.from('clients').select('*').eq('company_id', parsedCompany.id).order('name');
-            setClients(clientRows?.map(mapClient) ?? []);
-            console.log('[App] Loaded', clientRows?.length ?? 0, 'clients');
-          } catch (error) {
-            console.error('[App] Error loading clients:', error);
-            setClients([]);
-          }
+        const [
+          clientsResult,
+          usersResult,
+          appointmentsResult,
+          projectsResult,
+          expensesResult,
+          photosResult,
+          photoCategoriesResult,
+          clockResult,
+          tasksResult,
+          priceListResult,
+          subcontractorsResult,
+          shareLinksResult,
+          dailyTasksResult,
+          notificationsResult,
+        ] = await Promise.allSettled([
+          supabase.from('clients').select('*').eq('company_id', companyId).order('name'),
+          supabase.from('users').select('*').eq('company_id', companyId).eq('is_active', true),
+          supabase.from('appointments').select('*').eq('company_id', companyId).order('date', { ascending: true }),
+          supabase.from('projects').select('*').eq('company_id', companyId),
+          supabase.from('expenses').select('*, uploader:uploaded_by(id,name,email,avatar)').eq('company_id', companyId).order('date', { ascending: false }),
+          supabase.from('photos').select('*, uploader:uploaded_by(id,name,email,avatar)').eq('company_id', companyId).order('created_at', { ascending: false }),
+          supabase.from('photo_categories').select('name').eq('company_id', companyId).order('name'),
+          supabase.from('clock_entries').select('*, employee:employee_id(id,name,email)').eq('company_id', companyId).order('clock_in', { ascending: false }),
+          supabase.from('tasks').select('*').eq('company_id', companyId),
+          supabase.from('price_list_items').select('*').or(`is_custom.eq.false,company_id.eq.${companyId}`),
+          fetch(`${baseUrl}/api/get-subcontractors?companyId=${companyId}`).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(`${baseUrl}/api/get-schedule-share-link?companyId=${companyId}`).then(r => r.ok ? r.json() : null).catch(() => null),
+          fetch(`${baseUrl}/api/get-daily-tasks?companyId=${companyId}`).then(r => r.ok ? r.json() : null).catch(() => null),
+          parsedUser?.id
+            ? supabase.from('notifications').select('*').eq('user_id', parsedUser.id).eq('company_id', companyId).order('created_at', { ascending: false }).limit(50)
+            : Promise.resolve({ data: null, error: null }),
+        ]);
 
-          // Load company users
-          try {
-            const { data: userRows } = await supabase.from('users').select('*').eq('company_id', parsedCompany.id).eq('is_active', true);
-            setCompanyUsers(userRows?.map(mapUser) ?? []);
-          } catch (error) {
-            console.error('[App] Error loading company users:', error);
-            setCompanyUsers([]);
-          }
+        if (clientsResult.status === 'fulfilled') {
+          setClients(clientsResult.value.data?.map(mapClient) ?? []);
+          console.log('[App] Loaded', clientsResult.value.data?.length ?? 0, 'clients');
+        } else { console.error('[App] Error loading clients:', clientsResult.reason); setClients([]); }
 
-          // Load appointments
-          try {
-            const { data: appointmentRows } = await supabase.from('appointments').select('*').eq('company_id', parsedCompany.id).order('date', { ascending: true });
-            setAppointments(appointmentRows?.map(mapAppointment) ?? []);
-          } catch (error) {
-            console.error('[App] Error loading appointments:', error);
-            setAppointments([]);
-          }
+        if (usersResult.status === 'fulfilled') {
+          setCompanyUsers(usersResult.value.data?.map(mapUser) ?? []);
+        } else { console.error('[App] Error loading company users:', usersResult.reason); setCompanyUsers([]); }
 
-          // Load projects
-          try {
-            const { data: projectRows } = await supabase.from('projects').select('*').eq('company_id', parsedCompany.id);
-            setProjects(projectRows?.map(mapProject) ?? []);
-            console.log('[App] Loaded', projectRows?.length ?? 0, 'projects');
-          } catch (error) {
-            console.error('[App] Error loading projects:', error);
-            setProjects([]);
-          }
+        if (appointmentsResult.status === 'fulfilled') {
+          setAppointments(appointmentsResult.value.data?.map(mapAppointment) ?? []);
+        } else { console.error('[App] Error loading appointments:', appointmentsResult.reason); setAppointments([]); }
 
-          // Load expenses
-          try {
-            const { data: expenseRows } = await supabase.from('expenses').select('*, uploader:uploaded_by(id,name,email,avatar)').eq('company_id', parsedCompany.id).order('date', { ascending: false });
-            setExpenses(expenseRows?.length ? expenseRows.map(mapExpense) : mockExpenses);
-            console.log('[App] Loaded', expenseRows?.length ?? 0, 'expenses');
-          } catch (error) {
-            console.error('[App] Error loading expenses:', error);
-            setExpenses(mockExpenses);
-          }
+        if (projectsResult.status === 'fulfilled') {
+          setProjects(projectsResult.value.data?.map(mapProject) ?? []);
+          console.log('[App] Loaded', projectsResult.value.data?.length ?? 0, 'projects');
+        } else { console.error('[App] Error loading projects:', projectsResult.reason); setProjects([]); }
 
-          // Load photos from database
-          try {
-            const { data: photoRows } = await supabase.from('photos').select('*, uploader:uploaded_by(id,name,email,avatar)').eq('company_id', parsedCompany.id).order('created_at', { ascending: false });
-            setPhotos((photoRows ?? []).map(mapPhoto));
-            console.log('[App] Loaded', photoRows?.length ?? 0, 'photos from database');
-          } catch (error) {
-            console.error('[App] Error loading photos:', error);
-            setPhotos([]);
-          }
+        if (expensesResult.status === 'fulfilled') {
+          const rows = expensesResult.value.data;
+          setExpenses(rows?.length ? rows.map(mapExpense) : mockExpenses);
+          console.log('[App] Loaded', rows?.length ?? 0, 'expenses');
+        } else { console.error('[App] Error loading expenses:', expensesResult.reason); setExpenses(mockExpenses); }
 
-          // Load photo categories from database
-          try {
-            const { data: catRows } = await supabase.from('photo_categories').select('name').eq('company_id', parsedCompany.id).order('name');
-            setPhotoCategories((catRows ?? []).map((r: any) => r.name));
-            console.log('[App] Loaded', catRows?.length ?? 0, 'photo categories from database');
-          } catch (error) {
-            console.error('[App] Error loading photo categories:', error);
-            setPhotoCategories([]);
-          }
+        if (photosResult.status === 'fulfilled') {
+          setPhotos((photosResult.value.data ?? []).map(mapPhoto));
+          console.log('[App] Loaded', photosResult.value.data?.length ?? 0, 'photos from database');
+        } else { console.error('[App] Error loading photos:', photosResult.reason); setPhotos([]); }
 
-          // Load clock entries from database
-          try {
-            const { data: clockRows } = await supabase.from('clock_entries').select('*, employee:employee_id(id,name,email)').eq('company_id', parsedCompany.id).order('clock_in', { ascending: false });
-            setClockEntries((clockRows ?? []).map(mapClockEntry));
-            console.log('[App] Loaded', clockRows?.length ?? 0, 'clock entries from database');
-          } catch (error) {
-            console.error('[App] Error loading clock entries:', error);
-            setClockEntries([]);
-          }
+        if (photoCategoriesResult.status === 'fulfilled') {
+          setPhotoCategories((photoCategoriesResult.value.data ?? []).map((r: any) => r.name));
+          console.log('[App] Loaded', photoCategoriesResult.value.data?.length ?? 0, 'photo categories from database');
+        } else { console.error('[App] Error loading photo categories:', photoCategoriesResult.reason); setPhotoCategories([]); }
 
-          // Load tasks from database
-          try {
-            const { data: taskRows } = await supabase.from('tasks').select('*').eq('company_id', parsedCompany.id);
-            setTasks((taskRows ?? []).map(mapTask));
-            console.log('[App] Loaded', taskRows?.length ?? 0, 'tasks from database');
-          } catch (error) {
-            console.error('[App] Error loading tasks:', error);
-            setTasks([]);
-          }
+        if (clockResult.status === 'fulfilled') {
+          setClockEntries((clockResult.value.data ?? []).map(mapClockEntry));
+          console.log('[App] Loaded', clockResult.value.data?.length ?? 0, 'clock entries from database');
+        } else { console.error('[App] Error loading clock entries:', clockResult.reason); setClockEntries([]); }
 
-          // Load ALL price list items from database (master + custom)
-          try {
-            const { data: plRows } = await supabase.from('price_list_items').select('*').or(`is_custom.eq.false,company_id.eq.${parsedCompany.id}`);
-            if (plRows?.length) {
-              setPriceListItems(plRows.map(mapPriceListItem));
-              console.log('[App] Loaded', plRows.length, 'price list items from database');
-            } else {
-              const parsedPriceListItems = safeJsonParse<PriceListItem[]>(storedPriceListItems, 'priceListItems', []);
-              if (Array.isArray(parsedPriceListItems)) setPriceListItems(parsedPriceListItems);
-            }
-          } catch (error) {
-            console.error('[App] Error loading price list items:', error);
-            const parsedPriceListItems = safeJsonParse<PriceListItem[]>(storedPriceListItems, 'priceListItems', []);
-            if (Array.isArray(parsedPriceListItems)) setPriceListItems(parsedPriceListItems);
-          }
+        if (tasksResult.status === 'fulfilled') {
+          setTasks((tasksResult.value.data ?? []).map(mapTask));
+          console.log('[App] Loaded', tasksResult.value.data?.length ?? 0, 'tasks from database');
+        } else { console.error('[App] Error loading tasks:', tasksResult.reason); setTasks([]); }
 
-          // Load subcontractors from database
-          try {
-            const subcontractorsResponse = await fetch(
-              `${baseUrl}/api/get-subcontractors?companyId=${parsedCompany.id}`
-            );
-            if (subcontractorsResponse.ok) {
-              const subcontractorsResult = await subcontractorsResponse.json();
-              if (subcontractorsResult.subcontractors) {
-                setSubcontractors(subcontractorsResult.subcontractors);
-                console.log('[App] Loaded', subcontractorsResult.subcontractors.length, 'subcontractors from database');
-              } else {
-                // Fallback to AsyncStorage data
-                const parsedSubcontractors = safeJsonParse<Subcontractor[]>(storedSubcontractors, 'subcontractors', []);
-                if (Array.isArray(parsedSubcontractors)) {
-                  setSubcontractors(parsedSubcontractors);
-                }
-              }
-            } else {
-              console.error('[App] Error loading subcontractors:', subcontractorsResponse.status);
-              // Fallback to AsyncStorage data
-              const parsedSubcontractors = safeJsonParse<Subcontractor[]>(storedSubcontractors, 'subcontractors', []);
-              if (Array.isArray(parsedSubcontractors)) {
-                setSubcontractors(parsedSubcontractors);
-              }
-            }
-          } catch (error) {
-            console.error('[App] Error loading subcontractors:', error);
-            // Fallback to AsyncStorage data
-            const parsedSubcontractors = safeJsonParse<Subcontractor[]>(storedSubcontractors, 'subcontractors', []);
-            if (Array.isArray(parsedSubcontractors)) {
-              setSubcontractors(parsedSubcontractors);
-            }
-          }
-
-          // Load schedule share links for this company
-          try {
-            const slRes = await fetch(`${baseUrl}/api/get-schedule-share-link?companyId=${parsedCompany.id}`);
-            if (slRes.ok) {
-              const slData = await slRes.json();
-              setScheduleShareLinks(slData.links ?? []);
-              console.log('[App] Loaded', (slData.links ?? []).length, 'schedule share links');
-            }
-          } catch (error) {
-            console.error('[App] Error loading schedule share links:', error);
-          }
-
-          // Load daily task reminders (all for company; filter applied in getDailyTaskReminders)
-          try {
-            const drRes = await fetch(`${baseUrl}/api/get-daily-tasks?companyId=${parsedCompany.id}`);
-            if (drRes.ok) {
-              const drData = await drRes.json();
-              const reminders: DailyTaskReminder[] = (drData.tasks ?? []).map((t: any) => ({
-                id: t.id,
-                projectId: t.projectId ?? undefined,
-                title: t.title,
-                dueDate: t.dueDate,
-                isReminder: t.reminder,
-                completed: t.completed,
-                createdAt: t.createdAt,
-                completedAt: t.completedAt ?? undefined,
-              }));
-              setDailyTaskReminders(reminders);
-              console.log('[App] Loaded', reminders.length, 'daily task reminders');
-            }
-          } catch (error) {
-            console.error('[App] Error loading daily task reminders:', error);
-          }
-
-          // Load notifications for the current user
-          if (parsedUser?.id) {
-            try {
-              const { data: notifRows, error: notifErr } = await supabase
-                .from('notifications').select('*')
-                .eq('user_id', parsedUser.id)
-                .eq('company_id', parsedCompany.id)
-                .order('created_at', { ascending: false }).limit(50);
-              if (notifErr) {
-                console.warn('[App] Notifications load error:', notifErr.message);
-              } else {
-                setNotifications(prev => {
-                const dbIds = new Set((notifRows ?? []).map((n: any) => n.id));
-                const localOnly = prev.filter((n: any) => !dbIds.has(n.id));
-                return [...(notifRows ?? []).map(mapNotification), ...localOnly];
-              });
-                console.log('[App] Loaded', notifRows?.length ?? 0, 'notifications');
-              }
-            } catch (error) {
-              console.error('[App] Error loading notifications:', error);
-            }
-          }
-
-        } catch (error) {
-          console.error('[App] Error loading data from backend:', error);
-          // Set empty arrays on error
-          setClients([]);
-          setProjects([]);
-          setExpenses([]);
-          setPhotos([]);
-          setTasks([]);
-          setClockEntries([]);
+        if (priceListResult.status === 'fulfilled' && priceListResult.value.data?.length) {
+          setPriceListItems(priceListResult.value.data.map(mapPriceListItem));
+          console.log('[App] Loaded', priceListResult.value.data.length, 'price list items from database');
+        } else {
+          if (priceListResult.status === 'rejected') console.error('[App] Error loading price list items:', priceListResult.reason);
+          const fallbackPL = safeJsonParse<PriceListItem[]>(storedPriceListItems, 'priceListItems', []);
+          if (Array.isArray(fallbackPL)) setPriceListItems(fallbackPL);
         }
+
+        if (subcontractorsResult.status === 'fulfilled' && subcontractorsResult.value?.subcontractors) {
+          setSubcontractors(subcontractorsResult.value.subcontractors);
+          console.log('[App] Loaded', subcontractorsResult.value.subcontractors.length, 'subcontractors from database');
+        } else {
+          if (subcontractorsResult.status === 'rejected') console.error('[App] Error loading subcontractors:', subcontractorsResult.reason);
+          const fallbackSub = safeJsonParse<Subcontractor[]>(storedSubcontractors, 'subcontractors', []);
+          if (Array.isArray(fallbackSub)) setSubcontractors(fallbackSub);
+        }
+
+        if (shareLinksResult.status === 'fulfilled' && shareLinksResult.value) {
+          setScheduleShareLinks(shareLinksResult.value.links ?? []);
+          console.log('[App] Loaded', (shareLinksResult.value.links ?? []).length, 'schedule share links');
+        } else if (shareLinksResult.status === 'rejected') {
+          console.error('[App] Error loading schedule share links:', shareLinksResult.reason);
+        }
+
+        if (dailyTasksResult.status === 'fulfilled' && dailyTasksResult.value) {
+          const reminders: DailyTaskReminder[] = (dailyTasksResult.value.tasks ?? []).map((t: any) => ({
+            id: t.id,
+            projectId: t.projectId ?? undefined,
+            title: t.title,
+            dueDate: t.dueDate,
+            isReminder: t.reminder,
+            completed: t.completed,
+            createdAt: t.createdAt,
+            completedAt: t.completedAt ?? undefined,
+          }));
+          setDailyTaskReminders(reminders);
+          console.log('[App] Loaded', reminders.length, 'daily task reminders');
+        } else if (dailyTasksResult.status === 'rejected') {
+          console.error('[App] Error loading daily task reminders:', dailyTasksResult.reason);
+        }
+
+        if (parsedUser?.id && notificationsResult.status === 'fulfilled' && notificationsResult.value.data) {
+          const notifRows = notificationsResult.value.data;
+          setNotifications(prev => {
+            const dbIds = new Set(notifRows.map((n: any) => n.id));
+            const localOnly = prev.filter((n: any) => !dbIds.has(n.id));
+            return [...notifRows.map(mapNotification), ...localOnly];
+          });
+          console.log('[App] Loaded', notifRows.length, 'notifications');
+        } else if (notificationsResult.status === 'rejected') {
+          console.error('[App] Error loading notifications:', notificationsResult.reason);
+        }
+
       } else {
         console.log('[App] No company found, setting empty data');
-        // Set empty arrays when no company
         setClients([]);
         setProjects([]);
         setExpenses([]);
@@ -1569,7 +1440,12 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
         (payload) => {
           const updated = mapClockEntry(payload.new);
           console.log('[Realtime] Clock entry UPDATE:', updated.id, 'clockOut:', updated.clockOut);
-          setClockEntries(prev => prev.map(e => e.id === updated.id ? { ...e, ...updated } : e));
+          // Realtime payload lacks the employee JOIN — preserve the existing name so
+          // lunch start/end events don't wipe out the employee's display name.
+          setClockEntries(prev => prev.map(e => {
+            if (e.id !== updated.id) return e;
+            return { ...e, ...updated, employeeName: updated.employeeName || e.employeeName };
+          }));
         }
       )
       .subscribe((status) => {
@@ -1719,7 +1595,7 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
       ...photo,
       uploader: user ? { id: user.id, name: user.name, email: user.email, avatar: user.avatar } : null,
     };
-    setPhotos(prev => [...prev, optimisticPhoto]);
+    setPhotos(prev => [optimisticPhoto, ...prev]);
 
     // Save to backend if company exists
     if (company?.id) {
@@ -1919,22 +1795,33 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
         console.log('[App] Calling /api/clock-out...');
         const apiUrl = getApiBaseUrl();
 
-        // Transform lunchBreaks to match backend schema (startTime/endTime -> start/end)
-        const transformedLunchBreaks = updates.lunchBreaks?.map(lb => ({
-          start: lb.startTime,
-          end: lb.endTime || '',
-        })).filter(lb => lb.start && lb.end);
+        const clockOutTime = updates.clockOut!;
 
-        console.log('[App] Clock out data:', { entryId: id, workPerformed: updates.workPerformed, lunchBreaks: transformedLunchBreaks });
+        // Normalize lunch breaks to {startTime, endTime} format (same as update-lunch-break).
+        // Any break without an endTime is closed at clock-out time so both the DB and
+        // AppContext subtract the same duration.
+        const cleanedLunchBreaks = updates.lunchBreaks?.map(lb => ({
+          startTime: lb.startTime,
+          endTime: lb.endTime || clockOutTime,
+          startLocation: lb.startLocation,
+          endLocation: lb.endLocation,
+        })).filter(lb => lb.startTime);
+
+        console.log('[App] Clock out data:', { entryId: id, clockOut: clockOutTime, workPerformed: updates.workPerformed, lunchBreaks: cleanedLunchBreaks });
+        console.log('[App] clockOutLocation being sent to API:', updates.clockOutLocation
+          ? `lat=${updates.clockOutLocation.latitude}, lng=${updates.clockOutLocation.longitude}`
+          : 'UNDEFINED — location will NOT be stored');
 
         const response = await fetch(`${apiUrl}/api/clock-out`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             entryId: id,
+            clockOut: clockOutTime,
             workPerformed: updates.workPerformed,
-            lunchBreaks: transformedLunchBreaks,
+            lunchBreaks: cleanedLunchBreaks,
             category: updates.category,
+            clockOutLocation: updates.clockOutLocation,
           }),
         });
 

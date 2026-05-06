@@ -5,7 +5,7 @@ import { useApp } from '@/contexts/AppContext';
 import DailyTasksButton from '@/components/DailyTasksButton';
 import { Report, ProjectReportData, DailyLog, ChangeOrder, Payment, ScheduledTask, Photo } from '@/types';
 import { supabase } from '@/lib/supabase';
-import { ArrowLeft, FileText, Clock, DollarSign, Camera, Ruler, Plus, Archive, TrendingUp, Calendar, Users, AlertCircle, UserCheck, CreditCard, Wallet, Coffee, File, FolderOpen, Upload, Folder, Download, Trash2, X, Search, Image as ImageIcon, PlayCircle, PauseCircle, Monitor, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, FileText, Clock, DollarSign, Camera, Ruler, Plus, Archive, TrendingUp, Calendar, Users, AlertCircle, UserCheck, CreditCard, Wallet, Coffee, File, FolderOpen, Upload, Folder, Download, Trash2, X, Search, Image as ImageIcon, PlayCircle, PauseCircle, Monitor, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, LayoutGrid, LayoutList } from 'lucide-react-native';
 import ClockInOutComponent from '@/components/ClockInOutComponent';
 import CustomDatePicker from '@/components/DailyTasks/CustomDatePicker';
 import { generateUUID } from '@/utils/uuid';
@@ -23,13 +23,19 @@ import { compressImage, uriToBase64 } from '@/lib/upload-utils';
 import * as FileSystem from 'expo-file-system/legacy';
 import { File as FSFile, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
+import { DownloadResultModal, type DownloadResult } from '@/components/DownloadResultModal';
+import { DesktopSavableImage } from '@/components/DesktopSavableImage';
+import { ExpandableNotes } from '@/components/ExpandableNotes';
+import WorkerLocationMap, { type WorkerPin } from '@/components/WorkerLocationMap';
 
 type TabType = 'overview' | 'schedule' | 'estimate' | 'change-orders' | 'clock' | 'expenses' | 'photos' | 'videos' | 'files' | 'reports';
 
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const { projects, archiveProject, deleteProject, user, company, clockEntries, expenses, estimates, projectFiles, addProjectFile, deleteProjectFile, photos, addPhoto, deletePhoto, reports, addReport, refreshReports, dailyLogs = [], scheduledTasks, loadScheduledTasks, updateProject, addNotification, refreshClockEntries } = useApp();
+  const { projects, archiveProject, deleteProject, user, company, clockEntries, expenses, estimates, projectFiles, addProjectFile, deleteProjectFile, photos, addPhoto, deletePhoto, reports, addReport, refreshReports, dailyLogs = [], scheduledTasks, loadScheduledTasks, updateProject, addNotification, refreshClockEntries, companyUsers } = useApp();
 
   const [changeOrdersData, setChangeOrdersData] = useState<ChangeOrder[]>([]);
   const [paymentsData, setPaymentsData] = useState<Payment[]>([]);
@@ -133,12 +139,26 @@ export default function ProjectDetailScreen() {
   const [selectedPhotoImage, setSelectedPhotoImage] = useState<string | null>(null);
   const [photoNotes, setPhotoNotes] = useState<string>('');
   const [photoCategory, setPhotoCategory] = useState<string>('Foundation');
+  const [photoViewMode, setPhotoViewMode] = useState<'grid' | 'list'>('grid');
   const [showAIReportModal, setShowAIReportModal] = useState<boolean>(false);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
   const [showWebCameraBanner, setShowWebCameraBanner] = useState<boolean>(false);
   const isUploadingPhotoRef = useRef(false);
   const [viewingPhoto, setViewingPhoto] = useState<Photo | null>(null);
   const [isPhotoDownloading, setIsPhotoDownloading] = useState(false);
+  const [downloadResult, setDownloadResult] = useState<DownloadResult>(null);
+  const [zoomPercent, setZoomPercent] = useState(100);
+  const zScale = useSharedValue(1);
+  const zTranslateX = useSharedValue(0);
+  const zTranslateY = useSharedValue(0);
+  const zSavedScale = useSharedValue(1);
+  const zSavedTranslateX = useSharedValue(0);
+  const zSavedTranslateY = useSharedValue(0);
+  const zContainerWidth = useSharedValue(0);
+  const zContainerHeight = useSharedValue(0);
+  const fsImageWebRef = useRef<View>(null);
+  const photosScrollRef = useRef<ScrollView>(null);
+  const photosScrollY = useRef(0);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [budgetInput, setBudgetInput] = useState('');
   const [contractAmountInput, setContractAmountInput] = useState('');
@@ -256,7 +276,9 @@ export default function ProjectDetailScreen() {
   }, [projectFiles, dbProjectFiles, id, categoryFilter, searchQuery]);
 
   const projectPhotos = useMemo(() => {
-    return photos.filter(p => p.projectId === id);
+    return photos
+      .filter(p => p.projectId === id)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [photos, id]);
 
   const viewingPhotoIndex = useMemo(() => {
@@ -635,33 +657,243 @@ export default function ProjectDetailScreen() {
   
   const getEmployeeName = (employeeId: string, employeeName?: string) => {
     if (employeeName) return employeeName;
+    const fromMap = userNamesMap.get(employeeId);
+    if (fromMap) return fromMap;
     if (user?.id === employeeId) return user.name;
+    const fromUsers = companyUsers.find(u => u.id === employeeId);
+    if (fromUsers?.name) return fromUsers.name;
     return `Employee ${employeeId.slice(0, 4)}`;
   };
 
+  // Live worker location tracking — one row per employee in worker_live_locations
+  const [workerLocations, setWorkerLocations] = useState<any[]>([]);
+  const workerLocChannelRef = useRef<any>(null);
 
+  const mapPins = useMemo<WorkerPin[]>(() => {
+    if (!project?.id) return [];
 
-  if (!project) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Project not found</Text>
-      </View>
-    );
-  }
+    // Index real-time locations by employee for O(1) lookup
+    const liveByEmployee = new Map<string, any>();
+    workerLocations
+      .filter(w => w.project_id === project.id)
+      .forEach(w => liveByEmployee.set(w.employee_id, w));
+
+    // Build an avatar lookup from companyUsers so each pin shows the employee photo
+    const avatarByEmployee = new Map<string, string | undefined>();
+    companyUsers.forEach(u => avatarByEmployee.set(u.id, u.avatar));
+
+    return activeClockEntries
+      .map(entry => {
+        const live = liveByEmployee.get(entry.employeeId);
+        const hasLive = live && live.latitude != null && live.longitude != null
+          && (live.latitude !== 0 || live.longitude !== 0);
+        const clockInLoc = entry.location;
+        const hasClockIn = clockInLoc &&
+          (clockInLoc.latitude !== 0 || clockInLoc.longitude !== 0);
+
+        if (!hasLive && !hasClockIn) return null;
+
+        const isOnBreak = entry.lunchBreaks?.some((lb: any) => !lb.endTime) ?? false;
+        const avatarUrl: string | undefined =
+          avatarByEmployee.get(entry.employeeId) ||
+          (user?.id === entry.employeeId ? user?.avatar : undefined) ||
+          undefined;
+
+        if (hasLive) {
+          return {
+            employeeId:   entry.employeeId,
+            employeeName: live.employee_name || getEmployeeName(entry.employeeId, entry.employeeName),
+            avatarUrl,
+            latitude:     live.latitude,
+            longitude:    live.longitude,
+            status:       (live.status === 'on_break' ? 'on_break' : 'working') as 'working' | 'on_break',
+            updatedAt:    live.updated_at,
+          };
+        }
+
+        // Fall back to clock-in GPS coordinate
+        return {
+          employeeId:   entry.employeeId,
+          employeeName: getEmployeeName(entry.employeeId, entry.employeeName),
+          avatarUrl,
+          latitude:     clockInLoc!.latitude,
+          longitude:    clockInLoc!.longitude,
+          status:       (isOnBreak ? 'on_break' : 'working') as 'working' | 'on_break',
+          updatedAt:    entry.clockIn,
+        };
+      })
+      .filter(Boolean) as WorkerPin[];
+  }, [workerLocations, activeClockEntries, project?.id, companyUsers, user]);
+
+  useEffect(() => {
+    if (!project?.id) return;
+    const pid = project.id;
+
+    supabase.from('worker_live_locations').select('*').eq('project_id', pid)
+      .then(({ data, error }) => {
+        if (error) { console.warn('[WorkerLoc] fetch error:', error.message); return; }
+        if (data) setWorkerLocations(data);
+      });
+
+    const channel = supabase
+      .channel(`worker_locs_${pid}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'worker_live_locations',
+        filter: `project_id=eq.${pid}`,
+      }, () => {
+        supabase.from('worker_live_locations').select('*').eq('project_id', pid)
+          .then(({ data, error }) => {
+            if (error) return;
+            if (data) setWorkerLocations(data);
+          });
+      })
+      .subscribe();
+
+    workerLocChannelRef.current = channel;
+    return () => { supabase.removeChannel(channel); };
+  }, [project?.id]);
+
+  // Zoom helpers
+  const MIN_ZOOM = 1;
+  const MAX_ZOOM = 4;
+  const ZOOM_STEP = 0.5;
+
+  const resetZoomImmediate = useCallback(() => {
+    zScale.value = 1; zTranslateX.value = 0; zTranslateY.value = 0;
+    zSavedScale.value = 1; zSavedTranslateX.value = 0; zSavedTranslateY.value = 0;
+    setZoomPercent(100);
+  }, []);
+
+  const updateZoomPercent = useCallback((val: number) => { setZoomPercent(Math.round(val * 100)); }, []);
+
+  const handleZoomIn = useCallback(() => {
+    const next = Math.min(MAX_ZOOM, zScale.value + ZOOM_STEP);
+    zScale.value = withSpring(next, { damping: 20, stiffness: 200 });
+    zSavedScale.value = next;
+    setZoomPercent(Math.round(next * 100));
+    if (next <= 1) { zTranslateX.value = withSpring(0); zTranslateY.value = withSpring(0); zSavedTranslateX.value = 0; zSavedTranslateY.value = 0; }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    const next = Math.max(MIN_ZOOM, zScale.value - ZOOM_STEP);
+    zScale.value = withSpring(next, { damping: 20, stiffness: 200 });
+    zSavedScale.value = next;
+    setZoomPercent(Math.round(next * 100));
+    if (next <= 1) { zTranslateX.value = withSpring(0); zTranslateY.value = withSpring(0); zSavedTranslateX.value = 0; zSavedTranslateY.value = 0; }
+  }, []);
+
+  const onImageContainerLayout = useCallback((e: any) => { zContainerWidth.value = e.nativeEvent.layout.width; zContainerHeight.value = e.nativeEvent.layout.height; }, []);
+
+  const pinchGesture = useMemo(() => Gesture.Pinch()
+    .onStart(() => { 'worklet'; zSavedScale.value = zScale.value; })
+    .onUpdate((e) => { 'worklet'; zScale.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zSavedScale.value * e.scale)); })
+    .onEnd(() => { 'worklet'; zSavedScale.value = zScale.value;
+      const maxTx = zContainerWidth.value * (zScale.value - 1) / 2;
+      const maxTy = zContainerHeight.value * (zScale.value - 1) / 2;
+      if (Math.abs(zTranslateX.value) > maxTx) zTranslateX.value = withSpring(Math.sign(zTranslateX.value) * maxTx);
+      if (Math.abs(zTranslateY.value) > maxTy) zTranslateY.value = withSpring(Math.sign(zTranslateY.value) * maxTy);
+      zSavedTranslateX.value = zTranslateX.value; zSavedTranslateY.value = zTranslateY.value;
+      runOnJS(updateZoomPercent)(zScale.value);
+    }), []);
+
+  // Refs so the pan worklet below can trigger nav handlers defined later
+  // without a TDZ error or stale-handler capture.
+  const handleNextPhotoRef = useRef<() => void>(() => {});
+  const handlePrevPhotoRef = useRef<() => void>(() => {});
+  const triggerNextPhoto = useCallback(() => { handleNextPhotoRef.current(); }, []);
+  const triggerPrevPhoto = useCallback(() => { handlePrevPhotoRef.current(); }, []);
+
+  const panGesture = useMemo(() => Gesture.Pan().minPointers(1).maxPointers(2)
+    .onStart(() => { 'worklet'; zSavedTranslateX.value = zTranslateX.value; zSavedTranslateY.value = zTranslateY.value; })
+    .onUpdate((e) => {
+      'worklet';
+      if (zScale.value <= 1) {
+        zTranslateX.value = e.translationX;
+      } else {
+        zTranslateX.value = zSavedTranslateX.value + e.translationX;
+        zTranslateY.value = zSavedTranslateY.value + e.translationY;
+      }
+    })
+    .onEnd((e) => { 'worklet';
+      if (zScale.value <= 1) {
+        const SWIPE_DIST = 80;
+        const SWIPE_VEL = 500;
+        const tx = zTranslateX.value;
+        const vx = e.velocityX;
+        if (tx < -SWIPE_DIST || vx < -SWIPE_VEL) {
+          runOnJS(triggerNextPhoto)();
+        } else if (tx > SWIPE_DIST || vx > SWIPE_VEL) {
+          runOnJS(triggerPrevPhoto)();
+        }
+        zTranslateX.value = withSpring(0, { damping: 22, stiffness: 220 });
+        zTranslateY.value = withSpring(0, { damping: 22, stiffness: 220 });
+        zSavedTranslateX.value = 0;
+        zSavedTranslateY.value = 0;
+      } else {
+        const maxTx = zContainerWidth.value * (zScale.value - 1) / 2;
+        const maxTy = zContainerHeight.value * (zScale.value - 1) / 2;
+        if (Math.abs(zTranslateX.value) > maxTx) zTranslateX.value = withSpring(Math.sign(zTranslateX.value) * maxTx);
+        if (Math.abs(zTranslateY.value) > maxTy) zTranslateY.value = withSpring(Math.sign(zTranslateY.value) * maxTy);
+        zSavedTranslateX.value = zTranslateX.value; zSavedTranslateY.value = zTranslateY.value;
+      }
+    }), []);
+
+  const doubleTapGesture = useMemo(() => Gesture.Tap().numberOfTaps(2)
+    .onEnd(() => { 'worklet';
+      if (zScale.value > 1) {
+        zScale.value = withSpring(1, { damping: 20, stiffness: 200 }); zTranslateX.value = withSpring(0, { damping: 20, stiffness: 200 }); zTranslateY.value = withSpring(0, { damping: 20, stiffness: 200 });
+        zSavedScale.value = 1; zSavedTranslateX.value = 0; zSavedTranslateY.value = 0; runOnJS(updateZoomPercent)(1);
+      } else { zScale.value = withSpring(2, { damping: 20, stiffness: 200 }); zSavedScale.value = 2; runOnJS(updateZoomPercent)(2); }
+    }), []);
+
+  const composedGesture = useMemo(() => Gesture.Race(doubleTapGesture, Gesture.Simultaneous(pinchGesture, panGesture)), [doubleTapGesture, pinchGesture, panGesture]);
+
+  const animatedImageStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: zScale.value }, { translateX: zTranslateX.value }, { translateY: zTranslateY.value }],
+  }));
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !viewingPhoto) return;
+    const node = fsImageWebRef.current as unknown as HTMLElement;
+    if (!node) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zScale.value + delta));
+      zScale.value = withSpring(next, { damping: 20, stiffness: 200 }); zSavedScale.value = next;
+      setZoomPercent(Math.round(next * 100));
+      if (next <= 1) { zTranslateX.value = withSpring(0); zTranslateY.value = withSpring(0); zSavedTranslateX.value = 0; zSavedTranslateY.value = 0; }
+    };
+    node.addEventListener('wheel', handleWheel, { passive: false });
+    return () => { node.removeEventListener('wheel', handleWheel); };
+  }, [viewingPhoto]);
 
   const handleClosePhotoViewer = useCallback(() => {
+    resetZoomImmediate();
     setViewingPhoto(null);
-  }, []);
+    const y = photosScrollY.current;
+    requestAnimationFrame(() => {
+      photosScrollRef.current?.scrollTo({ y, animated: false });
+    });
+  }, [resetZoomImmediate]);
 
   const handleNextPhoto = useCallback(() => {
     if (viewingPhotoIndex < 0 || viewingPhotoIndex >= projectPhotos.length - 1) return;
+    resetZoomImmediate();
     setViewingPhoto(projectPhotos[viewingPhotoIndex + 1]);
-  }, [viewingPhotoIndex, projectPhotos]);
+  }, [viewingPhotoIndex, projectPhotos, resetZoomImmediate]);
 
   const handlePrevPhoto = useCallback(() => {
     if (viewingPhotoIndex <= 0) return;
+    resetZoomImmediate();
     setViewingPhoto(projectPhotos[viewingPhotoIndex - 1]);
-  }, [viewingPhotoIndex, projectPhotos]);
+  }, [viewingPhotoIndex, projectPhotos, resetZoomImmediate]);
+
+  // Keep the pan-gesture worklet in sync with the latest handlers.
+  handleNextPhotoRef.current = handleNextPhoto;
+  handlePrevPhotoRef.current = handlePrevPhoto;
 
   const handleDownloadPhoto = useCallback(async () => {
     if (!viewingPhoto?.url || isPhotoDownloading) return;
@@ -678,6 +910,7 @@ export default function ProjectDetailScreen() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        setDownloadResult({ status: 'success', message: `Saved as ${fileName}` });
       } else {
         const file = new FSFile(Paths.cache, fileName);
         const response = await fetch(viewingPhoto.url);
@@ -692,21 +925,29 @@ export default function ProjectDetailScreen() {
         const canShare = await Sharing.isAvailableAsync();
         if (canShare) {
           await Sharing.shareAsync(file.uri);
-        } else {
-          Alert.alert('Downloaded', `Photo saved to: ${file.uri}`);
         }
+        setDownloadResult({ status: 'success', message: `Saved as ${fileName}` });
       }
     } catch (error: any) {
       console.error('[ProjectDetail] Download error:', error);
-      if (Platform.OS === 'web') {
-        window.alert('Failed to download photo. Please try again.');
-      } else {
-        Alert.alert('Download Failed', 'Could not download the photo. Please try again.');
-      }
+      setDownloadResult({
+        status: 'error',
+        message: error?.message || 'Could not download the photo. Please try again.',
+      });
     } finally {
       setIsPhotoDownloading(false);
     }
   }, [viewingPhoto, isPhotoDownloading]);
+
+  if (!project) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>Project not found</Text>
+      </View>
+    );
+  }
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'super-admin';
 
   const renderTabContent = () => {
     switch (activeTab) {
@@ -1213,7 +1454,7 @@ export default function ProjectDetailScreen() {
                     const now = new Date();
                     const hoursWorked = ((now.getTime() - clockInTime.getTime()) / (1000 * 60 * 60)).toFixed(1);
                     const isOnLunch = entry.lunchBreaks?.some(lunch => !lunch.endTime) || false;
-                    
+
                     return (
                       <View key={entry.id} style={styles.clockedInItem}>
                         <View style={styles.clockedInEmployeeAvatar}>
@@ -1251,6 +1492,11 @@ export default function ProjectDetailScreen() {
                     );
                   })}
                 </View>
+                {isAdmin && mapPins.length > 0 && (
+                  <View style={{ marginTop: 12 }}>
+                    <WorkerLocationMap workers={mapPins} height={240} />
+                  </View>
+                )}
               </View>
             )}
 
@@ -2533,9 +2779,15 @@ export default function ProjectDetailScreen() {
 
         return (
           <View style={styles.photosTabContent}>
-            <ScrollView style={styles.photosScrollView} showsVerticalScrollIndicator={false}
-          keyboardDismissMode="on-drag"
-        >
+            <ScrollView
+              ref={photosScrollRef}
+              style={styles.photosScrollView}
+              showsVerticalScrollIndicator={false}
+              keyboardDismissMode="on-drag"
+              contentInsetAdjustmentBehavior="never"
+              onScroll={(e) => { photosScrollY.current = e.nativeEvent.contentOffset.y; }}
+              scrollEventThrottle={16}
+            >
               <View style={styles.photosHeader}>
                 <Text style={styles.photosTitle}>Photos</Text>
                 <View style={styles.photosHeaderButtons}>
@@ -2627,23 +2879,43 @@ export default function ProjectDetailScreen() {
               </View>
 
               <View style={styles.photosGallery}>
-                <Text style={styles.photosGalleryTitle}>Thumbnail Gallery ({projectPhotos.length})</Text>
+                <View style={styles.photosGalleryHeader}>
+                  <Text style={styles.photosGalleryTitle}>Thumbnail Gallery ({projectPhotos.length})</Text>
+                  <View style={styles.photosViewToggle}>
+                    <TouchableOpacity
+                      style={[styles.photosViewToggleBtn, photoViewMode === 'grid' && styles.photosViewToggleBtnActive]}
+                      onPress={() => setPhotoViewMode('grid')}
+                    >
+                      <LayoutGrid size={16} color={photoViewMode === 'grid' ? '#2563EB' : '#9CA3AF'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.photosViewToggleBtn, photoViewMode === 'list' && styles.photosViewToggleBtnActive]}
+                      onPress={() => setPhotoViewMode('list')}
+                    >
+                      <LayoutList size={16} color={photoViewMode === 'list' ? '#2563EB' : '#9CA3AF'} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
                 {projectPhotos.length === 0 ? (
                   <View style={styles.photosEmptyState}>
                     <Camera size={48} color="#D1D5DB" />
                     <Text style={styles.photosEmptyStateText}>No photos yet</Text>
                     <Text style={styles.photosEmptyStateSubtext}>Upload or take a photo to get started</Text>
                   </View>
-                ) : (
+                ) : photoViewMode === 'grid' ? (
                   <View style={styles.photosGalleryGrid}>
                     {projectPhotos.map((photo) => (
                       <View key={photo.id} style={[styles.photosGalleryItem, { position: 'relative' }]}>
                         <TouchableOpacity
-                          style={{ flex: 1 }}
                           onPress={() => setViewingPhoto(photo)}
                           activeOpacity={0.8}
                         >
-                          <Image source={{ uri: photo.url }} style={styles.photosThumbnail} contentFit="cover" />
+                          <DesktopSavableImage
+                            source={{ uri: photo.url }}
+                            style={styles.photosThumbnail}
+                            contentFit="cover"
+                            alt={photo.notes || photo.category || 'Photo'}
+                          />
 
                           {/* 🎯 CLIENT DESIGN: Uploader info below image */}
                           <View style={styles.photosThumbnailInfo}>
@@ -2680,7 +2952,13 @@ export default function ProjectDetailScreen() {
 
                             {/* Category */}
                             <View style={styles.photosCategoryBadge}>
-                              <Text style={styles.photosCategoryBadgeText}>{photo.category}</Text>
+                              <Text
+                                style={styles.photosCategoryBadgeText}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
+                              >
+                                {photo.category}
+                              </Text>
                             </View>
 
                             {/* Notes */}
@@ -2691,9 +2969,15 @@ export default function ProjectDetailScreen() {
                             )}
 
                             {/* Date */}
-                            <Text style={styles.photosThumbnailDate}>
-                              {new Date(photo.date).toLocaleDateString()}
-                            </Text>
+                            {photo.date && (
+                              <Text style={styles.photosThumbnailDate}>
+                                {new Date(photo.date).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}
+                              </Text>
+                            )}
                           </View>
                         </TouchableOpacity>
 
@@ -2716,6 +3000,60 @@ export default function ProjectDetailScreen() {
                           </TouchableOpacity>
                         )}
                       </View>
+                    ))}
+                  </View>
+                ) : (
+                  <View>
+                    {projectPhotos.map((photo) => (
+                      <TouchableOpacity
+                        key={photo.id}
+                        style={styles.photosListRow}
+                        activeOpacity={0.7}
+                        onPress={() => setViewingPhoto(photo)}
+                      >
+                        <DesktopSavableImage
+                          source={{ uri: photo.url }}
+                          style={styles.photosListThumbnail}
+                          contentFit="cover"
+                          alt={photo.notes || photo.category || 'Photo'}
+                        />
+                        <View style={styles.photosListInfo}>
+                          <Text style={styles.photosListCategory} numberOfLines={1}>{photo.category}</Text>
+                          {photo.uploader && (
+                            <Text style={styles.photosListUploader} numberOfLines={1}>{photo.uploader.name}</Text>
+                          )}
+                          {photo.notes && (
+                            <Text style={styles.photosListNotes} numberOfLines={1}>{photo.notes}</Text>
+                          )}
+                          {photo.date && (
+                            <Text style={styles.photosListDate}>
+                              {new Date(photo.date).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                year: 'numeric',
+                              })}
+                            </Text>
+                          )}
+                        </View>
+                        {project?.status !== 'completed' && photo.uploadedBy === user?.id && (
+                          <TouchableOpacity
+                            style={styles.photosListDeleteBtn}
+                            onPress={() => {
+                              if (Platform.OS === 'web') {
+                                if (!window.confirm('Delete this photo?')) return;
+                                deletePhoto(photo.id).catch((err: any) => window.alert(err.message || 'Failed to delete photo'));
+                                return;
+                              }
+                              Alert.alert('Delete Photo', 'Are you sure?', [
+                                { text: 'Cancel', style: 'cancel' },
+                                { text: 'Delete', style: 'destructive', onPress: () => deletePhoto(photo.id) },
+                              ]);
+                            }}
+                          >
+                            <Trash2 size={14} color="#EF4444" />
+                          </TouchableOpacity>
+                        )}
+                      </TouchableOpacity>
                     ))}
                   </View>
                 )}
@@ -3866,7 +4204,7 @@ export default function ProjectDetailScreen() {
         statusBarTranslucent
       >
         <View style={styles.fsOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={handleClosePhotoViewer} />
+          <Pressable style={StyleSheet.absoluteFill} onPress={zoomPercent > 100 ? undefined : handleClosePhotoViewer} />
 
           {/* Header */}
           <View style={styles.fsHeader}>
@@ -3891,16 +4229,48 @@ export default function ProjectDetailScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Image */}
-          {viewingPhoto && (
-            <View style={styles.fsImageContainer}>
-              <Image
-                source={{ uri: viewingPhoto.url }}
-                style={styles.fsImage}
-                contentFit="contain"
-                transition={200}
-              />
+          {/* Zoom Controls */}
+          <View style={styles.fsZoomControls}>
+            <TouchableOpacity
+              style={[styles.fsZoomBtn, zoomPercent <= 100 && styles.fsZoomBtnDisabled]}
+              onPress={handleZoomOut}
+              disabled={zoomPercent <= 100}
+            >
+              <ZoomOut size={18} color={zoomPercent <= 100 ? 'rgba(255,255,255,0.3)' : '#FFFFFF'} />
+            </TouchableOpacity>
+            <View style={styles.fsZoomBadge}>
+              <Text style={styles.fsZoomText}>{zoomPercent}%</Text>
             </View>
+            <TouchableOpacity
+              style={[styles.fsZoomBtn, zoomPercent >= 400 && styles.fsZoomBtnDisabled]}
+              onPress={handleZoomIn}
+              disabled={zoomPercent >= 400}
+            >
+              <ZoomIn size={18} color={zoomPercent >= 400 ? 'rgba(255,255,255,0.3)' : '#FFFFFF'} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Image with zoom */}
+          {viewingPhoto && (
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <GestureDetector gesture={composedGesture}>
+                <View
+                  style={styles.fsImageContainer}
+                  ref={fsImageWebRef}
+                  onLayout={onImageContainerLayout}
+                >
+                  <Animated.View style={[styles.fsImage, animatedImageStyle]}>
+                    <DesktopSavableImage
+                      source={{ uri: viewingPhoto.url }}
+                      style={{ width: '100%', height: '100%' }}
+                      contentFit="contain"
+                      transition={200}
+                      alt={viewingPhoto.notes || viewingPhoto.category || 'Photo'}
+                    />
+                  </Animated.View>
+                </View>
+              </GestureDetector>
+            </GestureHandlerRootView>
           )}
 
           {/* Prev arrow */}
@@ -3953,10 +4323,18 @@ export default function ProjectDetailScreen() {
                 </View>
               )}
               {viewingPhoto.notes ? (
-                <Text style={styles.fsNotes} numberOfLines={3}>{viewingPhoto.notes}</Text>
+                <ExpandableNotes
+                  text={viewingPhoto.notes}
+                  maxLines={3}
+                  maxExpandedHeight={180}
+                  textStyle={styles.fsNotes}
+                  toggleStyle={styles.fsNotesToggle}
+                />
               ) : null}
             </View>
           )}
+
+          <DownloadResultModal result={downloadResult} onDismiss={() => setDownloadResult(null)} />
         </View>
       </Modal>
     </>
@@ -5661,21 +6039,92 @@ const styles = StyleSheet.create({
   },
   photosGallery: {
     padding: 16,
+    paddingBottom: 120,
     backgroundColor: '#E5E7EB',
   },
   photosGalleryTitle: {
     fontSize: 18,
     fontWeight: '700' as const,
     color: '#1F2937',
+  },
+  photosGalleryHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
     marginBottom: 16,
+  },
+  photosViewToggle: {
+    flexDirection: 'row' as const,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 2,
+    gap: 2,
+  },
+  photosViewToggleBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 6,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  photosViewToggleBtnActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  photosListRow: {
+    flexDirection: 'row' as const,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 8,
+    alignItems: 'center' as const,
+  },
+  photosListThumbnail: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    backgroundColor: '#F3F4F6',
+    marginRight: 12,
+  },
+  photosListInfo: {
+    flex: 1,
+  },
+  photosListCategory: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#1F2937',
+  },
+  photosListUploader: {
+    fontSize: 12,
+    color: '#2563EB',
+    marginTop: 2,
+  },
+  photosListNotes: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 2,
+  },
+  photosListDate: {
+    fontSize: 11,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  photosListDeleteBtn: {
+    padding: 8,
+    marginLeft: 4,
   },
   photosGalleryGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 12,
+    alignItems: 'flex-start',
   },
   photosGalleryItem: {
-    width: '30%',
+    width: '48%',
     backgroundColor: '#FFFFFF',
     borderRadius: 12,
     overflow: 'hidden',
@@ -5699,7 +6148,7 @@ const styles = StyleSheet.create({
   },
   photosThumbnail: {
     width: '100%',
-    height: 150,
+    aspectRatio: 4 / 3,
     backgroundColor: '#F3F4F6',
   },
   photosThumbnailInfo: {
@@ -6349,6 +6798,45 @@ const styles = StyleSheet.create({
     color: '#E5E7EB',
     fontSize: 13,
     lineHeight: 18,
+  },
+  fsNotesToggle: {
+    color: '#93C5FD',
+    fontSize: 12,
+    fontWeight: '600' as const,
+  },
+  fsZoomControls: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 100 : 62,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    zIndex: 10,
+    gap: 2,
+  },
+  fsZoomBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fsZoomBtnDisabled: {
+    opacity: 0.4,
+  },
+  fsZoomBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 52,
+    alignItems: 'center',
+  },
+  fsZoomText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600' as const,
   },
   costBreakdownSection: {
     marginTop: 16,

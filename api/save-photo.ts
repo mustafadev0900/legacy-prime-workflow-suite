@@ -104,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         actorId: authUser.id,
         type: 'general',
         title: 'Photo Added',
-        message: `${name} added a ${category} photo to ${projectName}`,
+        message: `${name} added a ${category} photo to ${projectName}${notes ? `\nNote: ${notes}` : ''}`,
         data: { photoId: data.id, projectId },
       });
     } catch (e) {

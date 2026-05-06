@@ -17,11 +17,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Email service not configured' });
   }
 
-  const { recipients, subject, body, companyName } = req.body as {
+  const { recipients, subject, body, companyName, attachments } = req.body as {
     recipients: Array<{ email: string; name: string }>;
     subject: string;
     body: string;
     companyName?: string;
+    attachments?: Array<{ filename: string; content: string; type: string }>;
   };
 
   if (!recipients?.length || !subject || !body) {
@@ -29,6 +30,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const fromName = companyName || EMAIL_FROM_NAME;
+
+  // Warn when using Resend's restricted test sender — only delivers to the account owner
+  const isRestrictedSender = EMAIL_FROM_ADDRESS === 'onboarding@resend.dev';
+  if (isRestrictedSender) {
+    console.warn('[CRM Email] Using restricted test sender onboarding@resend.dev — emails will only reach the Resend account owner. Set EMAIL_FROM_ADDRESS to a verified domain email.');
+  }
 
   const results = await Promise.allSettled(
     recipients.map(async (recipient) => {
@@ -47,21 +54,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           to: [recipient.email],
           subject,
           html,
+          ...(attachments?.length ? {
+            attachments: attachments.map(a => ({
+              filename: a.filename,
+              content: a.content,
+            })),
+          } : {}),
         }),
       });
 
       const data = await r.json() as any;
-      if (!r.ok) throw new Error(data.message || 'Send failed');
-      console.log('[CRM Email] sent to', recipient.email, '— id:', data.id);
+      if (!r.ok) {
+        console.error('[CRM Email] Resend rejected email to', recipient.email, '—', data.message);
+        throw new Error(data.message || 'Send failed');
+      }
+      console.log('[CRM Email] accepted for', recipient.email, '— id:', data.id);
       return { email: recipient.email, id: data.id };
     })
   );
 
   const sent = results.filter(r => r.status === 'fulfilled').length;
   const failed = results.filter(r => r.status === 'rejected').length;
+  const failedReasons = results
+    .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    .map(r => r.reason?.message || 'Unknown error');
 
   console.log(`[CRM Email] done — sent=${sent} failed=${failed}`);
-  return res.status(200).json({ success: true, sent, failed });
+
+  // If every email was rejected by Resend, return a server error
+  if (sent === 0 && failed > 0) {
+    return res.status(500).json({
+      error: `Email delivery failed: ${failedReasons[0] || 'Resend rejected all recipients'}`,
+      sent: 0,
+      failed,
+    });
+  }
+
+  const senderWarning = isRestrictedSender
+    ? 'Using test email sender — emails are only guaranteed to reach the Resend account owner. To send to all recipients, verify a domain at resend.com/domains and set EMAIL_FROM_ADDRESS in your environment.'
+    : null;
+
+  return res.status(200).json({ success: true, sent, failed, senderWarning });
 }
 
 function esc(s: string): string {

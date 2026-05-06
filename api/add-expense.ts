@@ -146,7 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         actorId: authUser.id,
         type: 'general',
         title: 'Expense Added',
-        message: `${name} added a $${Number(amount).toLocaleString()} ${type} expense at ${store}`,
+        message: `${name} added a $${Number(amount).toLocaleString()} ${type} expense at ${store}${notes ? `\nNote: ${notes}` : ''}`,
         data: { expenseId: data.id, projectId },
       });
     } catch (e) {

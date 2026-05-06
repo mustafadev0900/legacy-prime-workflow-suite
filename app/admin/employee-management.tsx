@@ -11,6 +11,18 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 
+function formatPhone(raw: string | undefined): string {
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 11 && digits[0] === '1') {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return raw;
+}
+
 const OFFICE_ROLES: { name: string; icon: React.ComponentType<any>; color: string; bg: string }[] = [
   { name: 'Project Manager', icon: ClipboardList, color: '#4F46E5', bg: '#EEF2FF' },
   { name: 'Bookkeeper', icon: ClipboardList, color: '#4F46E5', bg: '#EEF2FF' },
@@ -50,17 +62,6 @@ export default function EmployeeManagementScreen() {
   const [showRolePicker, setShowRolePicker] = useState(false);
   const [isSavingClassify, setIsSavingClassify] = useState(false);
 
-  // Timecard modal
-  const [showTimecardModal, setShowTimecardModal] = useState(false);
-  const [timecardPeriod, setTimecardPeriod] = useState<'weekly' | 'bi-weekly'>('weekly');
-  const [isGeneratingTimecard, setIsGeneratingTimecard] = useState(false);
-
-  // Timecard success modal
-  const [showTimecardSuccess, setShowTimecardSuccess] = useState(false);
-  const [timecardResult, setTimecardResult] = useState<{
-    employeeName: string; totalHours: number; regularHours: number;
-    overtimeHours: number; totalEarnings: number;
-  } | null>(null);
   // Tick every 60s so live hours for clocked-in employees update automatically
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -313,66 +314,6 @@ export default function EmployeeManagementScreen() {
     }
   };
 
-  const openTimecardModal = (employee: User) => {
-    setSelectedEmployee(employee);
-    setTimecardPeriod('weekly');
-    setShowTimecardModal(true);
-  };
-
-  const handleGenerateTimecard = async () => {
-    if (!selectedEmployee) return;
-    setIsGeneratingTimecard(true);
-    try {
-      const now = new Date();
-      const dayOfWeek = now.getDay();
-      const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      const periodDays = timecardPeriod === 'weekly' ? 7 : 14;
-
-      const start = new Date(now);
-      start.setDate(now.getDate() - diffToMonday - (timecardPeriod === 'bi-weekly' ? 7 : 0));
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setDate(start.getDate() + periodDays - 1);
-      end.setHours(23, 59, 59, 999);
-
-      const empEntries = clockEntries.filter((e: ClockEntry) =>
-        e.employeeId === selectedEmployee.id &&
-        new Date(e.clockIn).getTime() >= start.getTime() &&
-        new Date(e.clockIn).getTime() <= end.getTime()
-      );
-
-      const entryMs = (entry: ClockEntry): number => {
-        const s = new Date(entry.clockIn).getTime();
-        const en = entry.clockOut ? new Date(entry.clockOut).getTime() : Date.now();
-        let ms = en - s;
-        if (entry.lunchBreaks) {
-          entry.lunchBreaks.forEach((lunch: any) => {
-            const ls = new Date(lunch.startTime).getTime();
-            const le = lunch.endTime ? new Date(lunch.endTime).getTime() : en;
-            if (!isNaN(ls) && !isNaN(le)) ms -= (le - ls);
-          });
-        }
-        return Math.max(0, ms);
-      };
-
-      const totalHours = empEntries.reduce((sum: number, e: ClockEntry) => sum + entryMs(e), 0) / 3_600_000;
-      const regularHours = Math.min(totalHours, 40);
-      const overtimeHours = Math.max(0, totalHours - 40);
-      const rate = selectedEmployee.hourlyRate || 0;
-      const totalEarnings = (regularHours * rate) + (overtimeHours * rate * 1.5);
-
-      setTimecardResult({
-        employeeName: selectedEmployee.name,
-        totalHours, regularHours, overtimeHours, totalEarnings,
-      });
-      setShowTimecardModal(false);
-      setShowTimecardSuccess(true);
-    } catch (err: any) {
-      Alert.alert('Error', err.message || 'Failed to generate timecard');
-    } finally {
-      setIsGeneratingTimecard(false);
-    }
-  };
 
   const getReportDateRange = (period: typeof reportPeriod): { start: Date; end: Date; label: string } => {
     const now = new Date();
@@ -820,7 +761,7 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
                 {/* Email + Phone */}
                 <Text style={styles.employeeEmail}>{employee.email}</Text>
                 {employee.phone && (
-                  <Text style={styles.employeePhone}>{employee.phone}</Text>
+                  <Text style={styles.employeePhone}>{formatPhone(employee.phone)}</Text>
                 )}
 
                 {/* Today hours + Rate inline with icons */}
@@ -831,21 +772,19 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
                       Today: {stats.todayHours.toFixed(1)}h
                     </Text>
                   </View>
-                  {employee.hourlyRate && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <DollarSign size={14} color="#6B7280" />
-                      <Text style={styles.inlineStatText}>
-                        ${employee.hourlyRate.toFixed(2)}/hr
-                      </Text>
-                    </View>
-                  )}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <DollarSign size={14} color="#6B7280" />
+                    <Text style={styles.inlineStatText}>
+                      ${(employee.hourlyRate ?? 0).toFixed(2)}/hr
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Actions: Timecard + Classify */}
                 <View style={styles.employeeActions}>
                   <TouchableOpacity
                     style={styles.blueActionButton}
-                    onPress={() => openTimecardModal(employee)}
+                    onPress={() => router.push(`/admin/time-cards?employeeId=${employee.id}`)}
                   >
                     <FileText size={15} color="#2563EB" />
                     <Text style={styles.blueActionText}>Timecard</Text>
@@ -1158,105 +1097,6 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
         </View>
       </Modal>
 
-      {/* Generate Timecard Modal */}
-      <Modal
-        visible={showTimecardModal}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setShowTimecardModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowTimecardModal(false)} />
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Generate Timecard</Text>
-
-            {selectedEmployee && (
-              <>
-                <View style={styles.modalInfo}>
-                  <Text style={styles.modalInfoLabel}>Employee:</Text>
-                  <Text style={styles.modalInfoValue}>{selectedEmployee.name}</Text>
-                </View>
-                <View style={styles.modalInfo}>
-                  <Text style={styles.modalInfoLabel}>Hourly Rate:</Text>
-                  <Text style={styles.modalInfoValue}>
-                    {selectedEmployee.hourlyRate ? `$${selectedEmployee.hourlyRate.toFixed(2)}/hr` : 'Not set'}
-                  </Text>
-                </View>
-              </>
-            )}
-
-            <Text style={[styles.classifySectionLabel, { marginTop: 8 }]}>Period:</Text>
-            <View style={styles.timecardToggleRow}>
-              <TouchableOpacity
-                style={[styles.timecardToggle, timecardPeriod === 'weekly' && styles.timecardToggleActive]}
-                onPress={() => setTimecardPeriod('weekly')}
-              >
-                <Text style={[styles.timecardToggleText, timecardPeriod === 'weekly' && styles.timecardToggleTextActive]}>Weekly</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.timecardToggle, timecardPeriod === 'bi-weekly' && styles.timecardToggleActive]}
-                onPress={() => setTimecardPeriod('bi-weekly')}
-              >
-                <Text style={[styles.timecardToggleText, timecardPeriod === 'bi-weekly' && styles.timecardToggleTextActive]}>Bi-Weekly</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={[styles.modalButtons, { marginTop: 24 }]}>
-              <TouchableOpacity
-                style={styles.modalCancelButton}
-                onPress={() => setShowTimecardModal(false)}
-                disabled={isGeneratingTimecard}
-              >
-                <Text style={styles.modalCancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalConfirmButton}
-                onPress={handleGenerateTimecard}
-                disabled={isGeneratingTimecard}
-              >
-                {isGeneratingTimecard ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.modalConfirmButtonText}>Generate</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Timecard Generated Success Modal */}
-      <Modal
-        visible={showTimecardSuccess}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowTimecardSuccess(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.successModal}>
-            <Text style={styles.successTitle}>Timecard Generated</Text>
-
-            {timecardResult && (
-              <View style={styles.successStatsContainer}>
-                <Text style={styles.successStatsText}>
-                  Employee: {timecardResult.employeeName}  Total Hours: {timecardResult.totalHours.toFixed(2)}h  Regular: {timecardResult.regularHours.toFixed(2)}h  Overtime: {timecardResult.overtimeHours.toFixed(2)}h  Total Earnings: ${timecardResult.totalEarnings.toFixed(2)}
-                </Text>
-              </View>
-            )}
-
-            <View style={styles.successDivider} />
-
-            <View style={styles.successFooter}>
-              <TouchableOpacity
-                style={styles.successOkButton}
-                onPress={() => setShowTimecardSuccess(false)}
-              >
-                <Text style={styles.successOkText}>OK</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -1901,82 +1741,5 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#1F2937',
-  },
-  // Timecard toggle
-  timecardToggleRow: {
-    flexDirection: 'row' as const,
-    backgroundColor: '#F1F5F9',
-    borderRadius: 10,
-    padding: 3,
-  },
-  timecardToggle: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center' as const,
-  },
-  timecardToggleActive: {
-    backgroundColor: '#2563EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  timecardToggleText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#64748B',
-  },
-  timecardToggleTextActive: {
-    color: '#FFFFFF',
-  },
-  // Success modal
-  successModal: {
-    backgroundColor: '#1E293B',
-    borderRadius: 12,
-    padding: 20,
-    marginHorizontal: 24,
-    alignSelf: 'center' as const,
-    marginTop: 'auto' as any,
-    marginBottom: 'auto' as any,
-    width: '90%' as any,
-    maxWidth: 360,
-  },
-  successTitle: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: '#FFFFFF',
-    marginBottom: 12,
-  },
-  successStatsContainer: {
-    marginBottom: 12,
-  },
-  successStatsText: {
-    fontSize: 13,
-    color: '#94A3B8',
-    lineHeight: 20,
-  },
-  successDivider: {
-    height: 1,
-    backgroundColor: '#334155',
-    marginBottom: 12,
-  },
-  successFooter: {
-    flexDirection: 'row' as const,
-    justifyContent: 'flex-end' as const,
-  },
-  successOkButton: {
-    borderWidth: 1,
-    borderColor: '#475569',
-    borderRadius: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 20,
-    backgroundColor: '#1E293B',
-  },
-  successOkText: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: '#E2E8F0',
   },
 });

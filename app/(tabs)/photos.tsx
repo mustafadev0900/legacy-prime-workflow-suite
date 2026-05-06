@@ -1,8 +1,8 @@
-import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, InputAccessoryView, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import SkeletonBox from '@/components/SkeletonBox';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
-import { Camera, Upload, Edit2, X, Check, Plus, Trash2, Settings, LayoutGrid, LayoutList, Monitor, Info, Download, ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { Camera, Upload, Edit2, X, Check, Plus, Trash2, Settings, LayoutGrid, LayoutList, Monitor, Info, Download, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Calendar } from 'lucide-react-native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Photo } from '@/types';
@@ -11,6 +11,13 @@ import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { supabase } from '@/lib/supabase';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, runOnJS } from 'react-native-reanimated';
+import { DownloadResultModal, type DownloadResult } from '@/components/DownloadResultModal';
+import { DesktopSavableImage } from '@/components/DesktopSavableImage';
+import { ExpandableNotes } from '@/components/ExpandableNotes';
+
+const KEYBOARD_ACCESSORY_ID = 'photos-preview-keyboard-done';
 
 export default function PhotosScreen() {
   const { user, photos, addPhoto, updatePhoto, deletePhoto, photoCategories, priceListCategories, addPhotoCategory, updatePhotoCategory, deletePhotoCategory, company, projects, refreshPhotos, isLoading, isCompanyReloading } = useApp();
@@ -58,9 +65,27 @@ export default function PhotosScreen() {
   // Full-screen photo preview
   const [fullScreenPhoto, setFullScreenPhoto] = useState<Photo | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadResult, setDownloadResult] = useState<DownloadResult>(null);
+
+
+  // Zoom state
+  const [zoomPercent, setZoomPercent] = useState(100);
+  const scale = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const savedScale = useSharedValue(1);
+  const savedTranslateX = useSharedValue(0);
+  const savedTranslateY = useSharedValue(0);
+  const containerWidth = useSharedValue(0);
+  const containerHeight = useSharedValue(0);
+  const fsImageWebRef = useRef<View>(null);
+  const galleryScrollRef = useRef<ScrollView>(null);
+  const galleryScrollY = useRef(0);
 
   const filteredPhotos = useMemo(() => {
-    return photos.filter(photo => !selectedProjectId || photo.projectId === selectedProjectId);
+    return photos
+      .filter(photo => !selectedProjectId || photo.projectId === selectedProjectId)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [photos, selectedProjectId]);
 
   const fullScreenIndex = useMemo(() => {
@@ -359,23 +384,236 @@ export default function PhotosScreen() {
     setTempCategory('');
   };
 
+  // Zoom helpers
+  const MIN_ZOOM = 1;
+  const MAX_ZOOM = 4;
+  const ZOOM_STEP = 0.5;
+
+  const resetZoomImmediate = useCallback(() => {
+    scale.value = 1;
+    translateX.value = 0;
+    translateY.value = 0;
+    savedScale.value = 1;
+    savedTranslateX.value = 0;
+    savedTranslateY.value = 0;
+    setZoomPercent(100);
+  }, []);
+
+  const updateZoomPercent = useCallback((val: number) => {
+    setZoomPercent(Math.round(val * 100));
+  }, []);
+
+  const handleZoomIn = useCallback(() => {
+    const next = Math.min(MAX_ZOOM, scale.value + ZOOM_STEP);
+    scale.value = withSpring(next, { damping: 20, stiffness: 200 });
+    savedScale.value = next;
+    setZoomPercent(Math.round(next * 100));
+    if (next <= 1) {
+      translateX.value = withSpring(0);
+      translateY.value = withSpring(0);
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+    }
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    const next = Math.max(MIN_ZOOM, scale.value - ZOOM_STEP);
+    scale.value = withSpring(next, { damping: 20, stiffness: 200 });
+    savedScale.value = next;
+    setZoomPercent(Math.round(next * 100));
+    if (next <= 1) {
+      translateX.value = withSpring(0);
+      translateY.value = withSpring(0);
+      savedTranslateX.value = 0;
+      savedTranslateY.value = 0;
+    }
+  }, []);
+
+  const onImageContainerLayout = useCallback((e: any) => {
+    containerWidth.value = e.nativeEvent.layout.width;
+    containerHeight.value = e.nativeEvent.layout.height;
+  }, []);
+
+  // Refs used inside the pan worklet so the gesture never captures stale
+  // handlers. handleNextPhoto/handlePrevPhoto are defined later and change
+  // whenever fullScreenIndex changes; direct deps would cause a TDZ error.
+  const handleNextPhotoRef = useRef<() => void>(() => {});
+  const handlePrevPhotoRef = useRef<() => void>(() => {});
+  const triggerNextPhoto = useCallback(() => { handleNextPhotoRef.current(); }, []);
+  const triggerPrevPhoto = useCallback(() => { handlePrevPhotoRef.current(); }, []);
+
+  const pinchGesture = useMemo(() =>
+    Gesture.Pinch()
+      .onStart(() => {
+        'worklet';
+        savedScale.value = scale.value;
+      })
+      .onUpdate((e) => {
+        'worklet';
+        scale.value = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, savedScale.value * e.scale));
+      })
+      .onEnd(() => {
+        'worklet';
+        savedScale.value = scale.value;
+        const maxTx = containerWidth.value * (scale.value - 1) / 2;
+        const maxTy = containerHeight.value * (scale.value - 1) / 2;
+        if (Math.abs(translateX.value) > maxTx) {
+          translateX.value = withSpring(Math.sign(translateX.value) * maxTx);
+        }
+        if (Math.abs(translateY.value) > maxTy) {
+          translateY.value = withSpring(Math.sign(translateY.value) * maxTy);
+        }
+        savedTranslateX.value = translateX.value;
+        savedTranslateY.value = translateY.value;
+        runOnJS(updateZoomPercent)(scale.value);
+      }),
+    []
+  );
+
+  const panGesture = useMemo(() =>
+    Gesture.Pan()
+      .minPointers(1)
+      .maxPointers(2)
+      .onStart(() => {
+        'worklet';
+        savedTranslateX.value = translateX.value;
+        savedTranslateY.value = translateY.value;
+      })
+      .onUpdate((e) => {
+        'worklet';
+        if (scale.value <= 1) {
+          // Not zoomed — follow finger horizontally for swipe-nav preview
+          translateX.value = e.translationX;
+        } else {
+          // Zoomed — pan the image in both axes
+          translateX.value = savedTranslateX.value + e.translationX;
+          translateY.value = savedTranslateY.value + e.translationY;
+        }
+      })
+      .onEnd((e) => {
+        'worklet';
+        if (scale.value <= 1) {
+          // Swipe-nav: distance or velocity threshold triggers next/prev
+          const SWIPE_DIST = 80;
+          const SWIPE_VEL = 500;
+          const tx = translateX.value;
+          const vx = e.velocityX;
+          if (tx < -SWIPE_DIST || vx < -SWIPE_VEL) {
+            runOnJS(triggerNextPhoto)();
+          } else if (tx > SWIPE_DIST || vx > SWIPE_VEL) {
+            runOnJS(triggerPrevPhoto)();
+          }
+          translateX.value = withSpring(0, { damping: 22, stiffness: 220 });
+          translateY.value = withSpring(0, { damping: 22, stiffness: 220 });
+          savedTranslateX.value = 0;
+          savedTranslateY.value = 0;
+        } else {
+          // Clamp pan within zoom bounds
+          const maxTx = containerWidth.value * (scale.value - 1) / 2;
+          const maxTy = containerHeight.value * (scale.value - 1) / 2;
+          if (Math.abs(translateX.value) > maxTx) {
+            translateX.value = withSpring(Math.sign(translateX.value) * maxTx);
+          }
+          if (Math.abs(translateY.value) > maxTy) {
+            translateY.value = withSpring(Math.sign(translateY.value) * maxTy);
+          }
+          savedTranslateX.value = translateX.value;
+          savedTranslateY.value = translateY.value;
+        }
+      }),
+    []
+  );
+
+  const doubleTapGesture = useMemo(() =>
+    Gesture.Tap()
+      .numberOfTaps(2)
+      .onEnd(() => {
+        'worklet';
+        if (scale.value > 1) {
+          scale.value = withSpring(1, { damping: 20, stiffness: 200 });
+          translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+          translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
+          savedScale.value = 1;
+          savedTranslateX.value = 0;
+          savedTranslateY.value = 0;
+          runOnJS(updateZoomPercent)(1);
+        } else {
+          scale.value = withSpring(2, { damping: 20, stiffness: 200 });
+          savedScale.value = 2;
+          runOnJS(updateZoomPercent)(2);
+        }
+      }),
+    []
+  );
+
+  const composedGesture = useMemo(() =>
+    Gesture.Race(
+      doubleTapGesture,
+      Gesture.Simultaneous(pinchGesture, panGesture)
+    ),
+    [doubleTapGesture, pinchGesture, panGesture]
+  );
+
+  const animatedImageStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scale.value },
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+    ],
+  }));
+
+  // Scroll wheel zoom (web)
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !fullScreenPhoto) return;
+    const node = fsImageWebRef.current as unknown as HTMLElement;
+    if (!node) return;
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+      const current = scale.value;
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, current + delta));
+      scale.value = withSpring(next, { damping: 20, stiffness: 200 });
+      savedScale.value = next;
+      setZoomPercent(Math.round(next * 100));
+      if (next <= 1) {
+        translateX.value = withSpring(0);
+        translateY.value = withSpring(0);
+        savedTranslateX.value = 0;
+        savedTranslateY.value = 0;
+      }
+    };
+    node.addEventListener('wheel', handleWheel, { passive: false });
+    return () => { node.removeEventListener('wheel', handleWheel); };
+  }, [fullScreenPhoto]);
+
   const handlePhotoPress = useCallback((photo: Photo) => {
     setFullScreenPhoto(photo);
   }, []);
 
   const handleCloseFullScreen = useCallback(() => {
+    resetZoomImmediate();
     setFullScreenPhoto(null);
-  }, []);
+    const y = galleryScrollY.current;
+    requestAnimationFrame(() => {
+      galleryScrollRef.current?.scrollTo({ y, animated: false });
+    });
+  }, [resetZoomImmediate]);
 
   const handleNextPhoto = useCallback(() => {
     if (fullScreenIndex < 0 || fullScreenIndex >= filteredPhotos.length - 1) return;
+    resetZoomImmediate();
     setFullScreenPhoto(filteredPhotos[fullScreenIndex + 1]);
-  }, [fullScreenIndex, filteredPhotos]);
+  }, [fullScreenIndex, filteredPhotos, resetZoomImmediate]);
 
   const handlePrevPhoto = useCallback(() => {
     if (fullScreenIndex <= 0) return;
+    resetZoomImmediate();
     setFullScreenPhoto(filteredPhotos[fullScreenIndex - 1]);
-  }, [fullScreenIndex, filteredPhotos]);
+  }, [fullScreenIndex, filteredPhotos, resetZoomImmediate]);
+
+  // Keep the pan-gesture worklet in sync with the latest handlers.
+  handleNextPhotoRef.current = handleNextPhoto;
+  handlePrevPhotoRef.current = handlePrevPhoto;
 
   const handleDownloadPhoto = useCallback(async () => {
     if (!fullScreenPhoto?.url || isDownloading) return;
@@ -394,6 +632,7 @@ export default function PhotosScreen() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        setDownloadResult({ status: 'success', message: `Saved as ${fileName}` });
       } else {
         const file = new File(Paths.cache, fileName);
         const response = await fetch(fullScreenPhoto.url);
@@ -408,17 +647,15 @@ export default function PhotosScreen() {
         const canShare = await Sharing.isAvailableAsync();
         if (canShare) {
           await Sharing.shareAsync(file.uri);
-        } else {
-          Alert.alert('Downloaded', `Photo saved to: ${file.uri}`);
         }
+        setDownloadResult({ status: 'success', message: `Saved as ${fileName}` });
       }
     } catch (error: any) {
       console.error('[Photos] Download error:', error);
-      if (Platform.OS === 'web') {
-        window.alert('Failed to download photo. Please try again.');
-      } else {
-        Alert.alert('Download Failed', 'Could not download the photo. Please try again.');
-      }
+      setDownloadResult({
+        status: 'error',
+        message: error?.message || 'Could not download the photo. Please try again.',
+      });
     } finally {
       setIsDownloading(false);
     }
@@ -427,18 +664,22 @@ export default function PhotosScreen() {
   return (
     <View style={styles.container}>
       <ScrollView
+        ref={galleryScrollRef}
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         keyboardDismissMode="on-drag"
+        contentInsetAdjustmentBehavior="never"
+        onScroll={(e) => { galleryScrollY.current = e.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={16}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <View style={styles.header}>
           <Text style={styles.title}>Photos</Text>
           <View style={styles.headerButtons}>
             <TouchableOpacity
-              style={[styles.headerButton, !!isPickingMedia && styles.headerButtonDisabled]}
+              style={[styles.headerButton, isPickingMedia !== false && styles.headerButtonDisabled]}
               onPress={takePhoto}
-              disabled={!!isPickingMedia}
+              disabled={isPickingMedia !== false}
             >
               {isPickingMedia === 'camera'
                 ? <ActivityIndicator size="small" color="#FFFFFF" />
@@ -446,9 +687,9 @@ export default function PhotosScreen() {
               <Text style={styles.headerButtonText}>Take Photo</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.headerButton, !!isPickingMedia && styles.headerButtonDisabled]}
+              style={[styles.headerButton, isPickingMedia !== false && styles.headerButtonDisabled]}
               onPress={pickImage}
-              disabled={!!isPickingMedia}
+              disabled={isPickingMedia !== false}
             >
               {isPickingMedia === 'gallery'
                 ? <ActivityIndicator size="small" color="#FFFFFF" />
@@ -542,7 +783,12 @@ export default function PhotosScreen() {
             {filteredPhotos.map((photo) => (
               <View key={photo.id} style={styles.galleryItem}>
                 <TouchableOpacity activeOpacity={0.8} onPress={() => handlePhotoPress(photo)}>
-                  <Image source={{ uri: photo.url }} style={styles.thumbnail} contentFit="cover" />
+                  <DesktopSavableImage
+                    source={{ uri: photo.url }}
+                    style={styles.thumbnail}
+                    contentFit="cover"
+                    alt={photo.notes || photo.category || 'Photo'}
+                  />
                 </TouchableOpacity>
 
                 <View style={styles.thumbnailFooter}>
@@ -615,6 +861,19 @@ export default function PhotosScreen() {
                   {photo.notes && (
                     <Text style={styles.photoNotes} numberOfLines={2}>{photo.notes}</Text>
                   )}
+
+                  {photo.date && (
+                    <View style={styles.photoDateRow}>
+                      <Calendar size={12} color="#6B7280" />
+                      <Text style={styles.photoDateText}>
+                        {new Date(photo.date).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </View>
             ))}
@@ -623,12 +882,25 @@ export default function PhotosScreen() {
           <View>
             {filteredPhotos.map((photo) => (
               <TouchableOpacity key={photo.id} style={styles.listRow} activeOpacity={0.7} onPress={() => handlePhotoPress(photo)}>
-                <Image source={{ uri: photo.url }} style={styles.listThumbnail} contentFit="cover" />
+                <DesktopSavableImage
+                  source={{ uri: photo.url }}
+                  style={styles.listThumbnail}
+                  contentFit="cover"
+                  alt={photo.notes || photo.category || 'Photo'}
+                />
                 <View style={styles.listInfo}>
                   <Text style={styles.listCategory} numberOfLines={1}>{photo.category}</Text>
                   {photo.uploader && <Text style={styles.listUploader} numberOfLines={1}>{photo.uploader.name}</Text>}
                   {photo.notes && <Text style={styles.listNotes} numberOfLines={1}>{photo.notes}</Text>}
-                  <Text style={styles.listDate}>{photo.date}</Text>
+                  {photo.date && (
+                    <Text style={styles.listDate}>
+                      {new Date(photo.date).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      })}
+                    </Text>
+                  )}
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   {photo.uploadedBy === user?.id && <TouchableOpacity onPress={() => handleEditCategory(photo)} style={styles.editButton}>
@@ -842,11 +1114,11 @@ export default function PhotosScreen() {
         onRequestClose={handleCancelPreview}
       >
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          behavior={Platform.OS === 'ios' ? undefined : 'height'}
           style={{ flex: 1 }}
         >
-        <View style={styles.previewModalOverlay}>
-          <View style={styles.previewModalContent}>
+        <Pressable style={styles.previewModalOverlay} onPress={Keyboard.dismiss}>
+          <Pressable style={styles.previewModalContent} onPress={(e) => e.stopPropagation()}>
             <View style={styles.previewModalHeader}>
               <Text style={styles.previewModalTitle}>Preview Photo</Text>
               <TouchableOpacity onPress={handleCancelPreview}>
@@ -854,11 +1126,14 @@ export default function PhotosScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.previewModalScroll} showsVerticalScrollIndicator={false}
-          keyboardDismissMode="on-drag"
-          automaticallyAdjustKeyboardInsets={true}
-          contentContainerStyle={{ paddingBottom: 40 }}
-        >
+            <ScrollView
+              style={styles.previewModalScroll}
+              showsVerticalScrollIndicator={false}
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              keyboardShouldPersistTaps="handled"
+              automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+              contentContainerStyle={{ paddingBottom: 40 }}
+            >
               {selectedImage && (
                 <View style={styles.previewImageContainer}>
                   <Image
@@ -877,6 +1152,7 @@ export default function PhotosScreen() {
                   onChangeText={setTempCategory}
                   placeholder="Enter or edit category..."
                   placeholderTextColor="#9CA3AF"
+                  inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_ACCESSORY_ID : undefined}
                 />
                 
                 <Text style={styles.previewLabel}>Quick Select</Text>
@@ -915,6 +1191,7 @@ export default function PhotosScreen() {
                   onChangeText={setPreviewNotes}
                   multiline
                   numberOfLines={4}
+                  inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_ACCESSORY_ID : undefined}
                 />
               </View>
             </ScrollView>
@@ -955,8 +1232,8 @@ export default function PhotosScreen() {
                 </View>
               </View>
             )}
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -1023,8 +1300,8 @@ export default function PhotosScreen() {
         statusBarTranslucent
       >
         <View style={styles.fsOverlay}>
-          {/* Background dismiss */}
-          <Pressable style={StyleSheet.absoluteFill} onPress={handleCloseFullScreen} />
+          {/* Background dismiss — disabled when zoomed to prevent accidental close */}
+          <Pressable style={StyleSheet.absoluteFill} onPress={zoomPercent > 100 ? undefined : handleCloseFullScreen} />
 
           {/* Header */}
           <View style={styles.fsHeader}>
@@ -1049,16 +1326,48 @@ export default function PhotosScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Image */}
-          {fullScreenPhoto && (
-            <View style={styles.fsImageContainer}>
-              <Image
-                source={{ uri: fullScreenPhoto.url }}
-                style={styles.fsImage}
-                contentFit="contain"
-                transition={200}
-              />
+          {/* Zoom Controls */}
+          <View style={styles.fsZoomControls}>
+            <TouchableOpacity
+              style={[styles.fsZoomBtn, zoomPercent <= 100 && styles.fsZoomBtnDisabled]}
+              onPress={handleZoomOut}
+              disabled={zoomPercent <= 100}
+            >
+              <ZoomOut size={18} color={zoomPercent <= 100 ? 'rgba(255,255,255,0.3)' : '#FFFFFF'} />
+            </TouchableOpacity>
+            <View style={styles.fsZoomBadge}>
+              <Text style={styles.fsZoomText}>{zoomPercent}%</Text>
             </View>
+            <TouchableOpacity
+              style={[styles.fsZoomBtn, zoomPercent >= 400 && styles.fsZoomBtnDisabled]}
+              onPress={handleZoomIn}
+              disabled={zoomPercent >= 400}
+            >
+              <ZoomIn size={18} color={zoomPercent >= 400 ? 'rgba(255,255,255,0.3)' : '#FFFFFF'} />
+            </TouchableOpacity>
+          </View>
+
+          {/* Image with zoom */}
+          {fullScreenPhoto && (
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <GestureDetector gesture={composedGesture}>
+                <View
+                  style={styles.fsImageContainer}
+                  ref={fsImageWebRef}
+                  onLayout={onImageContainerLayout}
+                >
+                  <Animated.View style={[styles.fsImage, animatedImageStyle]}>
+                    <DesktopSavableImage
+                      source={{ uri: fullScreenPhoto.url }}
+                      style={{ width: '100%', height: '100%' }}
+                      contentFit="contain"
+                      transition={200}
+                      alt={fullScreenPhoto.notes || fullScreenPhoto.category || 'Photo'}
+                    />
+                  </Animated.View>
+                </View>
+              </GestureDetector>
+            </GestureHandlerRootView>
           )}
 
           {/* Prev arrow */}
@@ -1125,14 +1434,31 @@ export default function PhotosScreen() {
 
               {/* Notes */}
               {fullScreenPhoto.notes ? (
-                <Text style={styles.fsNotes} numberOfLines={3}>
-                  {fullScreenPhoto.notes}
-                </Text>
+                <ExpandableNotes
+                  text={fullScreenPhoto.notes}
+                  maxLines={3}
+                  maxExpandedHeight={180}
+                  textStyle={styles.fsNotes}
+                  toggleStyle={styles.fsNotesToggle}
+                />
               ) : null}
             </View>
           )}
+
+          <DownloadResultModal result={downloadResult} onDismiss={() => setDownloadResult(null)} />
         </View>
       </Modal>
+
+      {Platform.OS === 'ios' && (
+        <InputAccessoryView nativeID={KEYBOARD_ACCESSORY_ID}>
+          <View style={styles.keyboardToolbar}>
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity onPress={Keyboard.dismiss} style={styles.keyboardDoneBtn}>
+              <Text style={styles.keyboardDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </InputAccessoryView>
+      )}
     </View>
   );
 }
@@ -1420,6 +1746,17 @@ const styles = StyleSheet.create({
     marginTop: 6,
     lineHeight: 16,
   },
+  photoDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 6,
+  },
+  photoDateText: {
+    fontSize: 11,
+    color: '#6B7280',
+    fontWeight: '500' as const,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1670,10 +2007,28 @@ const styles = StyleSheet.create({
   },
   previewImageContainer: {
     width: '100%',
-    height: 300,
+    height: 160,
     backgroundColor: '#F9FAFB',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  keyboardToolbar: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#F1F1F1',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#C8C8C8',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  keyboardDoneBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  keyboardDoneText: {
+    color: '#2563EB',
+    fontSize: 16,
+    fontWeight: '600' as const,
   },
   previewModalImage: {
     width: '100%',
@@ -1815,52 +2170,6 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#2563EB',
     borderRadius: 3,
-  },
-  // Upload Progress Modal Styles
-  uploadOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  uploadModal: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 32,
-    alignItems: 'center',
-    minWidth: 280,
-    maxWidth: '80%',
-  },
-  uploadTitle: {
-    fontSize: 18,
-    fontWeight: '600' as const,
-    color: '#1F2937',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  uploadProgress: {
-    fontSize: 32,
-    fontWeight: '700' as const,
-    color: '#2563EB',
-    marginBottom: 16,
-  },
-  progressBarContainer: {
-    width: '100%',
-    height: 8,
-    backgroundColor: '#E5E7EB',
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: '#2563EB',
-    borderRadius: 4,
-  },
-  uploadError: {
-    fontSize: 14,
-    color: '#EF4444',
-    marginTop: 12,
-    textAlign: 'center',
   },
   projectSection: {
     marginBottom: 24,
@@ -2054,5 +2363,44 @@ const styles = StyleSheet.create({
     color: '#E5E7EB',
     fontSize: 13,
     lineHeight: 18,
+  },
+  fsNotesToggle: {
+    color: '#93C5FD',
+    fontSize: 12,
+    fontWeight: '600' as const,
+  },
+  fsZoomControls: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 100 : 62,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    borderRadius: 20,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+    zIndex: 10,
+    gap: 2,
+  },
+  fsZoomBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fsZoomBtnDisabled: {
+    opacity: 0.4,
+  },
+  fsZoomBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minWidth: 52,
+    alignItems: 'center',
+  },
+  fsZoomText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600' as const,
   },
 });

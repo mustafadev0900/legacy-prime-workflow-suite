@@ -40,3 +40,10 @@ yarn-error.*
 .env.local
 .env
 *.p8
+
+# Firebase credentials (never commit)
+GoogleService-Info.plist
+google-services.json
+
+# Build output
+dist_debug/
