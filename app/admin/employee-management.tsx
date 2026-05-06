@@ -11,6 +11,18 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 
+function formatPhone(raw: string | undefined): string {
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 11 && digits[0] === '1') {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return raw;
+}
+
 const OFFICE_ROLES: { name: string; icon: React.ComponentType<any>; color: string; bg: string }[] = [
   { name: 'Project Manager', icon: ClipboardList, color: '#4F46E5', bg: '#EEF2FF' },
   { name: 'Bookkeeper', icon: ClipboardList, color: '#4F46E5', bg: '#EEF2FF' },
@@ -749,7 +761,7 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
                 {/* Email + Phone */}
                 <Text style={styles.employeeEmail}>{employee.email}</Text>
                 {employee.phone && (
-                  <Text style={styles.employeePhone}>{employee.phone}</Text>
+                  <Text style={styles.employeePhone}>{formatPhone(employee.phone)}</Text>
                 )}
 
                 {/* Today hours + Rate inline with icons */}
@@ -760,14 +772,12 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
                       Today: {stats.todayHours.toFixed(1)}h
                     </Text>
                   </View>
-                  {employee.hourlyRate && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                      <DollarSign size={14} color="#6B7280" />
-                      <Text style={styles.inlineStatText}>
-                        ${employee.hourlyRate.toFixed(2)}/hr
-                      </Text>
-                    </View>
-                  )}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <DollarSign size={14} color="#6B7280" />
+                    <Text style={styles.inlineStatText}>
+                      ${(employee.hourlyRate ?? 0).toFixed(2)}/hr
+                    </Text>
+                  </View>
                 </View>
 
                 {/* Actions: Timecard + Classify */}

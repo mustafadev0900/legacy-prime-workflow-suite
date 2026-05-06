@@ -64,7 +64,7 @@ function NotificationRow({ notification, onPress }: NotificationRowProps) {
             <Text style={styles.rowTime}>{formatTimeAgo(notification.createdAt)}</Text>
           </View>
         </View>
-        <Text style={styles.rowMessage} numberOfLines={2}>
+        <Text style={styles.rowMessage} numberOfLines={4}>
           {notification.message}
         </Text>
       </View>
@@ -76,7 +76,7 @@ function NotificationRow({ notification, onPress }: NotificationRowProps) {
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const { getNotifications, markNotificationRead, markAllNotificationsRead, refreshNotifications } = useApp();
+  const { getNotifications, markNotificationRead, markAllNotificationsRead, refreshNotifications, projects } = useApp();
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -112,9 +112,26 @@ export default function NotificationsScreen() {
       const title = notification.title;
 
       switch (notification.type) {
-        case 'task-reminder':
-          router.push('/(tabs)/dashboard');
+        case 'task-assigned': {
+          const projectId = data?.projectId
+            || projects.find(p => p.name === data?.projectName)?.id;
+          if (projectId) {
+            router.push(`/(tabs)/schedule?projectId=${projectId}` as any);
+          } else {
+            router.push('/(tabs)/schedule');
+          }
           break;
+        }
+
+        case 'task-reminder': {
+          const projectId = data?.projectId;
+          if (projectId) {
+            router.push(`/(tabs)/schedule?projectId=${projectId}` as any);
+          } else {
+            router.push('/(tabs)/schedule');
+          }
+          break;
+        }
 
         case 'estimate-received':
           // Estimate requests live in the CRM tab
@@ -202,7 +219,7 @@ export default function NotificationsScreen() {
           break;
       }
     },
-    [markNotificationRead, router]
+    [markNotificationRead, router, projects]
   );
 
   return (

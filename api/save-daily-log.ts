@@ -455,7 +455,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           actorId:  createdByUserId,
           type:     'general',
           title:    'Daily Log Submitted',
-          message:  `${name} submitted a daily log for ${projectName}`,
+          message:  `${name} submitted a daily log for ${projectName}${generalNotes ? `\nNote: ${generalNotes}` : ''}`,
           data:     { dailyLogId: dailyLog.id, projectId },
         });
       } catch (e) {

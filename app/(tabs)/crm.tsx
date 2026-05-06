@@ -9,6 +9,7 @@ import DailyTasksButton from '@/components/DailyTasksButton';
 import { Plus, Mail, MessageSquare, Send, X, CheckSquare, Square, Paperclip, FileText, Calculator, FileSignature, DollarSign, CheckCircle, CreditCard, ClipboardList, Sparkles, Phone, Settings, PhoneIncoming, PhoneOutgoing, Clock, Trash2, Calendar, ChevronDown, ChevronUp, TrendingUp, Users, FileCheck, DollarSign as DollarSignIcon, Camera, Pencil, PauseCircle, PlayCircle, Snowflake, RotateCcw } from 'lucide-react-native';
 import { Project, Client, CallLog } from '@/types';
 import * as DocumentPicker from 'expo-document-picker';
+import { uriToBase64 } from '@/lib/upload-utils';
 import * as Print from 'expo-print';
 import * as MailComposer from 'expo-mail-composer';
 import { useRouter } from 'expo-router';
@@ -821,25 +822,49 @@ export default function CRMScreen() {
       }
 
       const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+      console.log('[CRM Send] API_BASE:', API_BASE);
+      console.log('[CRM Send] recipients:', emailRecipients.map(c => c.email));
+      console.log('[CRM Send] subject:', messageSubject);
       setIsSendingEmail(true);
       try {
+        // Read any attachments as base64
+        const encodedAttachments = await Promise.all(
+          attachments.map(async (file) => {
+            const content = await uriToBase64(file.uri);
+            return { filename: file.name, content, type: file.type };
+          })
+        );
+
+        const payload = {
+          recipients: emailRecipients.map(c => ({ email: c.email, name: c.name })),
+          subject: messageSubject,
+          body: messageBody,
+          companyName: company?.name,
+          attachments: encodedAttachments.length > 0 ? encodedAttachments : undefined,
+        };
+        console.log('[CRM Send] Calling:', `${API_BASE}/api/send-crm-email`);
+        console.log('[CRM Send] Payload:', JSON.stringify({ ...payload, attachments: payload.attachments?.map(a => ({ filename: a.filename, type: a.type, size: a.content?.length })) }));
         const response = await fetch(`${API_BASE}/api/send-crm-email`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            recipients: emailRecipients.map(c => ({ email: c.email, name: c.name })),
-            subject: messageSubject,
-            body: messageBody,
-            companyName: company?.name,
-          }),
+          body: JSON.stringify(payload),
         });
+        console.log('[CRM Send] Response status:', response.status);
         const data = await response.json();
+        console.log('[CRM Send] Response data:', JSON.stringify(data));
         if (!response.ok) throw new Error(data.error || 'Failed to send');
         const skippedNote = skipped > 0 ? ` (${skipped} skipped — no email on file)` : '';
-        showAlert('Email Sent', `Successfully sent to ${data.sent} recipient${data.sent !== 1 ? 's' : ''}.${skippedNote}`);
+        if (data.failed > 0 && data.sent > 0) {
+          showAlert('Partially Sent', `Sent to ${data.sent} recipient${data.sent !== 1 ? 's' : ''}, but ${data.failed} failed.${skippedNote}`);
+        } else if (data.senderWarning) {
+          showAlert('Email Accepted', `Queued for ${data.sent} recipient${data.sent !== 1 ? 's' : ''}.${skippedNote}\n\n⚠️ ${data.senderWarning}`);
+        } else {
+          showAlert('Email Sent', `Successfully sent to ${data.sent} recipient${data.sent !== 1 ? 's' : ''}.${skippedNote}`);
+        }
         setShowMessageModal(false);
         setSelectedClients(new Set());
       } catch (err: any) {
+        console.error('[CRM Send] Error:', err.message, err);
         showAlert('Send Failed', err.message || 'Unable to send email. Please try again.');
       } finally {
         setIsSendingEmail(false);
@@ -2662,8 +2687,8 @@ export default function CRMScreen() {
               💡 Tip: Use {'{name}'} in your message to automatically personalize with first name
             </Text>
             {messageType === 'email' && attachments.length > 0 && (
-              <Text style={styles.warningText}>
-                ⚠️ File attachments are not supported in email — they will not be included.
+              <Text style={[styles.tipText, { color: '#059669' }]}>
+                ✓ {attachments.length} file{attachments.length !== 1 ? 's' : ''} will be attached to the email.
               </Text>
             )}
             {messageType === 'sms' && attachments.length > 0 && (

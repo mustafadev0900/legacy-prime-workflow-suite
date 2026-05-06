@@ -324,7 +324,6 @@ function entryToSession(e: ClockEntry, jobName: string, rate: number): Session {
 
   // Build all lunch break slots — supports unlimited breaks
   let totalBreakMs = 0;
-  const multiBreak = (e.lunchBreaks?.length ?? 0) > 1;
   const lunchBreaks: LunchSlot[] = (e.lunchBreaks ?? []).map(lb => {
     const outMs = new Date(lb.startTime).getTime();
     const inMs = lb.endTime ? new Date(lb.endTime).getTime() : Date.now();
@@ -360,18 +359,17 @@ function entryToSession(e: ClockEntry, jobName: string, rate: number): Session {
       lat: e.location.latitude, lng: e.location.longitude, color: "#10B981",
     });
   }
-  (e.lunchBreaks ?? []).forEach((lb, i) => {
-    const suffix = multiBreak ? ` ${i + 1}` : "";
+  (e.lunchBreaks ?? []).forEach((lb) => {
     if (lb.startTime && isValidLoc(lb.startLocation)) {
       locations.push({
-        label: `Lunch Out${suffix}`, time: fmtTime(lb.startTime),
+        label: "Lunch Out", time: fmtTime(lb.startTime),
         address: getAddr(lb.startLocation!),
         lat: lb.startLocation!.latitude, lng: lb.startLocation!.longitude, color: "#F59E0B",
       });
     }
     if (lb.endTime && isValidLoc(lb.endLocation)) {
       locations.push({
-        label: `Lunch In${suffix}`, time: fmtTime(lb.endTime!),
+        label: "Lunch In", time: fmtTime(lb.endTime!),
         address: getAddr(lb.endLocation!),
         lat: lb.endLocation!.latitude, lng: lb.endLocation!.longitude, color: "#F59E0B",
       });
@@ -490,15 +488,12 @@ function buildTimelineEvents(session: Session): TLEvent[] {
   const spanMs = (session.clockOutMs || Date.now()) - session.clockInMs;
   const pct = (ms: number) =>
     spanMs > 0 ? Math.min(95, Math.max(2, ((ms - session.clockInMs) / spanMs) * 100)) : 50;
-  const multiBreak = session.lunchBreaks.length > 1;
-
   const events: TLEvent[] = [];
   events.push({ label: "Clock In", time: session.clockIn, color: "#10B981", pct: 0 });
 
-  session.lunchBreaks.forEach((lb, i) => {
-    const suffix = multiBreak ? ` ${i + 1}` : "";
-    events.push({ label: `Lunch Out${suffix}`, time: lb.out, color: "#F59E0B", pct: pct(lb.outMs) });
-    events.push({ label: `Lunch In${suffix}`, time: lb.in, color: "#F59E0B", pct: pct(lb.inMs), italic: lb.inProgress });
+  session.lunchBreaks.forEach((lb) => {
+    events.push({ label: "Lunch Out", time: lb.out, color: "#F59E0B", pct: pct(lb.outMs) });
+    events.push({ label: "Lunch In", time: lb.in, color: "#F59E0B", pct: pct(lb.inMs), italic: lb.inProgress });
   });
 
   events.push({ label: "Clock Out", time: session.clockOut, color: "#EF4444", pct: 100, isRight: true });
@@ -508,7 +503,7 @@ function buildTimelineEvents(session: Session): TLEvent[] {
 // Maps a 0–100 pct to a pixel X on the bar line, inset by LINE_PAD on each side.
 const LINE_PAD = 4;
 const DOT_R = 5;
-const LABEL_W = 64;   // fixed label box width — fits "Lunch Out 1" at fontSize 8
+const LABEL_W = 60;   // fixed label box width — fits "Lunch Out" at fontSize 8
 const LABEL_ROW_H = 14; // height of each label row
 
 function evX(pct: number, bw: number): number {
@@ -535,11 +530,10 @@ function SessionBlock({
   // For each break: dot centers (px), chip left, shade span.
   const breakSegments = useMemo(() => {
     if (!barWidth || !session.lunchBreaks.length) return [];
-    const multiBreak = session.lunchBreaks.length > 1;
     return session.lunchBreaks.map((lb, i) => {
-      const suffix = multiBreak ? ` ${i + 1}` : "";
-      const outEv = tlEvents.find(ev => ev.label === `Lunch Out${suffix}`);
-      const inEv  = tlEvents.find(ev => ev.label === `Lunch In${suffix}`);
+      // Clock In is at index 0; each break pushes Lunch Out then Lunch In → break i at 1+i*2 and 2+i*2
+      const outEv = tlEvents[1 + i * 2];
+      const inEv  = tlEvents[2 + i * 2];
       if (!outEv || !inEv) return null;
       const loX = evX(outEv.pct, barWidth);
       const liX = evX(inEv.pct,  barWidth);
@@ -1507,8 +1501,6 @@ export default function TimeCardsScreen() {
     const renderSession = (s: Session, idx: number, total: number): string => {
       const taskBg = TASK_COLORS[s.task]?.bg ?? "#F3F4F6";
       const taskFg = TASK_COLORS[s.task]?.fg ?? "#374151";
-      const hasLunch = s.lunchBreaks.length > 0;
-      const multiBreak = s.lunchBreaks.length > 1;
       const spanMs = (s.clockOutMs || Date.now()) - s.clockInMs;
       const pctOf = (ms: number) =>
         spanMs > 0 ? Math.min(95, Math.max(2, ((ms - s.clockInMs) / spanMs) * 100)).toFixed(1) : "50";
@@ -1516,10 +1508,9 @@ export default function TimeCardsScreen() {
       // Build dynamic timeline events
       const tlEvents: Array<{ label: string; time: string; color: string; pos: string }> = [];
       tlEvents.push({ label: "Clock In", time: s.clockIn, color: "#10B981", pos: "left:0%" });
-      s.lunchBreaks.forEach((lb, i) => {
-        const suffix = multiBreak ? ` ${i + 1}` : "";
-        tlEvents.push({ label: `Lunch Out${suffix}`, time: lb.out, color: "#F59E0B", pos: `left:${pctOf(lb.outMs)}%` });
-        tlEvents.push({ label: `Lunch In${suffix}`, time: lb.in, color: "#F59E0B", pos: `left:${pctOf(lb.inMs)}%` });
+      s.lunchBreaks.forEach((lb) => {
+        tlEvents.push({ label: "Lunch Out", time: lb.out, color: "#F59E0B", pos: `left:${pctOf(lb.outMs)}%` });
+        tlEvents.push({ label: "Lunch In", time: lb.in, color: "#F59E0B", pos: `left:${pctOf(lb.inMs)}%` });
       });
       tlEvents.push({ label: "Clock Out", time: s.clockOut, color: "#EF4444", pos: "right:0" });
 
@@ -1838,7 +1829,6 @@ export default function TimeCardsScreen() {
         {showPicker && (
           <View style={styles.periodMenu}>
             {(["Weekly", "Biweekly", "Monthly"] as PeriodMode[]).map((mode) => {
-              const currentLabel = getPeriods(mode)[0].label;
               const isActive = periodMode === mode;
               return (
                 <TouchableOpacity
@@ -1853,7 +1843,6 @@ export default function TimeCardsScreen() {
                   <Text style={[styles.periodMenuText, isActive && styles.periodMenuTextActive]}>
                     {mode}
                   </Text>
-                  <Text style={styles.periodMenuDesc}>{currentLabel}</Text>
                 </TouchableOpacity>
               );
             })}

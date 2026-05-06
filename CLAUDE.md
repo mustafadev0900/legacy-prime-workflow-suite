@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 You are a Senior Full-Stack Software Engineer with 5+ years of professional experience, acting as a core technical owner of a large-scale cross-platform Construction / Contractor Management platform.
 
 ---
@@ -10,6 +14,50 @@ You are a Senior Full-Stack Software Engineer with 5+ years of professional expe
 - Challenge assumptions and propose better approaches when appropriate
 - Explain *why* decisions are made, not just *how*
 - Prefer production-ready solutions over theoretical ones; call out tradeoffs explicitly
+
+---
+
+## Commands
+
+### Development
+```bash
+# Two-terminal local dev (with secrets from .env, API on :3001)
+bun run api:dev          # Terminal 1 — local API server (scripts/dev-api.ts, port 3001)
+bun run start:local      # Terminal 2 — Expo web pointing at localhost:3001
+
+# Standard Expo dev (against prod API)
+bunx expo start          # Interactive — choose web/iOS/Android
+bunx expo start --web    # Web only
+
+# Physical iOS device — update EXPO_PUBLIC_API_URL to LAN IP first
+# e.g. http://192.168.20.149:3001, then add that origin to ALLOWED_ORIGINS in scripts/dev-api.ts
+```
+
+### Lint & Build
+```bash
+bun run lint             # expo lint (ESLint via eslint-config-expo)
+bun run build            # expo export -p web → dist/
+```
+
+### Testing
+```bash
+# Run a single unit test file
+bunx vitest run tests/unit/schedule/task-assignment-notification.test.ts
+
+# Run all unit tests
+bunx vitest run tests/unit/
+```
+Tests live in `tests/unit/` (vitest). They test pure logic extracted from API routes and screens — no DB or network required.
+
+### EAS (iOS/Android Builds)
+```bash
+eas build --platform ios --profile development    # Dev client build
+eas build --platform ios --profile preview        # Internal distribution
+eas build --platform ios --profile production     # App Store build (autoIncrement)
+```
+
+### Deployment
+Vercel auto-deploys `main` branch. No manual deploy command needed. The build command is `bunx expo export -p web` and output dir is `dist/`.
 
 ---
 
@@ -59,7 +107,9 @@ This is a **real-world, revenue-generating** cross-platform Construction / Contr
 ### Infrastructure
 - **Vercel** — web hosting + serverless functions (`vercel.json`)
 - **EAS** (Expo Application Services) — iOS/Android builds (`eas.json`)
-- **Cron**: `/api/check-task-reminders` every 5 minutes (Vercel cron)
+- **Crons** (both in `vercel.json`):
+  - `/api/check-task-reminders` every 5 minutes
+  - `/api/check-schedule-reminders` daily at 08:00 UTC (day-before schedule reminders via Resend email + push)
 - **App scheme**: `legacyprime://` (deep linking + OAuth callback)
 - **iOS bundle**: `app.rork.legacy-prime-workflow-suite`
 - **Android package**: `app.rork.legacy-prime-workflow-suite`
@@ -72,7 +122,13 @@ This is a **real-world, revenue-generating** cross-platform Construction / Contr
 ```
 /
 ├── api/                    # 115 Vercel serverless API route files
-│   ├── lib/                # Backend utilities (supabase.ts, s3.ts, etc.)
+│   ├── lib/                # Backend utilities
+│   │   ├── supabase.ts     # Service-role Supabase admin client
+│   │   ├── cors.ts         # applyCors() — required for Auth-header routes
+│   │   ├── auth-helper.ts  # extractUserFromRequest / requireAuth / requireAdmin
+│   │   ├── sendNotification.ts  # FCM push notification sender
+│   │   ├── firebase-admin.ts    # Zero-dep FCM client (no firebase-admin SDK)
+│   │   └── notifyAdmins.ts
 │   └── team/              # Chat API routes
 ├── app/                    # Expo Router screens
 │   ├── (auth)/            # Auth screens (grouped, no tab bar)
@@ -88,13 +144,8 @@ This is a **real-world, revenue-generating** cross-platform Construction / Contr
 │   │   ├── clock.tsx      # 13KB
 │   │   └── more.tsx       # 4KB
 │   ├── project/[id]/      # Project detail (tabs: overview, tasks, photos, expenses, files)
-│   ├── inspection/        # Inspection workflow
-│   ├── inspection-video/  # Video inspection
 │   ├── admin/             # Admin panel
 │   ├── auth/callback.tsx  # OAuth callback (non-grouped → /auth/callback)
-│   ├── profile.tsx        # 51KB
-│   ├── reports.tsx        # 58KB
-│   ├── notifications.tsx
 │   └── _layout.tsx        # Root layout + auth guard
 ├── backend/
 │   ├── hono.ts            # Hono app setup + routes
@@ -120,6 +171,10 @@ This is a **real-world, revenue-generating** cross-platform Construction / Contr
 │   ├── permissions.ts     # Role-based permission checks
 │   ├── i18n.ts
 │   └── verification-store.ts
+├── scripts/
+│   └── dev-api.ts         # Local API dev server — shims all 115 api/*.ts routes at :3001
+├── tests/
+│   └── unit/schedule/     # Vitest unit tests (pure logic, no DB)
 ├── types/
 │   ├── index.ts           # All core TypeScript models (~650 lines)
 │   └── supabase.ts        # DB-generated types
@@ -127,11 +182,7 @@ This is a **real-world, revenue-generating** cross-platform Construction / Contr
 │   ├── uuid.ts            # generateUUID() — expo-crypto wrapper
 │   ├── sendEstimate.ts
 │   └── generateChangeOrderPdf.ts
-├── supabase/migrations/   # 25 SQL migration files
-├── mocks/                 # Mock data, fixtures, 58KB price list
-├── constants/             # colors.ts, construction-tips.ts
-├── locales/               # i18n translation files
-└── patches/               # patch-package patches
+└── supabase/migrations/   # 25+ SQL migration files
 ```
 
 ---
@@ -176,6 +227,47 @@ import CustomTimePicker from '@/components/DailyTasks/CustomTimePicker';
 
 ---
 
+## API Route Conventions
+
+### ESM Import Rule (Critical)
+Vercel runs `api/*.ts` as native Node.js ESM — **all relative imports must use `.js` extension**:
+```typescript
+// ✅ Correct
+import { createClient } from './lib/supabase.js';
+import { applyCors } from './lib/cors.js';
+
+// ❌ Will fail at runtime on Vercel
+import { createClient } from './lib/supabase';
+```
+The `api/tsconfig.json` must stay `"module": "esnext"` — reverting to `"commonjs"` breaks all routes.
+
+### CORS Pattern
+`vercel.json` global headers cover simple GET requests. For any route that accepts an `Authorization` header (POST, PUT, DELETE, or GETs with auth), call `applyCors()` at the top:
+```typescript
+import { applyCors } from './lib/cors.js';
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (applyCors(req, res)) return;  // handles OPTIONS preflight
+  // ... handler logic
+}
+```
+`applyCors()` reflects the request origin if it's in the allowlist (required when `Authorization` header is present — `*` is rejected by browsers).
+
+### Auth Helper
+For routes requiring authentication, use `api/lib/auth-helper.ts`:
+```typescript
+import { requireAuth, requireAdmin } from './lib/auth-helper.js';
+
+// Authenticated user only
+const user = await requireAuth(req);  // throws 'UNAUTHORIZED' string if not authed
+// user: { id, email, companyId, role, name }
+
+// Admin/super-admin only
+const admin = await requireAdmin(req);  // throws 'FORBIDDEN' if not admin
+```
+
+---
+
 ## Environment Variables
 
 ### Frontend (EXPO_PUBLIC_* — safe to expose)
@@ -199,6 +291,64 @@ AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
 AWS_REGION
 AWS_S3_BUCKET_NAME
+RESEND_API_KEY                     # Email via Resend (task/schedule reminders, assignments)
+```
+
+---
+
+## State Management
+
+### AppContext (Primary Pattern)
+- **Location**: `contexts/AppContext.tsx` — 1000+ lines
+- **Access**: `useAppContext()` hook
+- **Loads data** from Supabase on company change
+- **snake_case → camelCase mappers**: mapClient, mapProject, mapPhoto, mapExpense, mapTask, mapClockEntry, mapNotification
+- **No `onAuthStateChange` listener** — auth state set manually via `setUser()` / `setCompany()`
+
+### Data Persistence Layers
+| Layer | Used For | Notes |
+|---|---|---|
+| Supabase DB | Authoritative persistent data | Always source of truth |
+| AsyncStorage | Quick local access, some lists | Can be stale |
+| AppContext state | In-memory runtime state | Hydrated from Supabase on load |
+
+### File/Project Files Pattern
+- `projectFiles` in AppContext = AsyncStorage-only (not DB-persisted)
+- `project/[id].tsx` loads `project_files` from Supabase → `dbProjectFiles` state
+- `currentProjectFiles` = merge of `dbProjectFiles` + `projectFiles`, deduped by ID, DB takes precedence
+
+### Project Status Rules
+- `activeProjects` = `status === 'active'` (NOT `!== 'archived'`)
+- Dashboard filter tabs: Active / Completed / Archived
+- `completed` status: clock-in, photos, expenses tabs are **locked**
+- Mark complete: `updateProject(id, { status: 'completed', endDate: now })`
+- Reactivate: `updateProject(id, { status: 'active', endDate: undefined })`
+
+---
+
+## File Upload Patterns
+
+### Image Upload (S3 presigned PUT)
+```typescript
+// 1. Compress
+const { uri, base64, width, height } = await compressImage(uri, { maxWidth: 1200, quality: 0.8 });
+// 2. Get presigned URL
+const { uploadUrl, fileUrl } = await fetch(`${API_BASE}/api/get-s3-upload-url`, ...).json();
+// 3. Direct PUT to S3
+await fetch(uploadUrl, { method: 'PUT', body: blob });
+// 4. Save metadata
+await addPhoto({ url: fileUrl, ... });
+```
+
+### Document Upload (base64 → API)
+```typescript
+// 1. Read file as base64
+const base64 = await uriToBase64(uri);  // from @/lib/upload-utils
+// 2. POST to upload API (5MB base64 limit)
+const { file } = await fetch(`${API_BASE}/api/upload-project-file-direct`, {
+  method: 'POST',
+  body: JSON.stringify({ fileData: base64, fileName, fileType, fileSize, companyId, projectId, category, notes })
+}).json();
 ```
 
 ---
@@ -260,11 +410,6 @@ ChatMessage {
   isDeleted?: boolean
 }
 
-ChatConversation {
-  id, name, type: 'individual' | 'group'
-  participants, messages, lastMessage, avatar
-}
-
 Company {
   id, name, logo, brandColor, licenseNumber
   subscriptionStatus: 'trial' | 'active' | 'suspended' | 'cancelled'
@@ -276,25 +421,6 @@ Estimate {
   id, clientId, name, items[]
   subtotal, taxRate, total
   status: 'draft' | 'sent' | 'approved' | 'rejected' | 'paid'
-  createdDate, paidDate, paymentId
-}
-
-Payment {
-  id, projectId, amount, date, clientName
-  method: 'cash' | 'check' | 'credit-card' | 'wire-transfer' | 'other'
-}
-
-ChangeOrder {
-  id, projectId, description, amount, date
-  status: 'pending' | 'approved' | 'rejected'
-  approvedBy, approvedDate
-}
-
-Subcontractor {
-  id, name, companyName, email, phone, trade
-  rating, hourlyRate, availability
-  certifications, insuranceExpiry, licenseNumber
-  approved, approvedBy, approvedDate
 }
 ```
 
@@ -314,120 +440,30 @@ type Permission =
 
 ---
 
-## State Management
-
-### AppContext (Primary Pattern)
-- **Location**: `contexts/AppContext.tsx` — 1000+ lines
-- **Access**: `useAppContext()` hook
-- **Loads data** from Supabase on company change
-- **snake_case → camelCase mappers**: mapClient, mapProject, mapPhoto, mapExpense, mapTask, mapClockEntry, mapNotification
-- **No `onAuthStateChange` listener** — auth state set manually via `setUser()` / `setCompany()`
-
-### Data Persistence Layers
-| Layer | Used For | Notes |
-|---|---|---|
-| Supabase DB | Authoritative persistent data | Always source of truth |
-| AsyncStorage | Quick local access, some lists | Can be stale |
-| AppContext state | In-memory runtime state | Hydrated from Supabase on load |
-
-### File/Project Files Pattern
-- `projectFiles` in AppContext = AsyncStorage-only (not DB-persisted)
-- `project/[id].tsx` loads `project_files` from Supabase → `dbProjectFiles` state
-- `currentProjectFiles` = merge of `dbProjectFiles` + `projectFiles`, deduped by ID, DB takes precedence
-
-### Project Status Rules
-- `activeProjects` = `status === 'active'` (NOT `!== 'archived'`)
-- Dashboard filter tabs: Active / Completed / Archived
-- `completed` status: clock-in, photos, expenses tabs are **locked**
-- Mark complete: `updateProject(id, { status: 'completed', endDate: now })`
-- Reactivate: `updateProject(id, { status: 'active', endDate: undefined })`
-
----
-
-## File Upload Patterns
-
-### Image Upload (S3 presigned PUT)
-```typescript
-// 1. Compress
-const { uri, base64, width, height } = await compressImage(uri, { maxWidth: 1200, quality: 0.8 });
-// 2. Get presigned URL
-const { uploadUrl, fileUrl } = await fetch(`${API_BASE}/api/get-s3-upload-url`, ...).json();
-// 3. Direct PUT to S3
-await fetch(uploadUrl, { method: 'PUT', body: blob });
-// 4. Save metadata
-await addPhoto({ url: fileUrl, ... });
-```
-
-### Document Upload (base64 → API)
-```typescript
-// 1. Read file as base64
-const base64 = await uriToBase64(uri);  // from @/lib/upload-utils
-// 2. POST to upload API (5MB base64 limit)
-const { file } = await fetch(`${API_BASE}/api/upload-project-file-direct`, {
-  method: 'POST',
-  body: JSON.stringify({ fileData: base64, fileName, fileType, fileSize, companyId, projectId, category, notes })
-}).json();
-// file = { id, projectId, name, category, fileType, fileSize, uri (S3 URL), ... }
-```
-
-### Cover Photo Upload
-```typescript
-compressImage(uri, { maxWidth: 1200, quality: 0.8 }) → blob → presigned S3 PUT via get-s3-upload-url
-```
-
----
-
 ## API Routes Reference
 
 ### File/Photo Routes
 - `POST /api/upload-project-file-direct` — base64 → S3 → `project_files` table. Returns `{ success, file }`. 5MB limit.
 - `GET /api/get-s3-upload-url` — Returns `{ uploadUrl, fileUrl }` for direct S3 PUT
 - `POST /api/save-photo` — Saves photo metadata to `photos` table. Requires JWT auth.
-- `POST /api/upload-to-s3` — General S3 upload utility
 
 ### Chat/Messaging Routes (`api/team/`)
 - `POST /api/team/send-message` — Accepts `replyTo` payload, stores `reply_to` UUID
 - `GET /api/team/get-messages` — Joins `reply_to` data via Supabase relational select
-- `GET /api/team/get-conversations`
 - `POST /api/team/delete-message` — Body: `{ messageId, userId }`. Soft-delete via `is_deleted=true`. Sender-only.
-
-### Estimates & Payments
-- `POST /api/create-estimate`, `save-estimate`, `update-estimate`
-- `POST /api/generate-estimate-items` — AI-powered line item generation
-- `POST /api/stripe-payment`, `add-payment`, `verify-stripe-payment`
-- `POST /api/send-estimate-email` — Email to subcontractor
-
-### Projects & Tasks
-- `POST /api/add-project`, `update-project`
-- `POST /api/add-daily-task`, `update-daily-task`, `delete-daily-task`
-- `GET /api/check-task-reminders` — Cron job, runs every 5 minutes
 
 ### Clock & Time
 - `POST /api/clock-in`, `clock-out`, `update-lunch-break`
 
 ### AI Routes
-- `POST /api/ai-assistant` — AI chat (60s timeout, 1024MB)
+- `POST /api/ai-assistant` — AI chat (60s timeout, 1024MB). 79 tools, RAG, cross-session memory.
 - `POST /api/speech-to-text`, `text-to-speech`
 - `POST /api/analyze-receipt` — OCR + duplicate detection
-- `POST /api/analyze-document`
-- `POST /api/extract-pdf-text`, `convert-pdf-to-image`
-- `POST /api/generate-ai-report`
 
-### Twilio
-- `POST /api/twilio-send-sms`, `twilio-make-call`
-- `POST /api/twilio-webhook`, `voice-webhook`
-- `POST /api/send-bulk-sms`
-
-### Subcontractors
-- `POST /api/create-subcontractor`
-- `POST /api/send-subcontractor-invitation`
-- `POST /api/complete-subcontractor-registration`
-- `POST /api/upload-subcontractor-business-file`
-
-### Schedule/Gantt
-- `GET/POST /api/get-scheduled-tasks`, `save-scheduled-task`, `update-scheduled-task`
-- `GET/POST /api/get-schedule-phases`, `save-schedule-phase`
-- `POST /api/generate-schedule-share-link`
+### Notifications
+- `POST /api/register-push-token` — upserts FCM/Expo push token
+- `GET /api/check-task-reminders` — cron every 5 min; also POST-able from dashboard
+- `GET /api/check-schedule-reminders` — cron daily 08:00 UTC; sends day-before schedule reminders
 
 ---
 
@@ -440,22 +476,12 @@ compressImage(uri, { maxWidth: 1200, quality: 0.8 }) → blob → presigned S3 P
 - **Google OAuth (Web)**: `window.location.href = oauthUrl` → Google → Supabase → `/auth/callback` handles tokens
 - **Password Reset**: `auth.resetPassword(email)` → redirect to `EXPO_PUBLIC_API_URL/reset-password`
 
-### Key Auth Screens
-- `(auth)/forgot-password.tsx`
-- `(auth)/phone-login.tsx`
-- `(auth)/reset-password.tsx`
-- `app/auth/callback.tsx` — OAuth callback (non-grouped → `/auth/callback`)
-
 ### Google OAuth Details
 - After session: look up `users` table by **email** (NOT auth ID — Google creates different Supabase UUID than email/password)
 - **User found** → map DB row → `setUser()`/`setCompany()`
 - **User not found** → DON'T sign out. Pass `{ email, googleAuthId, googleName }` to signup screen
 - **Signup with `googleAuthId`**: calls `auth.completeGoogleSignup()` → inserts company/users using existing auth ID. Never calls `supabase.auth.signUp()` (would 422).
 - Auth guard in `_layout.tsx`: `if (user && inAuthGroup && !pathname?.includes('reset-password')) → dashboard`
-
-### Signup Params Pattern
-- `phone` param → pre-fills phone field (locked, verified), skips password
-- `email` + `googleAuthId` + `googleName` → pre-fills email+name (locked), hides password fields
 
 ---
 
@@ -466,58 +492,15 @@ compressImage(uri, { maxWidth: 1200, quality: 0.8 }) → blob → presigned S3 P
 |---|---|
 | `AudioPlayer.tsx` | Uses `@react-native-community/slider` v5.0.1 for seek bar |
 | `AudioRecorder.tsx` | Supports `autoStart` prop — starts on mount |
-| `ChatListItem.tsx` | Conversation list item |
-| `ChatTabs.tsx` | All/Unread/Groups tab filtering |
 | `MessageBubble.tsx` | Renders text/voice/image/file/video |
 | `ReplyPreview.tsx` | Quoted reply inside bubble |
 | `VideoMessage.tsx` | `expo-video` VideoView on native; `<video>` on web |
 
-### Message Types
-```typescript
-type: 'text' | 'voice' | 'image' | 'file' | 'video'
-```
-
-### Reply & Delete
+### Key Patterns
 - Reply: `replyingTo` state → bar above input → sent with message → `ReplyPreview` in bubble
 - Delete: `locallyDeletedIds: Set<string>` in chat.tsx for optimistic UI (not in AppContext)
 - DB soft-delete: `is_deleted=true` on messages table
-- DB: `messages.reply_to UUID REFERENCES messages(id)` — migration: `supabase/migrations/20260307_chat_reply_video.sql`
-
-### Voice Messages
-- Preload: capped to 3 most recent messages on chat open
-- `expo-audio` (not `expo-av`) for recording/playback
-
----
-
-## Supabase Migrations (Chronological)
-
-| File | Change |
-|---|---|
-| `20260128_create_daily_tasks.sql` | Initial daily tasks table |
-| `20260129_add_time_to_daily_tasks.sql` | Time fields |
-| `20260202_create_file_share_links.sql` | File sharing |
-| `20260207_add_uploaded_by.sql` | Uploaded-by tracking |
-| `20260209_create_estimate_requests.sql` | Estimate requests |
-| `20260210_add_completed_at_to_tasks.sql` | Task completion timestamp |
-| `20260215_create_schedule_phases.sql` | Gantt phases |
-| `20260216_add_rls_policies.sql` | Row Level Security |
-| `20260217_add_phase_to_scheduled_tasks.sql` | Phase FK on tasks |
-| `20260218_add_completed_fields.sql` | Completion tracking |
-| `20260219_add_project_id_to_daily_tasks.sql` | Project linkage |
-| `20260220_add_contract_amount_to_projects.sql` | Contract financials |
-| `20260221_add_updated_at_to_users.sql` | User audit |
-| `20260222_create_schedule_share_links.sql` | Schedule sharing |
-| `20260223_allow_anon_company_code_lookup.sql` | Anon RLS policy |
-| `20260224_create_payments.sql` | Payment records |
-| `20260225_create_notifications_and_push_tokens.sql` | Push notifications |
-| `20260226_backfill_users_is_active.sql` | Active flag backfill |
-| `20260301_add_custom_permissions_to_users.sql` | Custom permissions |
-| `20260301_enable_realtime_notifications.sql` | Supabase Realtime |
-| `20260307_chat_reply_video.sql` | reply_to FK + video type |
-| `20260310_add_video_message_type.sql` | Video message enum |
-| `registration_tokens.sql` | Subcontractor invite tokens |
-| `scheduled_tasks_table.sql` | Initial Gantt tasks |
-| `subcontractor_registration.sql` | Subcontractor onboarding |
+- Voice messages use `expo-audio` (not `expo-av`); preload capped to 3 most recent on chat open
 
 ---
 
@@ -525,36 +508,9 @@ type: 'text' | 'voice' | 'image' | 'file' | 'video'
 
 **Location**: `components/GanttChart/` (25+ files)
 
-**Key sub-components:**
-- `GanttSchedule.tsx` — Main container
-- `GanttTimeline/` — Timeline rendering
-- `GanttSidebar/` — Phase/task sidebar
-- `TaskModal/` — Task detail modal
-- `PrintExport/` — Print functionality
-- `hooks/` — `useGanttState.ts`, `useGanttResize.ts`, `useGanttResponsive.ts`
+Key sub-components: `GanttSchedule.tsx` (main container), `GanttTimeline/`, `GanttSidebar/`, `TaskModal/`, `PrintExport/`, `hooks/` (useGanttState, useGanttResize, useGanttResponsive).
 
-**Features:**
-- Hierarchical phases (parent/child via `parentPhaseId`)
-- Drag-resize tasks on timeline
-- Zoom levels: day / week / month
-- `visibleToClient` toggle per task/phase
-- Client-facing share link (`generate-schedule-share-link`)
-
----
-
-## Validation Patterns
-
-- **CRM Add Client**: Per-field inline errors via `clientFieldErrors` state (NOT Alert dialogs)
-- Collect all errors simultaneously; clear per-field as user corrects
-- **General**: Validate at system boundaries (user input, external APIs). Do NOT add defensive validation for internal invariants.
-
----
-
-## Per-Project Cover Photo
-
-- `Project.image` = S3 URL or Unsplash fallback
-- Create modal: `coverPhotoUri` state → `uploadCoverPhoto()` → S3 via `get-s3-upload-url`
-- Project detail: "Change Photo" button overlaid on image (hidden for completed/archived)
+Features: hierarchical phases (`parentPhaseId`), drag-resize tasks, zoom levels (day/week/month), `visibleToClient` toggle, client share link.
 
 ---
 
@@ -565,7 +521,17 @@ type: 'text' | 'voice' | 'image' | 'file' | 'video'
 | `api/ai-assistant.ts` | 60s | 1024MB |
 | `api/create-estimate.ts` | 10s | 512MB |
 | `api/index.ts` | 60s | 1024MB |
+| `api/update-project.ts` | 30s | 512MB |
+| `api/team/send-message.ts` | 30s | 1024MB |
 | Default `api/**/*.ts` | 10s | 1024MB |
+
+---
+
+## Validation Patterns
+
+- **CRM Add Client**: Per-field inline errors via `clientFieldErrors` state (NOT Alert dialogs)
+- Collect all errors simultaneously; clear per-field as user corrects
+- **General**: Validate at system boundaries (user input, external APIs). Do NOT add defensive validation for internal invariants.
 
 ---
 

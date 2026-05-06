@@ -1795,15 +1795,19 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
         console.log('[App] Calling /api/clock-out...');
         const apiUrl = getApiBaseUrl();
 
-        // Preserve all location fields when transforming for the backend.
-        const transformedLunchBreaks = updates.lunchBreaks?.map(lb => ({
-          start: lb.startTime,
-          end: lb.endTime || '',
+        const clockOutTime = updates.clockOut!;
+
+        // Normalize lunch breaks to {startTime, endTime} format (same as update-lunch-break).
+        // Any break without an endTime is closed at clock-out time so both the DB and
+        // AppContext subtract the same duration.
+        const cleanedLunchBreaks = updates.lunchBreaks?.map(lb => ({
+          startTime: lb.startTime,
+          endTime: lb.endTime || clockOutTime,
           startLocation: lb.startLocation,
           endLocation: lb.endLocation,
-        })).filter(lb => lb.start && lb.end);
+        })).filter(lb => lb.startTime);
 
-        console.log('[App] Clock out data:', { entryId: id, workPerformed: updates.workPerformed, lunchBreaks: transformedLunchBreaks });
+        console.log('[App] Clock out data:', { entryId: id, clockOut: clockOutTime, workPerformed: updates.workPerformed, lunchBreaks: cleanedLunchBreaks });
         console.log('[App] clockOutLocation being sent to API:', updates.clockOutLocation
           ? `lat=${updates.clockOutLocation.latitude}, lng=${updates.clockOutLocation.longitude}`
           : 'UNDEFINED — location will NOT be stored');
@@ -1813,8 +1817,9 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             entryId: id,
+            clockOut: clockOutTime,
             workPerformed: updates.workPerformed,
-            lunchBreaks: transformedLunchBreaks,
+            lunchBreaks: cleanedLunchBreaks,
             category: updates.category,
             clockOutLocation: updates.clockOutLocation,
           }),

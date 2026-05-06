@@ -7,7 +7,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { employeeId, companyId, taskName, startDate, companyName, projectName, notes } = req.body;
+  const { employeeId, companyId, taskName, startDate, companyName, projectName, projectId, notes } = req.body;
   console.log('[TaskNotif] Request body:', { employeeId, companyId, taskName, startDate, companyName, projectName, hasNotes: !!notes });
 
   if (!employeeId || !companyId || !taskName || !startDate) {
@@ -60,7 +60,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       type: 'task-assigned',
       title: 'New Task Assignment',
       message: inAppMessage,
-      data: { taskName, startDate, projectName: projectName ?? null },
+      data: { taskName, startDate, projectName: projectName ?? null, projectId: projectId ?? null },
     }).then(notifId => {
       console.log('[TaskNotif] In-app sent — notifId:', notifId);
       return { channel: 'in-app', success: true, notifId };
@@ -74,6 +74,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const RESEND_API_KEY      = process.env.RESEND_API_KEY;
   const EMAIL_FROM_ADDRESS  = process.env.EMAIL_FROM_ADDRESS || 'onboarding@resend.dev';
   const EMAIL_FROM_NAME     = process.env.EMAIL_FROM_NAME    || 'Legacy Prime';
+  const isRestrictedSender  = EMAIL_FROM_ADDRESS === 'onboarding@resend.dev';
+
+  if (isRestrictedSender) {
+    console.warn('[TaskNotif] Using restricted test sender onboarding@resend.dev — email will only reach the Resend account owner. Set EMAIL_FROM_ADDRESS to a verified domain email in Vercel environment variables.');
+  }
 
   if (RESEND_API_KEY && employeeEmail) {
     tasks.push(
@@ -100,11 +105,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .then(async r => {
           const data = await r.json();
           if (!r.ok) {
-            console.error('[TaskNotif] Resend error:', data);
+            console.error('[TaskNotif] Resend rejected email to', employeeEmail, '—', (data as any).message);
             return { channel: 'email', success: false, error: (data as any).message };
           }
-          console.log('[TaskNotif] Email sent — id:', (data as any).id);
-          return { channel: 'email', success: true, messageId: (data as any).id };
+          console.log('[TaskNotif] Email accepted for', employeeEmail, '— id:', (data as any).id, isRestrictedSender ? '(restricted sender — delivery not guaranteed)' : '');
+          return { channel: 'email', success: true, messageId: (data as any).id, senderWarning: isRestrictedSender ? 'onboarding@resend.dev only delivers to account owner' : undefined };
         })
         .catch(err => {
           console.error('[TaskNotif] Email fetch error:', err.message);

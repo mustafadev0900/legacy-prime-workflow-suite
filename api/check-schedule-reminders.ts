@@ -268,8 +268,15 @@ function getDayAfterTomorrowStart(): string {
 }
 
 function formatDate(iso: string): string {
-  const [yr, mo, dy] = iso.split('T')[0].split('-').map(Number);
-  return new Date(Date.UTC(yr, mo - 1, dy)).toLocaleDateString('en-US', {
+  const d = new Date(iso);
+  // If the time component is not UTC midnight the date was saved as local midnight
+  // (legacy bug: setHours instead of setUTCHours). Shift forward one day so we
+  // display the user's intended local date, not the UTC date one day earlier.
+  if (d.getUTCHours() !== 0 || d.getUTCMinutes() !== 0 || d.getUTCSeconds() !== 0) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    d.setUTCHours(0, 0, 0, 0);
+  }
+  return d.toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
   });
 }

@@ -103,8 +103,9 @@ export function buildMapHtml(
 <div id="map"></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-var map=L.map('map',{zoomControl:true,scrollWheelZoom:true})
+var map=L.map('map',{zoomControl:false,scrollWheelZoom:true})
          .setView([${centerLat},${centerLng}],${zoom});
+L.control.zoom({position:'topright'}).addTo(map);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
   attribution:'&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
   maxZoom:19

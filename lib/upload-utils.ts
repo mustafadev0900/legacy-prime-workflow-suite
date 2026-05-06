@@ -72,6 +72,19 @@ export async function compressImage(
  */
 export async function uriToBase64(uri: string): Promise<string> {
   try {
+    if (Platform.OS === 'web') {
+      if (uri.startsWith('data:')) {
+        return uri.split(',')[1];
+      }
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      return new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(blob);
+      });
+    }
     const base64 = await FileSystem.readAsStringAsync(uri, {
       encoding: FileSystem.EncodingType.Base64,
     });
