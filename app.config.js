@@ -57,7 +57,6 @@ module.exports = {
       ],
     ],
     extra: {
-      openaiApiKey: process.env.EXPO_PUBLIC_OPENAI_API_KEY,
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       rorkApiBaseUrl: process.env.EXPO_PUBLIC_RORK_API_BASE_URL,

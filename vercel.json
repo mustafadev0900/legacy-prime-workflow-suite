@@ -13,6 +13,14 @@
   "outputDirectory": "dist",
   "installCommand": "bun install",
   "functions": {
+    "api/ai-estimate.ts": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/speech-to-text.ts": {
+      "maxDuration": 30,
+      "memory": 512
+    },
     "api/ai-assistant.ts": {
       "maxDuration": 60,
       "memory": 1024

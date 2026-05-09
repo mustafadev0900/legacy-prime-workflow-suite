@@ -15,7 +15,6 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as pdfjsLib from 'pdfjs-dist';
 import { AudioModule, useAudioRecorder, RecordingPresets } from '@/lib/expo-audio-compat';
-import Constants from 'expo-constants';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as MailComposer from 'expo-mail-composer';
@@ -3316,36 +3315,22 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
           });
         }
 
-        // Transcribe with OpenAI Whisper (direct API call to avoid timeout)
+        // Transcribe with OpenAI Whisper (via backend — key never exposed to client)
         console.log('[AI Estimate] Transcribing audio, base64 length:', base64.length);
 
-        const apiKey = Constants.expoConfig?.extra?.openaiApiKey || process.env.EXPO_PUBLIC_OPENAI_API_KEY;
-        if (!apiKey) {
-          Alert.alert('Error', 'OpenAI API key not configured');
-          return;
-        }
+        const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+        const audioExtension = Platform.OS === 'web' ? 'webm' : 'm4a';
 
-        // Convert base64 to blob
-        const audioBlob = await fetch(`data:audio/m4a;base64,${base64}`).then(r => r.blob());
-
-        // Create FormData for Whisper API
-        const formData = new FormData();
-        formData.append('file', audioBlob, 'audio.m4a');
-        formData.append('model', 'whisper-1');
-        formData.append('language', 'en');
-
-        console.log('[AI Estimate] Calling OpenAI Whisper API directly...');
-        const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        console.log('[AI Estimate] Calling /api/speech-to-text...');
+        const response = await fetch(`${API_BASE}/api/speech-to-text`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: formData,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audioBase64: base64, audioExtension }),
         });
 
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('[AI Estimate] Whisper API error:', errorText);
+          console.error('[AI Estimate] speech-to-text error:', errorText);
           Alert.alert('Error', 'Failed to transcribe audio. Please try again.');
           return;
         }
@@ -3964,18 +3949,10 @@ Valid response format:
 
 NEVER respond with plain text. ALWAYS use JSON format above.`;
 
-      // Call OpenAI directly from client to avoid Vercel timeout issues
-      const apiKey = Constants.expoConfig?.extra?.openaiApiKey || process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+      // Call backend proxy — key stays server-side only
+      const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 
-      console.log('[AI Estimate] OpenAI API key present:', !!apiKey);
-      console.log('[AI Estimate] Using expo-constants:', !!Constants.expoConfig?.extra?.openaiApiKey);
-
-      if (!apiKey) {
-        Alert.alert('Error', 'OpenAI API key not configured. Please add EXPO_PUBLIC_OPENAI_API_KEY to your environment variables.');
-        return;
-      }
-
-      console.log('[AI Estimate] Calling OpenAI API with Vision...');
+      console.log('[AI Estimate] Calling /api/ai-estimate...');
       console.log('[AI Estimate] Text input:', textInput);
       console.log('[AI Estimate] Attached files for vision:', attachedFilesData.length);
 
@@ -4022,35 +3999,26 @@ NEVER respond with plain text. ALWAYS use JSON format above.`;
           : 'string',
       }));
 
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      const response = await fetch(`${API_BASE}/api/ai-estimate`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o', // Use gpt-4o for vision capabilities
-          messages: messages,
-          max_tokens: 4096,
-          temperature: 0.3,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages }),
       });
 
-      console.log('[AI Estimate] OpenAI API response status:', response.status);
+      console.log('[AI Estimate] ai-estimate response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error('[AI Estimate] OpenAI API error:', errorText);
-        throw new Error(`OpenAI API error: ${response.status} ${response.statusText}`);
+        console.error('[AI Estimate] ai-estimate error:', errorText);
+        throw new Error(`AI estimate error: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
-      console.log('[AI Estimate] OpenAI API success, processing response...');
+      console.log('[AI Estimate] ai-estimate success, processing response...');
 
       const result = {
         success: true,
-        message: data.choices[0]?.message?.content || '',
-        usage: data.usage,
+        message: data.content || '',
       };
 
       console.log('[AI Estimate] API Response length:', result.message.length);
