@@ -2923,6 +2923,7 @@ export default function EstimateScreen() {
           }}
           projectName={project?.name || 'Unnamed Project'}
           existingItems={items}
+          priceListItems={priceListItems}
         />
       )}
 
@@ -3266,9 +3267,10 @@ interface AIEstimateGenerateModalProps {
   onGenerate: (items: EstimateItem[], shouldReplace: boolean) => void;
   projectName: string;
   existingItems: EstimateItem[];
+  priceListItems: PriceListItem[];
 }
 
-function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, existingItems }: AIEstimateGenerateModalProps) {
+function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, existingItems, priceListItems }: AIEstimateGenerateModalProps) {
   const [textInput, setTextInput] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isRecording, setIsRecording] = useState<boolean>(false);
@@ -3385,6 +3387,7 @@ function AIEstimateGenerateModal({ visible, onClose, onGenerate, projectName, ex
           playsInSilentMode: true,
         });
 
+        await nativeRecorder.prepareToRecordAsync();
         nativeRecorder.record();
         setIsRecording(true);
         console.log('[AI Estimate] Recording started');
