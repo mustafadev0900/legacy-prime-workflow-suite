@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable, Platform, Linking } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable, Platform, Linking, useWindowDimensions } from 'react-native';
 import { useApp } from '@/contexts/AppContext';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -42,6 +42,8 @@ export default function BusinessCostsScreen() {
   const { expenses, clockEntries, company, refreshClockEntries, refreshExpenses } = useApp();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const isTablet = screenWidth >= 768;
 
   // Accordion state
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -851,21 +853,38 @@ export default function BusinessCostsScreen() {
                   </View>
                 )}
 
-                {/* Receipt image thumbnail */}
-                {selectedExpense.receiptUrl &&
-                  !selectedExpense.receiptUrl.startsWith('blob:') &&
-                  !selectedExpense.receiptUrl.toLowerCase().includes('.pdf') && (
-                  <TouchableOpacity
-                    activeOpacity={0.85}
-                    onPress={() => { setShowExpenseDetail(false); handleViewReceipt(selectedExpense.receiptUrl!); }}
-                  >
-                    <Image
-                      source={{ uri: selectedExpense.receiptUrl }}
-                      style={styles.detailReceiptPreview}
-                      contentFit="cover"
-                    />
-                  </TouchableOpacity>
-                )}
+                {/* Receipt thumbnail / file indicator */}
+                {selectedExpense.receiptUrl && !selectedExpense.receiptUrl.startsWith('blob:') && (() => {
+                  const url = selectedExpense.receiptUrl!.toLowerCase();
+                  const isPdf = url.includes('.pdf');
+                  const isDocx = url.includes('.docx') || url.includes('.doc');
+                  if (isPdf || isDocx) {
+                    return (
+                      <TouchableOpacity
+                        style={styles.noReceiptRow}
+                        activeOpacity={0.7}
+                        onPress={() => { setShowExpenseDetail(false); handleViewReceipt(selectedExpense.receiptUrl!); }}
+                      >
+                        <File size={16} color="#2563EB" />
+                        <Text style={[styles.noReceiptText, { color: '#2563EB' }]}>
+                          {isDocx ? 'View Word Document' : 'View PDF'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  }
+                  return (
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      onPress={() => { setShowExpenseDetail(false); handleViewReceipt(selectedExpense.receiptUrl!); }}
+                    >
+                      <Image
+                        source={{ uri: selectedExpense.receiptUrl }}
+                        style={styles.detailReceiptPreview}
+                        contentFit="cover"
+                      />
+                    </TouchableOpacity>
+                  );
+                })()}
 
                 {/* No receipt message */}
                 {!selectedExpense.receiptUrl && (
@@ -889,9 +908,18 @@ export default function BusinessCostsScreen() {
         animationType="slide"
         onRequestClose={() => setShowLaborDetail(false)}
       >
-        <View style={styles.modalOverlay}>
+        <View style={[styles.modalOverlay, isTablet && styles.modalOverlayTablet]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowLaborDetail(false)} />
-          <View style={styles.detailSheet}>
+          <View style={[
+            styles.detailSheet,
+            isTablet && {
+              alignSelf: 'center',
+              width: Math.min(screenWidth * 0.65, 680),
+              maxHeight: '80%',
+              borderRadius: 20,
+              marginBottom: 0,
+            }
+          ]}>
             {/* Header */}
             <View style={styles.detailHeader}>
               <Text style={styles.detailTitle}>{selectedLaborRow?.name}</Text>
@@ -1068,9 +1096,13 @@ export default function BusinessCostsScreen() {
                 <X size={24} color="#1F2937" />
               </TouchableOpacity>
             </View>
-            {viewingReceiptUrl && (
-              viewingReceiptUrl.toLowerCase().includes('.pdf') ? (
-                Platform.OS === 'web' ? (
+            {viewingReceiptUrl && (() => {
+              const url = viewingReceiptUrl.toLowerCase();
+              const isPdf = url.includes('.pdf');
+              const isDocx = url.includes('.docx') || url.includes('.doc');
+
+              if (isPdf) {
+                return Platform.OS === 'web' ? (
                   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
                   // @ts-ignore — iframe is valid on web
                   <iframe
@@ -1089,15 +1121,32 @@ export default function BusinessCostsScreen() {
                       <Text style={styles.openPdfButtonText}>Open PDF</Text>
                     </TouchableOpacity>
                   </View>
-                )
-              ) : (
+                );
+              }
+
+              if (isDocx) {
+                return (
+                  <View style={styles.pdfViewerContainer}>
+                    <File size={60} color="#2563EB" />
+                    <Text style={styles.pdfViewerText}>Word Document</Text>
+                    <TouchableOpacity
+                      style={styles.openPdfButton}
+                      onPress={() => Linking.openURL(viewingReceiptUrl!).catch(() => {})}
+                    >
+                      <Text style={styles.openPdfButtonText}>Open Document</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              }
+
+              return (
                 <Image
                   source={{ uri: viewingReceiptUrl }}
                   style={styles.receiptViewerImage}
                   contentFit="contain"
                 />
-              )
-            )}
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -1389,6 +1438,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',
     justifyContent: 'flex-end',
+  },
+  modalOverlayTablet: {
+    justifyContent: 'center',
+    paddingHorizontal: 20,
   },
   detailSheet: {
     backgroundColor: '#FFFFFF',

@@ -373,7 +373,7 @@ export default function ExpensesScreen() {
   const handleUploadFile = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf', 'image/*'],
+        type: ['application/pdf', 'image/*', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'],
         copyToCacheDirectory: true,
       });
 
@@ -383,6 +383,11 @@ export default function ExpensesScreen() {
 
       const file = result.assets[0];
       console.log('[FILE] Selected file:', file);
+
+      const isDocx = file.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        || file.mimeType === 'application/msword'
+        || file.name?.toLowerCase().endsWith('.docx')
+        || file.name?.toLowerCase().endsWith('.doc');
 
       if (file.mimeType?.startsWith('image/')) {
         await processReceipt(file.uri);
@@ -395,8 +400,17 @@ export default function ExpensesScreen() {
           'PDF file uploaded successfully. Please enter expense details manually.',
           [{ text: 'OK' }]
         );
+      } else if (isDocx) {
+        setReceiptImage(file.uri);
+        setReceiptType('file');
+        setReceiptFileName(file.name);
+        Alert.alert(
+          'Document Uploaded',
+          'Word document uploaded successfully. Please enter expense details manually.',
+          [{ text: 'OK' }]
+        );
       } else {
-        Alert.alert('Unsupported File', 'Please upload an image or PDF file.');
+        Alert.alert('Unsupported File', 'Please upload an image, PDF, or Word document.');
       }
     } catch (error) {
       console.error('Error uploading file:', error);
