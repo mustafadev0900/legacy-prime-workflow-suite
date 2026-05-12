@@ -84,7 +84,8 @@
       "Bash(xargs:*)",
       "Bash(sudo xcodebuild:*)",
       "Bash(git diff:*)",
-      "Bash(pod install)"
+      "Bash(pod install)",
+      "mcp__plugin_vercel_vercel__list_deployments"
     ],
     "deny": [],
     "ask": []
