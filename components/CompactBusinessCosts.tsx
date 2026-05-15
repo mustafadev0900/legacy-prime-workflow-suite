@@ -30,7 +30,7 @@ export default function CompactBusinessCosts({ expenses, clockEntries = [], hour
   const inOfficeCount = inOfficeEntries.length;
 
   const businessExpenses = useMemo(
-    () => expenses.filter(e => e.isCompanyCost),
+    () => expenses.filter(e => e.isCompanyCost === true),
     [expenses]
   );
 
@@ -82,23 +82,20 @@ export default function CompactBusinessCosts({ expenses, clockEntries = [], hour
 
   const thisMonthTotal = thisMonthExpenseTotal + laborThisMonth;
 
-  // Rolling 6-month average (company expenses + office labor combined per month)
+  // Rolling 6-month average — same logic as business-costs.tsx detail screen
   const overheadPerMonth = useMemo(() => {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     const monthMap: Record<string, number> = {};
     businessExpenses
-      .filter(e => {
-        const [y, m, d] = e.date.split('-').map(Number);
-        return new Date(y, m - 1, d) >= sixMonthsAgo;
-      })
+      .filter(e => new Date(e.date) >= sixMonthsAgo)
       .forEach(e => {
-        const [y, m] = e.date.split('-').map(Number);
-        const key = `${y}-${m - 1}`;
+        const d = new Date(e.date);
+        const key = `${d.getFullYear()}-${d.getMonth()}`;
         monthMap[key] = (monthMap[key] || 0) + e.amount;
       });
     officeClockEntries
-      .filter(e => e.clockOut && new Date(e.clockIn) >= sixMonthsAgo)
+      .filter(e => new Date(e.clockIn) >= sixMonthsAgo)
       .forEach(e => {
         if (!e.hourlyRate) return;
         const cost = calcNetMs(e) / 3_600_000 * e.hourlyRate;
@@ -112,11 +109,52 @@ export default function CompactBusinessCosts({ expenses, clockEntries = [], hour
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessExpenses, officeClockEntries]);
 
-  // Recommended rate = overhead/mo ÷ hours worked this month
-  const recRate = useMemo(() => {
-    if (hoursWorked <= 0 || overheadPerMonth <= 0) return 0;
-    return overheadPerMonth / hoursWorked;
-  }, [overheadPerMonth, hoursWorked]);
+  // ── Client formula: Recommended Rate = Avg Labor Cost/hr + Indirect Cost/hr ──
+
+  // ALL employee hours this month (project + business cost combined)
+  const totalEmployeeHoursThisMonth = useMemo(() => {
+    return clockEntries
+      .filter(e => {
+        const d = new Date(e.clockIn);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      })
+      .reduce((s, e) => s + calcNetMs(e) / 3_600_000, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clockEntries]);
+
+  // Total payroll cost this month (all employees with hourly rate)
+  const totalPayrollCostThisMonth = useMemo(() => {
+    return clockEntries
+      .filter(e => {
+        const d = new Date(e.clockIn);
+        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+      })
+      .reduce((s, e) => e.hourlyRate ? s + calcNetMs(e) / 3_600_000 * e.hourlyRate : s, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clockEntries]);
+
+  // Avg labor cost/hr = total payroll ÷ total hours
+  const avgLaborCostPerHour = useMemo(
+    () => totalEmployeeHoursThisMonth > 0 ? totalPayrollCostThisMonth / totalEmployeeHoursThisMonth : 0,
+    [totalPayrollCostThisMonth, totalEmployeeHoursThisMonth]
+  );
+
+  // Total indirect costs this month = company expenses + office labor
+  const totalIndirectCostsThisMonth = useMemo(() => {
+    return thisMonthExpenseTotal + laborThisMonth;
+  }, [thisMonthExpenseTotal, laborThisMonth]);
+
+  // Indirect cost/hr = total indirect costs ÷ total employee hours
+  const indirectCostPerHour = useMemo(
+    () => totalEmployeeHoursThisMonth > 0 ? totalIndirectCostsThisMonth / totalEmployeeHoursThisMonth : 0,
+    [totalIndirectCostsThisMonth, totalEmployeeHoursThisMonth]
+  );
+
+  // Recommended rate = avg labor cost/hr + indirect cost/hr
+  const recRate = useMemo(
+    () => avgLaborCostPerHour + indirectCostPerHour,
+    [avgLaborCostPerHour, indirectCostPerHour]
+  );
 
   // Yearly forecast = This Month × 12
   const yearlyForecast = useMemo(() => thisMonthTotal * 12, [thisMonthTotal]);
