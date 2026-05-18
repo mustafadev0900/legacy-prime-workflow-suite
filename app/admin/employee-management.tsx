@@ -769,7 +769,7 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                     <Clock size={14} color="#6B7280" />
                     <Text style={styles.inlineStatText}>
-                      Today: {stats.todayHours.toFixed(1)}h
+                      Today: {stats.todayHours.toFixed(4)}h
                     </Text>
                   </View>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

@@ -262,7 +262,7 @@ export default function CompactBusinessCosts({ expenses, clockEntries = [], hour
                 <Text style={styles.metricLabel}>Rec. Rate</Text>
               </View>
               <Text style={[styles.metricValue, styles.metricValueLarge, { color: '#7C3AED' }]} numberOfLines={1}>
-                {recRate > 0 ? `$${recRate.toFixed(0)}/hr` : '$0/hr'}
+                {recRate > 0 ? `$${recRate.toFixed(2)}/hr` : '$0/hr'}
               </Text>
             </View>
           </View>
@@ -308,7 +308,7 @@ export default function CompactBusinessCosts({ expenses, clockEntries = [], hour
                 <Text style={styles.metricLabel}>Rec. Rate</Text>
               </View>
               <Text style={[styles.metricValue, { color: '#7C3AED' }]} numberOfLines={1}>
-                {recRate > 0 ? `$${recRate.toFixed(0)}/hr` : '$0/hr'}
+                {recRate > 0 ? `$${recRate.toFixed(2)}/hr` : '$0/hr'}
               </Text>
             </View>
             <View style={styles.metricDivider} />

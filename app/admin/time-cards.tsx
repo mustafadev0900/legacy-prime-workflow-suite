@@ -1601,7 +1601,7 @@ export default function TimeCardsScreen() {
       <div class="week-head">
         <div><span class="wk-label">${sec.label}</span> &nbsp;•&nbsp; ${sec.range}</div>
         <div class="wk-totals">
-          <span class="muted">Net Hours:</span> <b>${sec.netHours.toFixed(2)}h</b>
+          <span class="muted">Net Hours:</span> <b>${sec.netHours.toFixed(4)}h</b>
           &nbsp;&nbsp;<span class="muted">Total Pay:</span> <b class="pay">${rate > 0 ? `$${sec.pay.toFixed(2)}` : "—"}</b>
         </div>
       </div>
@@ -1680,7 +1680,7 @@ export default function TimeCardsScreen() {
           <div class="sname">${displayName}</div>
           <div class="srate">${rate > 0 ? `$${rate.toFixed(2)}/hr` : "Rate N/A"}</div>
         </div>
-        <div class="stat"><div class="sv">${totals.netHours.toFixed(2)}h</div><div class="sl">Total Net Hours</div></div>
+        <div class="stat"><div class="sv">${totals.netHours.toFixed(4)}h</div><div class="sl">Total Net Hours</div></div>
         <div class="stat"><div class="sv green">${rate > 0 ? `$${totals.totalPay.toFixed(2)}` : "—"}</div><div class="sl">Total Pay</div></div>
         <div class="stat"><div class="sv">${totals.sessions}</div><div class="sl">Total Sessions</div></div>
       </div>
@@ -1690,7 +1690,7 @@ export default function TimeCardsScreen() {
           <div class="pt-title">PAY PERIOD TOTALS</div>
           <div class="pt-sub">${period.label} (${periodMode})</div>
         </div>
-        <div class="stat"><div class="sv">${totals.netHours.toFixed(2)}h</div><div class="sl">Total Net Hours</div></div>
+        <div class="stat"><div class="sv">${totals.netHours.toFixed(4)}h</div><div class="sl">Total Net Hours</div></div>
         <div class="stat"><div class="sv">${totals.lunchStr}</div><div class="sl">Total Lunch Time</div></div>
         <div class="stat"><div class="sv">${totals.grossStr}</div><div class="sl">Total Gross Hours</div></div>
         <div class="stat"><div class="sv green">${rate > 0 ? `$${totals.totalPay.toFixed(2)}` : "—"}</div><div class="sl">Total Pay</div></div>
@@ -1898,7 +1898,7 @@ export default function TimeCardsScreen() {
               ]}
             >
               <Text style={styles.summaryStatValue}>
-                {totals.netHours.toFixed(2)}h
+                {totals.netHours.toFixed(4)}h
               </Text>
               <Text style={styles.summaryStatLabel}>Total Net Hours</Text>
             </View>
@@ -1975,7 +1975,7 @@ export default function TimeCardsScreen() {
                   <Text style={styles.weekTotalText}>
                     Net Hours:{" "}
                     <Text style={styles.weekTotalValue}>
-                      {sec.netHours.toFixed(2)}h
+                      {sec.netHours.toFixed(4)}h
                     </Text>
                   </Text>
                   <Text style={styles.weekTotalText}>
@@ -2025,7 +2025,7 @@ export default function TimeCardsScreen() {
             </View>
             <View style={styles.payStat}>
               <Text style={styles.payStatValue}>
-                {totals.netHours.toFixed(2)}h
+                {totals.netHours.toFixed(4)}h
               </Text>
               <Text style={styles.payStatLabel}>Total Net Hours</Text>
             </View>

@@ -1153,7 +1153,7 @@ export default function ClockInOutComponent({ projectId, projectName, officeRole
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>Paid Hours</Text>
-            <Text style={styles.statValue}>{totalHoursToday.toFixed(2)}h</Text>
+            <Text style={styles.statValue}>{totalHoursToday.toFixed(5)}h</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>Sessions</Text>
