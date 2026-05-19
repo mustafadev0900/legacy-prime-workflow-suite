@@ -2,30 +2,36 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable,
 import { useApp } from '@/contexts/AppContext';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { Stack, useFocusEffect } from 'expo-router';
 import { useCallback } from 'react';
 import { Image } from 'expo-image';
 import {
   DollarSign, Layers, TrendingUp, Grid3X3, Users, BarChart3,
-  Clock, ChevronDown, ChevronUp, ArrowLeft, X, Image as ImageIcon, File, ChevronRight, ChevronLeft
+  Clock, ChevronDown, ChevronUp, ArrowLeft, X, Image as ImageIcon, File, ChevronRight, ChevronLeft, Calendar
 } from 'lucide-react-native';
 import type { Expense } from '@/types';
 
-interface RateCalcSettings {
-  desiredSalary: number;
-  billableHoursPerWeek: number;
-  workingWeeksPerYear: number;
-  profitMargin: number;
+function getPeriodBounds(
+  period: 'weekly' | 'monthly' | 'quarterly' | 'yearly',
+  anchor: Date
+): [Date, Date] {
+  if (period === 'weekly') return getWeekBounds(anchor);
+  const start = new Date(anchor);
+  const end = new Date(anchor);
+  if (period === 'monthly') {
+    start.setDate(1); start.setHours(0, 0, 0, 0);
+    end.setMonth(end.getMonth() + 1, 0); end.setHours(23, 59, 59, 999);
+  } else if (period === 'quarterly') {
+    const q = Math.floor(start.getMonth() / 3);
+    start.setMonth(q * 3, 1); start.setHours(0, 0, 0, 0);
+    end.setMonth(q * 3 + 3, 0); end.setHours(23, 59, 59, 999);
+  } else {
+    start.setMonth(0, 1); start.setHours(0, 0, 0, 0);
+    end.setMonth(11, 31); end.setHours(23, 59, 59, 999);
+  }
+  return [start, end];
 }
-
-const DEFAULT_SETTINGS: RateCalcSettings = {
-  desiredSalary: 80000,
-  billableHoursPerWeek: 30,
-  workingWeeksPerYear: 50,
-  profitMargin: 20,
-};
 
 function getWeekBounds(d: Date): [Date, Date] {
   const start = new Date(d);
@@ -49,9 +55,14 @@ export default function BusinessCostsScreen() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const toggle = (key: string) => setExpanded(prev => ({ ...prev, [key]: !prev[key] }));
 
-  // Rate calculator settings (loaded for recommended rate summary card)
-  const [settings, setSettings] = useState<RateCalcSettings>(DEFAULT_SETTINGS);
   const [overheadPeriod, setOverheadPeriod] = useState<'monthly' | 'yearly'>('monthly');
+
+  // Rate period selector
+  const [ratePeriod, setRatePeriod] = useState<'weekly' | 'monthly' | 'quarterly' | 'yearly'>('monthly');
+  const [ratePeriodDate, setRatePeriodDate] = useState<Date>(new Date());
+  const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 220 });
+  const filterBtnRef = useRef<View>(null);
 
   // Expense detail modal
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
@@ -73,33 +84,21 @@ export default function BusinessCostsScreen() {
   };
 
   // When screen comes into focus: immediate refresh + start a 10-second
-  // polling interval so clock-in/out events appear without any manual refresh.
-  // Interval is cleared automatically when the screen loses focus.
+  // Fetch fresh data on screen focus. Live updates arrive via AppContext Realtime
+  // channels (clock-entries + expenses) — no polling interval needed.
+  // Functions intentionally excluded from deps to prevent double-fetch on re-render.
   useFocusEffect(useCallback(() => {
     refreshClockEntries();
     refreshExpenses();
-    const id = setInterval(() => {
-      refreshClockEntries();
-    }, 10_000);
-    return () => clearInterval(id);
-  }, [refreshClockEntries, refreshExpenses]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []));
 
   // Tick every 10s so live labor costs (active sessions) update their hours
-  const [, setTick] = useState(0);
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 10_000);
     return () => clearInterval(id);
   }, []);
-
-  // Load rate settings from AsyncStorage
-  useEffect(() => {
-    if (!company?.id) return;
-    AsyncStorage.getItem(`rate_calc_${company.id}`).then(raw => {
-      if (raw) {
-        setSettings(JSON.parse(raw));
-      }
-    });
-  }, [company?.id]);
 
   // ─── Data calculations ───────────────────────────────────────────────────
   // Business Costs = ONLY indirect company overhead.
@@ -149,17 +148,18 @@ export default function BusinessCostsScreen() {
 
   // This month: office labor cost (hours × rate, no project entries)
   const officeLaborThisMonth = useMemo(() => {
+    const n = new Date();
     return officeClockEntries
       .filter(e => {
         const d = new Date(e.clockIn);
-        return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+        return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth();
       })
       .reduce((sum, e) => {
         if (!e.hourlyRate) return sum;
         return sum + calcNetMs(e) / 3_600_000 * e.hourlyRate;
       }, 0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [officeClockEntries]);
+  }, [officeClockEntries, tick]);
 
   // This month combined total (used for summary card + yearly forecast)
   const thisMonthTotal = thisMonthExpenseTotal + officeLaborThisMonth;
@@ -247,7 +247,7 @@ export default function BusinessCostsScreen() {
   const laborRows = useMemo((): EmployeeLaborRow[] => {
     const map = new Map<string, EmployeeLaborRow>();
     const twentyFourHoursAgo = Date.now() - 24 * 3_600_000;
-    officeClockEntries.forEach(e => {
+    officeClockEntries.forEach((e: typeof clockEntries[0]) => {
         const netHours = calcNetMs(e) / 3_600_000;
         const rate = e.hourlyRate ?? null;
         const cost = rate != null ? netHours * rate : 0;
@@ -271,7 +271,7 @@ export default function BusinessCostsScreen() {
       });
     return Array.from(map.values()).sort((a, b) => b.totalCost - a.totalCost);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [officeClockEntries]);
+  }, [officeClockEntries, tick]);
 
   const laborTotalAllTime = useMemo(
     () => laborRows.reduce((s, r) => s + r.totalCost, 0),
@@ -313,21 +313,93 @@ export default function BusinessCostsScreen() {
       });
     return Array.from(map.values()).sort((a, b) => b.date.localeCompare(a.date));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedLaborRow, officeClockEntries, laborFilter, laborFilterDate]);
+  }, [selectedLaborRow, officeClockEntries, laborFilter, laborFilterDate, tick]);
 
   const laborHoursAllTime = useMemo(
     () => laborRows.reduce((s, r) => s + r.totalHours, 0),
     [laborRows]
   );
 
-  // Rate calculator
-  const recommendedRate = useMemo(() => {
-    const totalAnnualCost = settings.desiredSalary + (overheadPerMonth * 12);
-    const billableHoursPerYear = settings.billableHoursPerWeek * settings.workingWeeksPerYear;
-    if (billableHoursPerYear <= 0) return 0;
-    const baseRate = totalAnnualCost / billableHoursPerYear;
-    return baseRate * (1 + settings.profitMargin / 100);
-  }, [settings, overheadPerMonth]);
+  // ─── Rate period bounds ──────────────────────────────────────────────────
+  const periodBounds = useMemo(
+    () => getPeriodBounds(ratePeriod, ratePeriodDate),
+    [ratePeriod, ratePeriodDate]
+  );
+
+  const allPeriodEntries = useMemo(() => {
+    const [start, end] = periodBounds;
+    return clockEntries.filter(e => { const d = new Date(e.clockIn); return d >= start && d <= end; });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clockEntries, periodBounds]);
+
+  // All employee hours in period (field + office) — used as divisor for indirect cost rate
+  const totalEmployeeHoursInPeriod = useMemo(
+    () => allPeriodEntries.reduce((s, e) => s + calcNetMs(e) / 3_600_000, 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allPeriodEntries, tick]
+  );
+
+  // Field/project employees only — their cost forms the average labor rate baseline.
+  // Office labor is intentionally excluded here; it appears in totalIndirectCostsInPeriod
+  // as overhead, so counting it here would double-count it in the recommended rate.
+  const fieldPeriodEntries = useMemo(
+    () => allPeriodEntries.filter(e => !!e.projectId),
+    [allPeriodEntries]
+  );
+
+  const fieldHoursInPeriod = useMemo(
+    () => fieldPeriodEntries.reduce((s, e) => s + calcNetMs(e) / 3_600_000, 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fieldPeriodEntries, tick]
+  );
+
+  const fieldPayrollCostInPeriod = useMemo(
+    () => fieldPeriodEntries.reduce((s, e) => e.hourlyRate ? s + calcNetMs(e) / 3_600_000 * e.hourlyRate : s, 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [fieldPeriodEntries, tick]
+  );
+
+  // Average field labor cost per field hour worked
+  const avgLaborCostPerHour = useMemo(
+    () => fieldHoursInPeriod > 0 ? fieldPayrollCostInPeriod / fieldHoursInPeriod : 0,
+    [fieldPayrollCostInPeriod, fieldHoursInPeriod]
+  );
+
+  const totalIndirectCostsInPeriod = useMemo(() => {
+    const [start, end] = periodBounds;
+    const expCost = businessExpenses.filter(e => { const d = new Date(e.date); return d >= start && d <= end; }).reduce((s, e) => s + e.amount, 0);
+    const officeLaborCost = officeClockEntries.filter(e => { const d = new Date(e.clockIn); return d >= start && d <= end; }).reduce((s, e) => e.hourlyRate ? s + calcNetMs(e) / 3_600_000 * e.hourlyRate : s, 0);
+    return expCost + officeLaborCost;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessExpenses, officeClockEntries, periodBounds, tick]);
+
+  const indirectCostPerHour = useMemo(
+    () => totalEmployeeHoursInPeriod > 0 ? totalIndirectCostsInPeriod / totalEmployeeHoursInPeriod : 0,
+    [totalIndirectCostsInPeriod, totalEmployeeHoursInPeriod]
+  );
+
+  const ratePeriodLabel = useMemo(() => {
+    const [start, end] = periodBounds;
+    const f = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (ratePeriod === 'yearly') return `${start.getFullYear()}`;
+    return `${f(start)} – ${f(end)}, ${end.getFullYear()}`;
+  }, [periodBounds, ratePeriod]);
+
+  const navigatePeriod = (dir: -1 | 1) => {
+    setRatePeriodDate(prev => {
+      const d = new Date(prev);
+      if (ratePeriod === 'weekly') d.setDate(d.getDate() + dir * 7);
+      else if (ratePeriod === 'monthly') d.setMonth(d.getMonth() + dir);
+      else if (ratePeriod === 'quarterly') d.setMonth(d.getMonth() + dir * 3);
+      else d.setFullYear(d.getFullYear() + dir);
+      return d;
+    });
+  };
+
+  const recommendedRate = useMemo(
+    () => avgLaborCostPerHour + indirectCostPerHour,
+    [avgLaborCostPerHour, indirectCostPerHour]
+  );
 
   // 3-month average (expenses + office labor)
   const avg3mo = useMemo(() => {
@@ -455,9 +527,43 @@ export default function BusinessCostsScreen() {
               <Grid3X3 size={20} color="#FFFFFF" />
             </View>
             <Text style={styles.cardLabel}>Recommended Rate</Text>
-            <Text style={[styles.cardValue, { color: '#7C3AED' }]}>
+
+            {/* Filter pill — right-aligned, shrinks to content */}
+            <TouchableOpacity
+              ref={filterBtnRef as any}
+              style={styles.rateFilterRow}
+              onPress={() => {
+                filterBtnRef.current?.measureInWindow((x, y, w, h) => {
+                  const dropW = 220;
+                  setDropdownPos({ top: y + h + 6, left: x + w - dropW, width: dropW });
+                  setShowPeriodDropdown(true);
+                });
+              }}
+              activeOpacity={0.75}
+            >
+              <Calendar size={11} color="#2563EB" />
+              <Text style={styles.rateFilterDate} numberOfLines={1}>{ratePeriodLabel}</Text>
+              <View style={styles.rateFilterBadge}>
+                <Text style={styles.rateFilterBadgeText}>
+                  {ratePeriod.charAt(0).toUpperCase() + ratePeriod.slice(1)}
+                </Text>
+              </View>
+              <ChevronDown size={11} color="#6B7280" />
+            </TouchableOpacity>
+
+            <Text
+              style={[styles.cardValue, { color: '#7C3AED' }]}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+            >
               {recommendedRate > 0 ? `${fmtDec(recommendedRate)}/hr` : '$0/hr'}
             </Text>
+            {recommendedRate > 0 && (
+              <Text style={styles.cardSubValue} numberOfLines={2}>
+                L: ${avgLaborCostPerHour.toFixed(2)} + O: ${indirectCostPerHour.toFixed(2)}/hr
+              </Text>
+            )}
           </View>
         </View>
 
@@ -1100,6 +1206,48 @@ export default function BusinessCostsScreen() {
         </View>
       </Modal>
 
+      {/* ─── Period Dropdown Modal ─── */}
+      <Modal
+        visible={showPeriodDropdown}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPeriodDropdown(false)}
+      >
+        <Pressable
+          style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.3)' }]}
+          onPress={() => setShowPeriodDropdown(false)}
+        />
+        <View style={[styles.rateDropdownModal, { top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width }]}>
+          <Text style={styles.rateDropdownTitle}>Period</Text>
+          {(['weekly', 'monthly', 'quarterly', 'yearly'] as const).map(p => (
+            <TouchableOpacity
+              key={p}
+              style={[styles.rateDropdownOption, ratePeriod === p && styles.rateDropdownOptionActive]}
+              activeOpacity={0.7}
+              onPress={() => { setRatePeriod(p); setRatePeriodDate(new Date()); }}
+            >
+              <Text style={[styles.rateDropdownOptionText, ratePeriod === p && styles.rateDropdownOptionTextActive]}>
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </Text>
+              {ratePeriod === p && <View style={styles.rateDropdownCheck} />}
+            </TouchableOpacity>
+          ))}
+          <View style={styles.rateDropdownDivider} />
+          <View style={styles.rateDropdownDateNav}>
+            <TouchableOpacity style={styles.rateDropdownNavBtn} onPress={() => navigatePeriod(-1)} activeOpacity={0.7}>
+              <ChevronLeft size={16} color="#374151" />
+            </TouchableOpacity>
+            <Text style={styles.rateDropdownDateLabel} numberOfLines={1}>{ratePeriodLabel}</Text>
+            <TouchableOpacity style={styles.rateDropdownNavBtn} onPress={() => navigatePeriod(1)} activeOpacity={0.7}>
+              <ChevronRight size={16} color="#374151" />
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={styles.rateDropdownDone} onPress={() => setShowPeriodDropdown(false)} activeOpacity={0.8}>
+            <Text style={styles.rateDropdownDoneText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
       {/* ─── Receipt Viewer Modal ─── */}
       <Modal
         visible={showReceiptViewer}
@@ -1205,6 +1353,7 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderWidth: 1,
     borderColor: '#E5E7EB',
+    overflow: 'hidden',
   },
   cardIcon: {
     width: 40,
@@ -1561,4 +1710,69 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   openPdfButtonText: { fontSize: 14, fontWeight: '600', color: '#FFFFFF' },
+
+  // Recommended Rate card — filter pill
+  cardSubValue: { fontSize: 10, color: '#9CA3AF', marginTop: 3 },
+  rateFilterRow: {
+    alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginTop: 6,
+    marginBottom: 8,
+    maxWidth: '100%',
+    overflow: 'hidden',
+  },
+  rateFilterDate: { fontSize: 10, fontWeight: '600', color: '#1F2937', flexShrink: 1 },
+  rateFilterBadge: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  rateFilterBadgeText: { fontSize: 10, fontWeight: '700', color: '#2563EB' },
+
+  // Period dropdown modal
+  rateDropdownModal: {
+    position: 'absolute',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  rateDropdownTitle: {
+    fontSize: 12, fontWeight: '600', color: '#9CA3AF',
+    textTransform: 'uppercase', paddingHorizontal: 12, paddingVertical: 6,
+  },
+  rateDropdownOption: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingVertical: 12, borderRadius: 8,
+  },
+  rateDropdownOptionActive: { backgroundColor: '#F3E8FF' },
+  rateDropdownOptionText: { fontSize: 15, color: '#374151', fontWeight: '500' },
+  rateDropdownOptionTextActive: { color: '#7C3AED', fontWeight: '700' },
+  rateDropdownCheck: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#7C3AED' },
+  rateDropdownDivider: { height: 1, backgroundColor: '#F3F4F6', marginHorizontal: 8, marginVertical: 6 },
+  rateDropdownDateNav: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 8, paddingVertical: 6,
+  },
+  rateDropdownNavBtn: { padding: 8, borderRadius: 8, backgroundColor: '#F3F4F6' },
+  rateDropdownDateLabel: { flex: 1, fontSize: 13, fontWeight: '700', color: '#1F2937', textAlign: 'center' },
+  rateDropdownDone: {
+    backgroundColor: '#7C3AED', borderRadius: 10,
+    marginHorizontal: 8, marginTop: 6, marginBottom: 4,
+    paddingVertical: 11, alignItems: 'center',
+  },
+  rateDropdownDoneText: { fontSize: 14, fontWeight: '700', color: '#FFFFFF' },
 });

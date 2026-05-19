@@ -964,7 +964,10 @@ export default function ClockInOutComponent({
     todayEntries
       .filter((e) => !!e.clockOut)
       .forEach((e) => {
-        const { paidSec, lunchSec } = calcEntry(e, new Date(e.clockOut!).getTime());
+        const { paidSec, lunchSec } = calcEntry(
+          e,
+          new Date(e.clockOut!).getTime(),
+        );
         totalPaidSec += paidSec;
         totalBreakSec += lunchSec;
       });
@@ -977,7 +980,10 @@ export default function ClockInOutComponent({
       totalBreakSec += lunchSec;
     }
 
-    return { totalPaidSecToday: totalPaidSec, totalBreakSecToday: totalBreakSec };
+    return {
+      totalPaidSecToday: totalPaidSec,
+      totalBreakSecToday: totalBreakSec,
+    };
   })();
 
   // Shift to display in the Top Summary Card + Time Log section.
@@ -1537,12 +1543,7 @@ export default function ClockInOutComponent({
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>Paid Hours</Text>
-            <Text style={styles.statValue}>{fmtSec(totalPaidSecToday)}</Text>
-            {/* {totalBreakSecToday > 0 && (
-              <Text style={styles.statBreakNote}>
-                −{fmtSec(totalBreakSecToday)} break
-              </Text>
-            )} */}
+            <Text style={styles.statValue}>{totalHoursToday.toFixed(5)}h</Text>
           </View>
           <View style={styles.statItem}>
             <Text style={styles.statLabel}>Sessions</Text>
