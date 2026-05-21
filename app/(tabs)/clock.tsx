@@ -71,6 +71,8 @@ export default function ClockScreen() {
     }
   }, [params.projectId]);
 
+  const isPending = user != null && user.isActive === false;
+
   const activeProjects = projects.filter(p => p.status === 'active');
   const selectedProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
 
@@ -275,6 +277,7 @@ export default function ClockScreen() {
                   projectId={effectiveProject?.id}
                   projectName={effectiveProject?.name}
                   officeRole={effectiveOfficeRole ?? undefined}
+                  isPending={isPending}
                 />
               </View>
             </View>
@@ -284,6 +287,7 @@ export default function ClockScreen() {
                 projectId={effectiveProject?.id}
                 projectName={effectiveProject?.name}
                 officeRole={effectiveOfficeRole ?? undefined}
+                isPending={isPending}
               />
             </View>
           )}

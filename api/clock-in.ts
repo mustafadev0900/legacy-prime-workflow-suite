@@ -44,12 +44,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Snapshot the employee's current hourly rate so historical entries remain
-    // accurate even after future rate changes.
+    // accurate even after future rate changes. Also verify account is approved.
     const { data: userRow } = await supabase
       .from('users')
-      .select('hourly_rate')
+      .select('hourly_rate, is_active')
       .eq('id', employeeId)
       .single();
+
+    if (userRow && userRow.is_active === false) {
+      console.log('[ClockIn] Rejected: account not yet approved for employee:', employeeId);
+      return res.status(403).json({ error: 'Account pending admin approval' });
+    }
+
     const snapshotRate = userRow?.hourly_rate != null ? Number(userRow.hourly_rate) : null;
 
     console.log('[ClockIn] Inserting into database...');

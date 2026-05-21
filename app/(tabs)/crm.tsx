@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, Dimensions, InputAccessoryView, Keyboard, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, InputAccessoryView, Keyboard, Linking, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 const KEYBOARD_ACCESSORY_ID = 'crm-keyboard-done';
@@ -6,7 +6,7 @@ import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useEffect, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import DailyTasksButton from '@/components/DailyTasksButton';
-import { Plus, Mail, MessageSquare, Send, X, CheckSquare, Square, Paperclip, FileText, Calculator, FileSignature, DollarSign, CheckCircle, CreditCard, ClipboardList, Sparkles, Phone, Settings, PhoneIncoming, PhoneOutgoing, Clock, Trash2, Calendar, ChevronDown, ChevronUp, TrendingUp, Users, FileCheck, DollarSign as DollarSignIcon, Camera, Pencil, PauseCircle, PlayCircle, Snowflake, RotateCcw } from 'lucide-react-native';
+import { Plus, Mail, MessageSquare, Send, X, CheckSquare, Square, Paperclip, FileText, Calculator, FileSignature, DollarSign, CheckCircle, CreditCard, ClipboardList, Sparkles, Phone, Settings, PhoneIncoming, PhoneOutgoing, Clock, Trash2, Calendar, ChevronDown, ChevronUp, TrendingUp, Users, FileCheck, DollarSign as DollarSignIcon, Camera, Pencil, PauseCircle, PlayCircle, Snowflake, RotateCcw, MapPin, Building2 } from 'lucide-react-native';
 import { Project, Client, CallLog } from '@/types';
 import * as DocumentPicker from 'expo-document-picker';
 import { uriToBase64 } from '@/lib/upload-utils';
@@ -113,6 +113,8 @@ const promotionTemplates: MessageTemplate[] = [
 
 export default function CRMScreen() {
   const { clients, addClient, addProject, updateClient, updateProject, deleteClient, estimates, updateEstimate, callLogs, addCallLog, deleteCallLog, setCallLogs, company, user, refreshClients, refreshEstimates, projects, priceListItems, isLoading, isCompanyReloading, companyUsers, appointments, addAppointment, updateAppointment, deleteAppointment } = useApp();
+  const { width: screenWidth } = useWindowDimensions();
+  const isSmallScreen = screenWidth < 500;
   const router = useRouter();
   const { sendSingleSMS, sendBulkSMSMessages, isLoading: isSendingSMS } = useTwilioSMS();
   const { initiateCall, isLoadingCall } = useTwilioCalls();
@@ -323,7 +325,6 @@ export default function CRMScreen() {
     }
   };
 
-  const [showAddForm, setShowAddForm] = useState<boolean>(true);
   const [showAddClientModal, setShowAddClientModal] = useState<boolean>(false);
   const addClientScrollRef = useRef<ScrollView>(null);
   const [isAddingClient, setIsAddingClient] = useState<boolean>(false);
@@ -1583,18 +1584,26 @@ export default function CRMScreen() {
 
         <View style={styles.sidebar}>
           <View style={styles.statsSection}>
-            <Text style={styles.statsTitle}>Stats</Text>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Leads by Google</Text>
-              <Text style={styles.statValue}>{leadsByGoogle}</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Leads by Referral</Text>
-              <Text style={styles.statValue}>{leadsByReferral}</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statLabel}>Leads by Ad</Text>
-              <Text style={styles.statValue}>{leadsByAd}</Text>
+            <View style={styles.statRow}>
+              <Text style={styles.statsTitle}>Stats</Text>
+              <View style={[styles.statItem, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+                <Text style={[styles.statLabel, { color: '#1D4ED8' }]}>Google</Text>
+                <View style={[styles.statBadge, { backgroundColor: '#2563EB' }]}>
+                  <Text style={styles.statBadgeText}>{leadsByGoogle}</Text>
+                </View>
+              </View>
+              <View style={[styles.statItem, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                <Text style={[styles.statLabel, { color: '#15803D' }]}>Referral</Text>
+                <View style={[styles.statBadge, { backgroundColor: '#16A34A' }]}>
+                  <Text style={styles.statBadgeText}>{leadsByReferral}</Text>
+                </View>
+              </View>
+              <View style={[styles.statItem, { backgroundColor: '#FAF5FF', borderColor: '#DDD6FE' }]}>
+                <Text style={[styles.statLabel, { color: '#6D28D9' }]}>Ad</Text>
+                <View style={[styles.statBadge, { backgroundColor: '#7C3AED' }]}>
+                  <Text style={styles.statBadgeText}>{leadsByAd}</Text>
+                </View>
+              </View>
             </View>
           </View>
         </View>
@@ -1684,269 +1693,273 @@ export default function CRMScreen() {
           </ScrollView>
 
           {(isLoading || isCompanyReloading) && clients.length === 0 && (
-            <View>
+            <View style={!isSmallScreen ? styles.clientGrid : undefined}>
               {[0, 1, 2, 3].map(i => (
-                <View key={i} style={{ padding: 16, marginBottom: 8, backgroundColor: '#F9FAFB', borderRadius: 12 }}>
-                  <SkeletonBox width="60%" height={16} borderRadius={4} />
-                  <SkeletonBox width="45%" height={13} borderRadius={4} style={{ marginTop: 8 }} />
-                  <SkeletonBox width="55%" height={13} borderRadius={4} style={{ marginTop: 6 }} />
-                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                    <SkeletonBox width={70} height={28} borderRadius={6} />
-                    <SkeletonBox width={70} height={28} borderRadius={6} />
-                    <SkeletonBox width={90} height={28} borderRadius={6} />
+                <View key={i} style={!isSmallScreen ? [styles.clientGridCell, i % 2 === 0 ? { paddingRight: 10 } : { paddingLeft: 10 }] : undefined}>
+                  <View style={{ padding: 16, marginBottom: 8, backgroundColor: '#F9FAFB', borderRadius: 12 }}>
+                    <SkeletonBox width="60%" height={16} borderRadius={4} />
+                    <SkeletonBox width="45%" height={13} borderRadius={4} style={{ marginTop: 8 }} />
+                    <SkeletonBox width="55%" height={13} borderRadius={4} style={{ marginTop: 6 }} />
+                    <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                      <SkeletonBox width={70} height={28} borderRadius={6} />
+                      <SkeletonBox width={70} height={28} borderRadius={6} />
+                      <SkeletonBox width={90} height={28} borderRadius={6} />
+                    </View>
                   </View>
                 </View>
               ))}
             </View>
           )}
 
+          <View style={!isSmallScreen ? styles.clientGrid : undefined}>
           {[...clients]
             .filter(c => c.status !== 'Cold Lead' && (activeStatusFilter === 'All' || c.status === activeStatusFilter) && (user?.role !== 'salesperson' || c.assignedRep === user?.id))
             .sort((a, b) => {
               const dateA = new Date(a.createdAt || a.lastContactDate || a.lastContacted).getTime();
               const dateB = new Date(b.createdAt || b.lastContactDate || b.lastContacted).getTime();
               return dateB - dateA;
-            }).map((client) => {
+            }).map((client, index) => {
             const linkedProject = projects.find(p => p.clientId === client.id);
             return (
-            <View key={client.id} style={styles.clientRow}>
-              <View style={styles.clientRowHeader}>
-                <TouchableOpacity 
-                  style={styles.checkbox}
-                  onPress={() => toggleClientSelection(client.id)}
-                >
-                  {selectedClients.has(client.id) ? (
-                    <CheckSquare size={24} color="#2563EB" />
-                  ) : (
-                    <Square size={24} color="#9CA3AF" />
-                  )}
-                </TouchableOpacity>
-                <View style={styles.clientInfo}>
-                  <View style={styles.clientNameRow}>
-                    <Text style={styles.clientName}>{client.name}</Text>
-                    {(() => {
-                      const followUpStatus = getFollowUpStatus(client);
-                      return (
-                        <View style={[styles.followUpStatusBadge, { backgroundColor: followUpStatus.color }]}>
-                          <Text style={styles.followUpStatusText}>{followUpStatus.emoji} {followUpStatus.label}</Text>
-                        </View>
-                      );
-                    })()}
-                  </View>
-                  {client.address && (
-                    client.address.startsWith('[AI Call]') ? (() => {
-                      const lines = client.address.replace(/^\[AI Call\]\n?/, '').split('\n').filter(Boolean);
-                      return (
-                        <View style={styles.aiCallBlock}>
-                          <View style={styles.aiCallRow}>
-                            <View style={styles.aiCallBadge}>
-                              <Text style={styles.aiCallBadgeText}>AI Call</Text>
-                            </View>
-                            <Text style={styles.aiCallSummary} numberOfLines={1}>{lines[0] || ''}</Text>
-                          </View>
-                          {lines.slice(1).map((line, i) => (
-                            <Text key={i} style={styles.aiCallLine} numberOfLines={1}>{line}</Text>
-                          ))}
-                        </View>
-                      );
-                    })() : (
-                      <Text style={styles.clientAddress}>{client.address}</Text>
-                    )
-                  )}
-                  <Text style={styles.clientEmail}>{client.email}</Text>
-                  <Text style={styles.clientPhone}>{client.phone}</Text>
-                  <Text style={styles.clientSource}>{client.source}</Text>
-                  {/* Assign Rep — inline on card */}
-                  {(user?.role === 'admin' || user?.role === 'super-admin') ? (
-                    <View>
-                      <TouchableOpacity style={styles.cardInlineRow} onPress={() => {
-                        if (repPickerClientId === client.id) { setRepPickerClientId(null); }
-                        else { setRepPickerClientId(client.id); setRepPickerValue(client.assignedRep ?? null); }
-                      }}>
-                        <Users size={14} color="#2563EB" />
-                        <Text style={styles.cardInlineLabel}>{client.assignedRep ? `Rep: ${companyUsers.find(u => u.id === client.assignedRep)?.name || 'Unknown'}` : 'Assign Rep'}</Text>
-                        <Pencil size={12} color="#9CA3AF" />
-                      </TouchableOpacity>
-                      {repPickerClientId === client.id && (
-                        <View style={styles.repPickerPanel}>
-                          <Text style={styles.repPickerTitle}>Assign Sales Rep</Text>
-                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cardRepChipScroll}>
-                            {salespersons.map(sp => (
-                              <TouchableOpacity
-                                key={sp.id}
-                                style={[styles.repChip, repPickerValue === sp.id && styles.repChipActive]}
-                                onPress={() => setRepPickerValue(sp.id)}
-                              >
-                                <Text style={[styles.repChipText, repPickerValue === sp.id && styles.repChipTextActive]} numberOfLines={1}>{sp.name}</Text>
-                              </TouchableOpacity>
-                            ))}
-                            <TouchableOpacity
-                              style={[styles.repChip, !repPickerValue && styles.repChipActive]}
-                              onPress={() => setRepPickerValue(null)}
-                            >
-                              <Text style={[styles.repChipText, !repPickerValue && styles.repChipTextActive]}>Unassigned</Text>
-                            </TouchableOpacity>
-                          </ScrollView>
-                          <View style={styles.repPickerActions}>
-                            <TouchableOpacity style={styles.repPickerSaveBtn} onPress={() => { updateClient(client.id, { assignedRep: repPickerValue }); setRepPickerClientId(null); }}>
-                              <Text style={styles.repPickerSaveBtnText}>Save</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={styles.repPickerCancelBtn} onPress={() => setRepPickerClientId(null)}>
-                              <Text style={styles.repPickerCancelBtnText}>Cancel</Text>
-                            </TouchableOpacity>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  ) : client.assignedRep ? (
-                    <View style={styles.cardInlineRow}>
-                      <Users size={14} color="#2563EB" />
-                      <Text style={styles.cardInlineLabel}>Rep: {companyUsers.find(u => u.id === client.assignedRep)?.name || 'Unknown'}</Text>
-                    </View>
-                  ) : null}
+            <View key={client.id} style={!isSmallScreen ? [styles.clientGridCell, index % 2 === 0 ? { paddingRight: 10 } : { paddingLeft: 10 }] : undefined}>
+            <View style={styles.clientRow}>
 
-                  {/* Job Details — inline on card */}
-                  {jobDetailsClientId === client.id ? (
-                    <View style={styles.jobDetailsEditRow}>
-                      <TextInput
-                        style={styles.jobDetailsInput}
-                        placeholder="e.g. Kitchen remodel, 2nd floor bathroom"
-                        placeholderTextColor="#9CA3AF"
-                        value={jobDetailsText}
-                        onChangeText={setJobDetailsText}
-                        multiline
-                        autoFocus
-                      />
-                      <View style={styles.jobDetailsActions}>
-                          <TouchableOpacity onPress={() => setJobDetailsClientId(null)}>
-                            <Text style={styles.jobDetailsCancelText}>Cancel</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity onPress={() => { updateClient(client.id, { jobDetails: jobDetailsText.trim() || null }); setJobDetailsClientId(null); }}>
-                            <Text style={styles.jobDetailsSaveText}>Save</Text>
-                          </TouchableOpacity>
-                      </View>
+              {/* ── Header row ─────────────────────────────────────── */}
+              <View style={styles.cardHeader}>
+                <TouchableOpacity style={styles.checkbox} onPress={() => toggleClientSelection(client.id)}>
+                  {selectedClients.has(client.id) ? <CheckSquare size={20} color="#2563EB" /> : <Square size={20} color="#9CA3AF" />}
+                </TouchableOpacity>
+                <Text style={styles.clientName} numberOfLines={1}>{client.name}</Text>
+                {(() => {
+                  const fs = getFollowUpStatus(client);
+                  return <View style={[styles.followUpStatusBadge, { backgroundColor: fs.color }]}><Text style={styles.followUpStatusText}>{fs.emoji} {fs.label}</Text></View>;
+                })()}
+                {(() => {
+                  const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> = {
+                    'Lead':      { bg: '#DBEAFE', text: '#2563EB', label: 'Lead' },
+                    'Project':   { bg: '#D1FAE5', text: '#059669', label: 'Project' },
+                    'Completed': { bg: '#F3F4F6', text: '#374151', label: 'Completed' },
+                    'Cold Lead': { bg: '#E0F2FE', text: '#0284C7', label: 'Cold Lead' },
+                  };
+                  const conf = STATUS_BADGE[client.status] ?? STATUS_BADGE['Lead'];
+                  return (
+                    <View style={[styles.statusBadge, { backgroundColor: conf.bg }]}>
+                      {client.status === 'Cold Lead' && <Snowflake size={10} color={conf.text} style={{ marginRight: 3 }} />}
+                      <Text style={[styles.statusText, { color: conf.text }]}>{conf.label}</Text>
                     </View>
-                  ) : (
-                    <TouchableOpacity style={styles.cardInlineRow} onPress={() => { setJobDetailsClientId(client.id); setJobDetailsText(client.jobDetails ?? ''); }}>
-                      <ClipboardList size={14} color="#D97706" style={{ flexShrink: 0 }} />
-                      <ScrollView style={styles.jobDetailsScroll} nestedScrollEnabled showsVerticalScrollIndicator>
-                        <Text style={[styles.cardInlineLabel, { color: client.jobDetails ? '#374151' : '#D97706' }]}>
-                          {client.jobDetails || 'Add Job Details'}
-                        </Text>
-                      </ScrollView>
-                      {client.jobDetails && <Pencil size={12} color="#9CA3AF" style={{ flexShrink: 0 }} />}
-                    </TouchableOpacity>
+                  );
+                })()}
+                <TouchableOpacity onPress={() => openEditClientModal(client)} style={styles.cardEditBtn}>
+                  <Pencil size={15} color="#9CA3AF" />
+                </TouchableOpacity>
+              </View>
+
+              {/* ── 2-column info grid ──────────────────────────────── */}
+              <View style={styles.cardInfoGrid}>
+                <View style={styles.cardInfoCol}>
+                  {client.address && !client.address.startsWith('[AI Call]') && (
+                    <View style={styles.cardInfoRow}>
+                      <MapPin size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                      <Text style={styles.cardInfoText} numberOfLines={2}>{client.address}</Text>
+                    </View>
                   )}
-                  {(() => {
-                    const STATUS_BADGE: Record<string, { bg: string; text: string; label: string }> = {
-                      'Lead':      { bg: '#DBEAFE', text: '#2563EB', label: 'Lead' },
-                      'Project':   { bg: '#D1FAE5', text: '#059669', label: 'Project' },
-                      'Completed': { bg: '#F3F4F6', text: '#374151', label: 'Completed' },
-                      'Cold Lead': { bg: '#E0F2FE', text: '#0284C7', label: 'Cold Lead' },
-                    };
-                    const conf = STATUS_BADGE[client.status] ?? STATUS_BADGE['Lead'];
+                  {client.address?.startsWith('[AI Call]') && (() => {
+                    const lines = client.address.replace(/^\[AI Call\]\n?/, '').split('\n').filter(Boolean);
                     return (
-                      <View style={[styles.statusBadge, { backgroundColor: conf.bg }]}>
-                        {client.status === 'Cold Lead' && <Snowflake size={10} color={conf.text} style={{ marginRight: 3 }} />}
-                        <Text style={[styles.statusText, { color: conf.text }]}>{conf.label}</Text>
+                      <View style={styles.cardInfoRow}>
+                        <View style={styles.aiCallBadge}><Text style={styles.aiCallBadgeText}>AI Call</Text></View>
+                        <Text style={styles.cardInfoText} numberOfLines={2}>{lines[0] || ''}</Text>
                       </View>
                     );
                   })()}
                   {(client.lastContactDate || client.lastContacted) && (
-                    <Text style={styles.clientDate}>
-                      Last contacted: {
-                        client.lastContactDate
+                    <View style={styles.cardInfoRow}>
+                      <Clock size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                      <Text style={styles.cardInfoText}>
+                        Contact: {client.lastContactDate
                           ? new Date(client.lastContactDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-                          : client.lastContacted
-                      }
-                    </Text>
-                  )}
-                  {client.createdAt && (
-                    <Text style={styles.clientCreatedDate}>Created: {new Date(client.createdAt).toLocaleDateString()}</Text>
+                          : client.lastContacted}
+                      </Text>
+                    </View>
                   )}
                   {client.nextFollowUpDate && client.nextFollowUpDate.trim() !== '' && (() => {
                     try {
-                      const date = new Date(client.nextFollowUpDate + 'T00:00:00');
-                      if (isNaN(date.getTime())) return null;
+                      const d = new Date(client.nextFollowUpDate + 'T00:00:00');
+                      if (isNaN(d.getTime())) return null;
                       return (
-                        <View style={styles.nextFollowUpRow}>
-                          <Calendar size={14} color="#2563EB" />
-                          <Text style={styles.nextFollowUpText}>Next Follow-Up: {date.toLocaleDateString()}</Text>
+                        <View style={styles.cardInfoRow}>
+                          <Calendar size={12} color="#2563EB" style={{ marginTop: 1, flexShrink: 0 }} />
+                          <Text style={[styles.cardInfoText, { color: '#2563EB' }]}>Follow-Up: {d.toLocaleDateString()}</Text>
                         </View>
                       );
-                    } catch (e) {
-                      return null;
-                    }
+                    } catch (e) { return null; }
                   })()}
-                  
-                  {(() => {
-                    const suggestions = getAISuggestions(client);
-                    return suggestions.length > 0 ? (
-                      <View style={styles.aiSuggestionsContainer}>
-                        <View style={styles.aiSuggestionsHeader}>
-                          <Sparkles size={14} color="#8B5CF6" />
-                          <Text style={styles.aiSuggestionsTitle}>AI Suggestions</Text>
-                        </View>
-                        {suggestions.map((suggestion, idx) => (
-                          <View key={idx} style={styles.aiSuggestionItem}>
-                            <View style={styles.aiSuggestionDot} />
-                            <Text style={styles.aiClientSuggestionText}>{suggestion}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    ) : null;
-                  })()}
+                </View>
+                <View style={styles.cardInfoCol}>
+                  {!!client.email && (
+                    <View style={styles.cardInfoRow}>
+                      <Mail size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                      <Text style={styles.cardInfoText} numberOfLines={1}>{client.email}</Text>
+                    </View>
+                  )}
+                  {(client.source || client.phone) && (
+                    <View style={styles.cardInfoRow}>
+                      <Building2 size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                      <Text style={styles.cardInfoText} numberOfLines={2}>
+                        {[client.source && `Source: ${client.source}`, client.phone && `Phone: ${client.phone}`].filter(Boolean).join(' • ')}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
 
-                  {(() => {
-                    const clientVideos = inspectionVideos.filter(
-                      (v: any) => v.clientId === client.id
-                    );
+              {/* ── Divider ─────────────────────────────────────────── */}
+              <View style={styles.cardDivider} />
 
-                    return clientVideos.length > 0 ? (
-                      <View style={styles.inspectionVideosContainer}>
-                        <View style={styles.inspectionVideosHeader}>
-                          <Camera size={14} color="#8B5CF6" />
-                          <Text style={styles.inspectionVideosTitle}>
-                            Inspection Videos ({clientVideos.length})
+              {/* ── Middle row: links + created date ────────────────── */}
+              <View style={styles.cardMidRow}>
+                <View style={styles.cardMidLeft}>
+                  {(user?.role === 'admin' || user?.role === 'super-admin') ? (
+                    <TouchableOpacity
+                      style={styles.cardLinkBtn}
+                      onPress={() => {
+                        if (repPickerClientId === client.id) setRepPickerClientId(null);
+                        else { setRepPickerClientId(client.id); setRepPickerValue(client.assignedRep ?? null); }
+                      }}
+                    >
+                      <Users size={13} color="#2563EB" />
+                      <Text style={styles.cardLinkText}>
+                        {client.assignedRep ? (companyUsers.find(u => u.id === client.assignedRep)?.name || 'Assign Rep') : 'Assign Rep'}
+                      </Text>
+                    </TouchableOpacity>
+                  ) : client.assignedRep ? (
+                    <View style={styles.cardLinkBtn}>
+                      <Users size={13} color="#2563EB" />
+                      <Text style={styles.cardLinkText}>{companyUsers.find(u => u.id === client.assignedRep)?.name || 'Rep'}</Text>
+                    </View>
+                  ) : null}
+                  <TouchableOpacity
+                    style={styles.cardLinkBtn}
+                    onPress={() => { setJobDetailsClientId(client.id); setJobDetailsText(client.jobDetails ?? ''); }}
+                  >
+                    <ClipboardList size={13} color="#D97706" />
+                    <Text style={[styles.cardLinkText, { color: '#D97706' }]} numberOfLines={1}>
+                      {client.jobDetails || 'Add Details'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {client.createdAt ? (
+                  <Text style={styles.cardCreatedText}>
+                    Created: <Text style={styles.cardCreatedValue}>{new Date(client.createdAt).toLocaleDateString('en-GB')}</Text>
+                  </Text>
+                ) : null}
+              </View>
+
+              {/* Rep picker (expanded inline) */}
+              {repPickerClientId === client.id && (
+                <View style={styles.repPickerPanel}>
+                  <Text style={styles.repPickerTitle}>Assign Sales Rep</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cardRepChipScroll}>
+                    {salespersons.map(sp => (
+                      <TouchableOpacity key={sp.id} style={[styles.repChip, repPickerValue === sp.id && styles.repChipActive]} onPress={() => setRepPickerValue(sp.id)}>
+                        <Text style={[styles.repChipText, repPickerValue === sp.id && styles.repChipTextActive]} numberOfLines={1}>{sp.name}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    <TouchableOpacity style={[styles.repChip, !repPickerValue && styles.repChipActive]} onPress={() => setRepPickerValue(null)}>
+                      <Text style={[styles.repChipText, !repPickerValue && styles.repChipTextActive]}>Unassigned</Text>
+                    </TouchableOpacity>
+                  </ScrollView>
+                  <View style={styles.repPickerActions}>
+                    <TouchableOpacity style={styles.repPickerSaveBtn} onPress={() => { updateClient(client.id, { assignedRep: repPickerValue }); setRepPickerClientId(null); }}>
+                      <Text style={styles.repPickerSaveBtnText}>Save</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.repPickerCancelBtn} onPress={() => setRepPickerClientId(null)}>
+                      <Text style={styles.repPickerCancelBtnText}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* Job details edit (expanded inline) */}
+              {jobDetailsClientId === client.id && (
+                <View style={styles.jobDetailsEditRow}>
+                  <TextInput
+                    style={styles.jobDetailsInput}
+                    placeholder="e.g. Kitchen remodel, 2nd floor bathroom"
+                    placeholderTextColor="#9CA3AF"
+                    value={jobDetailsText}
+                    onChangeText={setJobDetailsText}
+                    multiline
+                    autoFocus
+                  />
+                  <View style={styles.jobDetailsActions}>
+                    <TouchableOpacity onPress={() => setJobDetailsClientId(null)}>
+                      <Text style={styles.jobDetailsCancelText}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { updateClient(client.id, { jobDetails: jobDetailsText.trim() || null }); setJobDetailsClientId(null); }}>
+                      <Text style={styles.jobDetailsSaveText}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {/* AI Suggestion — first one only */}
+              {(() => {
+                const suggestions = getAISuggestions(client);
+                if (!suggestions.length) return null;
+                return (
+                  <View style={styles.cardSuggestionRow}>
+                    <Sparkles size={13} color="#7C3AED" style={{ flexShrink: 0 }} />
+                    <Text style={styles.cardSuggestionText}>
+                      <Text style={styles.cardSuggestionLabel}>Suggestion:  </Text>
+                      {suggestions[0]}
+                    </Text>
+                  </View>
+                );
+              })()}
+
+              {/* Inspection videos */}
+              {(() => {
+                const clientVideos = inspectionVideos.filter((v: any) => v.clientId === client.id);
+                if (!clientVideos.length) return null;
+                return (
+                  <View style={styles.inspectionVideosContainer}>
+                    <View style={styles.inspectionVideosHeader}>
+                      <Camera size={14} color="#8B5CF6" />
+                      <Text style={styles.inspectionVideosTitle}>Inspection Videos ({clientVideos.length})</Text>
+                    </View>
+                    {clientVideos.map((video) => (
+                      <View key={video.id} style={styles.inspectionVideoItem}>
+                        <View style={styles.videoInfo}>
+                          <Text style={styles.videoStatus}>
+                            {video.status === 'completed' ? '✅' : '⏳'} {video.status === 'completed' ? 'Completed' : 'Pending'}
                           </Text>
+                          <Text style={styles.videoDate}>
+                            {new Date(video.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </Text>
+                          {video.status === 'completed' && video.videoDuration && (
+                            <Text style={styles.videoDuration}>
+                              Duration: {Math.floor(video.videoDuration / 60)}:{(video.videoDuration % 60).toString().padStart(2, '0')}
+                            </Text>
+                          )}
                         </View>
-                        {clientVideos.map((video) => (
-                          <View key={video.id} style={styles.inspectionVideoItem}>
-                            <View style={styles.videoInfo}>
-                              <Text style={styles.videoStatus}>
-                                {video.status === 'completed' ? '✅' : '⏳'} {video.status === 'completed' ? 'Completed' : 'Pending'}
-                              </Text>
-                              <Text style={styles.videoDate}>
-                                {new Date(video.createdAt).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </Text>
-                              {video.status === 'completed' && video.videoDuration && (
-                                <Text style={styles.videoDuration}>
-                                  Duration: {Math.floor(video.videoDuration / 60)}:{(video.videoDuration % 60).toString().padStart(2, '0')}
-                                </Text>
-                              )}
-                            </View>
-                            {video.status === 'completed' && video.videoUrl && (
-                              <TouchableOpacity
-                                style={styles.viewVideoButton}
-                                onPress={async () => {
-                                  try {
-                                    console.log('[CRM] Getting video view URL for:', video.videoUrl);
-                                    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
-                                    const response = await fetch(`${apiUrl}/api/get-video-view-url?videoKey=${encodeURIComponent(video.videoUrl)}`);
+                        {video.status === 'completed' && video.videoUrl && (
+                          <TouchableOpacity
+                            style={styles.viewVideoButton}
+                            onPress={async () => {
+                              try {
+                                console.log('[CRM] Getting video view URL for:', video.videoUrl);
+                                const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+                                const response = await fetch(`${apiUrl}/api/get-video-view-url?videoKey=${encodeURIComponent(video.videoUrl)}`);
 
-                                    if (!response.ok) {
-                                      throw new Error('Failed to get video URL');
-                                    }
+                                if (!response.ok) {
+                                  throw new Error('Failed to get video URL');
+                                }
 
-                                    const result = await response.json();
-                                    console.log('[CRM] Got video view URL');
+                                const result = await response.json();
+                                console.log('[CRM] Got video view URL');
 
-                                    if (result.viewUrl) {
+                                if (result.viewUrl) {
                                       Linking.openURL(result.viewUrl);
                                     }
                                   } catch (error: any) {
@@ -1966,125 +1979,83 @@ export default function CRMScreen() {
                           </View>
                         ))}
                       </View>
-                    ) : null;
-                  })()}
-                </View>
-              </View>
-              <View style={styles.clientActions}>
-                <TouchableOpacity 
-                  style={styles.actionButton}
-                  onPress={() => openMessageModal('email', client.id)}
-                >
-                  <Mail size={16} color="#2563EB" />
-                  <Text style={styles.actionButtonText}>Email</Text>
+                  );
+              })()}
+
+              {/* ── Action buttons (3 per row) ───────────────────── */}
+              <View style={styles.cardActions}>
+                {/* outlined — blue */}
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineBlue]} onPress={() => openMessageModal('email', client.id)}>
+                  <Mail size={13} color="#2563EB" />
+                  <Text style={[styles.cardActionText, { color: '#2563EB' }]}>Email</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.actionButton}
-                  onPress={() => openMessageModal('sms', client.id)}
-                >
-                  <MessageSquare size={16} color="#059669" />
-                  <Text style={styles.actionButtonText}>SMS</Text>
+                {/* outlined — gray */}
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineGray]} onPress={() => openMessageModal('sms', client.id)}>
+                  <MessageSquare size={13} color="#374151" />
+                  <Text style={[styles.cardActionText, { color: '#374151' }]}>SMS</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.followUpButton}
-                  onPress={() => {
-                    const contactDate = new Date().toISOString();
-                    updateClient(client.id, { 
-                      lastContacted: new Date().toLocaleDateString(),
-                      lastContactDate: contactDate 
-                    });
-                    Alert.alert('Success', 'Follow-up recorded!');
-                  }}
-                >
-                  <CheckCircle size={16} color="#10B981" />
-                  <Text style={styles.followUpButtonText}>Follow Up</Text>
+                {/* solid — green */}
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionSolidGreen]} onPress={() => { updateClient(client.id, { lastContacted: new Date().toLocaleDateString(), lastContactDate: new Date().toISOString() }); Alert.alert('Success', 'Follow-up recorded!'); }}>
+                  <CheckCircle size={13} color="#FFFFFF" />
+                  <Text style={[styles.cardActionText, { color: '#FFFFFF' }]}>Follow Up</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.setFollowUpButton}
-                  onPress={() => openFollowUpDatePicker(client.id)}
-                >
-                  <Calendar size={16} color="#2563EB" />
-                  <Text style={styles.setFollowUpButtonText}>Set Follow-Up</Text>
+                {/* outlined — blue */}
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineBlue]} onPress={() => openFollowUpDatePicker(client.id)}>
+                  <Calendar size={13} color="#2563EB" />
+                  <Text style={[styles.cardActionText, { color: '#2563EB' }]}>Set Follow-Up</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.estimateButton}
-                  onPress={() => createEstimateForClient(client.id)}
-                >
-                  <Calculator size={16} color="#FFFFFF" />
-                  <Text style={styles.estimateButtonText}>Create Estimate</Text>
+                {/* solid — blue */}
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionSolidBlue]} onPress={() => createEstimateForClient(client.id)}>
+                  <Calculator size={13} color="#FFFFFF" />
+                  <Text style={[styles.cardActionText, { color: '#FFFFFF' }]}>Create Estimate</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.inspectionButton}
-                  onPress={() => sendInspectionLink(client.id)}
-                  disabled={false}
-                >
-                  <Camera size={16} color="#FFFFFF" />
-                  <Text style={styles.inspectionButtonText}>
-                    Send Inspection Link
-                  </Text>
+                {/* solid — purple */}
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionSolidPurple]} onPress={() => sendInspectionLink(client.id)}>
+                  <Camera size={13} color="#FFFFFF" />
+                  <Text style={[styles.cardActionText, { color: '#FFFFFF' }]}>Inspection Link</Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => openEstimateActions(client.id)}
-                >
-                  <FileText size={16} color="#8B5CF6" />
-                  <Text style={styles.actionButtonText}>Estimates</Text>
+                {/* outlined — gray */}
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineGray]} onPress={() => openEstimateActions(client.id)}>
+                  <FileText size={13} color="#374151" />
+                  <Text style={[styles.cardActionText, { color: '#374151' }]}>Estimates</Text>
+                </TouchableOpacity>
+                {/* light yellow — payment */}
+                {(client.status === 'Lead' || client.status === 'Project') && (
+                  <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionYellow]} onPress={() => requestPayment(client.id)}>
+                    <CreditCard size={13} color="#FFFFFF" />
+                    <Text style={[styles.cardActionText, { color: '#FFFFFF' }]}>Request Payment</Text>
+                  </TouchableOpacity>
+                )}
+                {/* outlined — gray */}
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineGray]} onPress={() => openEditClientModal(client)}>
+                  <Pencil size={13} color="#374151" />
+                  <Text style={[styles.cardActionText, { color: '#374151' }]}>Edit Info</Text>
+                </TouchableOpacity>
+                {/* outlined — gray */}
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineGray]} onPress={() => handleMarkColdLead(client)}>
+                  <Snowflake size={13} color="#374151" />
+                  <Text style={[styles.cardActionText, { color: '#374151' }]}>Cold Lead</Text>
                 </TouchableOpacity>
                 {client.status === 'Lead' && (
-                  <TouchableOpacity
-                    style={styles.convertButton}
-                    onPress={() => convertLeadToProject(client.id)}
-                  >
-                    <CheckCircle size={16} color="#FFFFFF" />
-                    <Text style={styles.convertButtonText}>Convert to Project</Text>
-                  </TouchableOpacity>
-                )}
-                {(client.status === 'Lead' || client.status === 'Project') && (
-                  <TouchableOpacity
-                    style={styles.paymentButton}
-                    onPress={() => requestPayment(client.id)}
-                  >
-                    <CreditCard size={16} color="#FFFFFF" />
-                    <Text style={styles.paymentButtonText}>Request Payment</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={styles.actionButton}
-                  onPress={() => openEditClientModal(client)}
-                >
-                  <Pencil size={16} color="#6B7280" />
-                  <Text style={styles.actionButtonText}>Edit Info</Text>
-                </TouchableOpacity>
-                {(client.status === 'Lead' || client.status === 'Project') && (
-                  <TouchableOpacity
-                    style={styles.freezeButton}
-                    onPress={() => handleMarkColdLead(client)}
-                  >
-                    <Snowflake size={14} color="#6B7280" />
-                    <Text style={styles.freezeButtonText}>Cold lead</Text>
+                  <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionSolidGreen]} onPress={() => convertLeadToProject(client.id)}>
+                    <CheckCircle size={13} color="#FFFFFF" />
+                    <Text style={[styles.cardActionText, { color: '#FFFFFF' }]}>To Project</Text>
                   </TouchableOpacity>
                 )}
                 {client.status === 'Project' && linkedProject && (
                   <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => {
-                      const isOnHold = linkedProject.status === 'on-hold';
-                      updateProject(linkedProject.id, { status: isOnHold ? 'active' : 'on-hold' });
-                    }}
+                    style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, linkedProject.status === 'on-hold' ? styles.cardActionSolidGreen : styles.cardActionOutlineOrange]}
+                    onPress={() => updateProject(linkedProject.id, { status: linkedProject.status === 'on-hold' ? 'active' : 'on-hold' })}
                   >
-                    {linkedProject.status === 'on-hold' ? (
-                      <PlayCircle size={16} color="#10B981" />
-                    ) : (
-                      <PauseCircle size={16} color="#F59E0B" />
-                    )}
-                    <Text style={styles.actionButtonText}>
-                      {linkedProject.status === 'on-hold' ? 'Resume Project' : 'Delay Project'}
-                    </Text>
+                    {linkedProject.status === 'on-hold' ? <PlayCircle size={13} color="#FFFFFF" /> : <PauseCircle size={13} color="#EA580C" />}
+                    <Text style={[styles.cardActionText, { color: linkedProject.status === 'on-hold' ? '#FFFFFF' : '#EA580C' }]}>{linkedProject.status === 'on-hold' ? 'Resume' : 'Delay Project'}</Text>
                   </TouchableOpacity>
                 )}
               </View>
             </View>
+            </View>
           ); })}
+          </View>
 
           <View style={styles.metricsWidget}>
             <TouchableOpacity 
@@ -2186,95 +2157,6 @@ export default function CRMScreen() {
             )}
           </View>
 
-          {showAddForm && (
-            <View style={styles.addForm}>
-              <Text style={styles.formTitle}>Add New Client</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Name"
-                placeholderTextColor="#9CA3AF"
-                value={newClientName}
-                onChangeText={setNewClientName}
-                inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_ACCESSORY_ID : undefined}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Address"
-                placeholderTextColor="#9CA3AF"
-                value={newClientAddress}
-                onChangeText={setNewClientAddress}
-                inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_ACCESSORY_ID : undefined}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Email"
-                placeholderTextColor="#9CA3AF"
-                value={newClientEmail}
-                onChangeText={setNewClientEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_ACCESSORY_ID : undefined}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Phone (10 digits)"
-                placeholderTextColor="#9CA3AF"
-                value={newClientPhone}
-                onChangeText={(text) => setNewClientPhone(filterPhoneInput(text))}
-                keyboardType="number-pad"
-                maxLength={10}
-                inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_ACCESSORY_ID : undefined}
-              />
-              <TextInput
-                style={styles.input}
-                placeholder="Source (Google, Referral, Ad, Phone Call)"
-                placeholderTextColor="#9CA3AF"
-                value={newClientSource}
-                onChangeText={setNewClientSource}
-                inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_ACCESSORY_ID : undefined}
-              />
-              <TextInput
-                style={[styles.input, { height: 70, textAlignVertical: 'top' }]}
-                placeholder="Job Details (What is the job about?)"
-                placeholderTextColor="#9CA3AF"
-                value={newClientJobDetails}
-                onChangeText={setNewClientJobDetails}
-                multiline
-                inputAccessoryViewID={Platform.OS === 'ios' ? KEYBOARD_ACCESSORY_ID : undefined}
-              />
-
-              <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E3A5F', marginTop: 10, marginBottom: 6 }}>Assign Sales Rep</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                {companyUsers.filter(u => u.isActive !== false && u.role?.toLowerCase() === 'salesperson').map(sp => (
-                  <TouchableOpacity
-                    key={sp.id}
-                    style={[styles.sourceButton, newClientAssignedRep === sp.id && styles.sourceButtonActive, { marginRight: 8 }]}
-                    onPress={() => setNewClientAssignedRep(newClientAssignedRep === sp.id ? undefined : sp.id)}
-                  >
-                    <Text style={[styles.sourceButtonText, newClientAssignedRep === sp.id && styles.sourceButtonTextActive]}>{sp.name}</Text>
-                  </TouchableOpacity>
-                ))}
-                <TouchableOpacity
-                  style={[styles.sourceButton, !newClientAssignedRep && styles.sourceButtonActive]}
-                  onPress={() => setNewClientAssignedRep(undefined)}
-                >
-                  <Text style={[styles.sourceButtonText, !newClientAssignedRep && styles.sourceButtonTextActive]}>Unassigned</Text>
-                </TouchableOpacity>
-              </ScrollView>
-
-              <TouchableOpacity
-                style={[styles.submitButton, isAddingClient && styles.submitButtonDisabled, { marginBottom: 80 }]}
-                onPress={() => handleAddClient(false)}
-                disabled={isAddingClient}
-              >
-                {isAddingClient ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Add Client</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
       </ScrollView>
 
@@ -4624,7 +4506,8 @@ const styles = StyleSheet.create({
   },
   sidebar: {
     backgroundColor: '#E5E7EB',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   sidebarItem: {
     paddingVertical: 12,
@@ -4638,26 +4521,43 @@ const styles = StyleSheet.create({
     color: '#1F2937',
   },
   statsSection: {
-    marginTop: 24,
+    marginTop: 4,
   },
   statsTitle: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+    fontSize: 15,
+    fontWeight: '700' as const,
     color: '#1F2937',
-    marginBottom: 12,
+  },
+  statRow: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    alignItems: 'center' as const,
+    gap: 8,
   },
   statItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: '#DBEAFE',
-    borderRadius: 8,
-    marginBottom: 8,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    paddingVertical: 9,
+    paddingHorizontal: 26,
+    borderRadius: 20,
+    borderWidth: 1,
   },
   statLabel: {
-    fontSize: 14,
-    color: '#1F2937',
+    fontSize: 13,
+    fontWeight: '600' as const,
+  },
+  statBadge: {
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 2,
+    minWidth: 26,
+    alignItems: 'center' as const,
+  },
+  statBadgeText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
   },
   statValue: {
     fontSize: 14,
@@ -4673,11 +4573,201 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     marginBottom: 16,
   },
+  clientGrid: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+  },
+  clientGridCell: {
+    width: '50%',
+  },
+  cardHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    marginBottom: 14,
+    flexWrap: 'wrap' as const,
+  },
+  cardEditBtn: {
+    marginLeft: 'auto' as any,
+    padding: 6,
+  },
+  cardInfoGrid: {
+    flexDirection: 'row' as const,
+    gap: 12,
+    marginBottom: 12,
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    padding: 12,
+  },
+  cardInfoCol: {
+    flex: 1,
+    gap: 10,
+  },
+  cardInfoRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: 7,
+  },
+  cardInfoText: {
+    fontSize: 13,
+    color: '#6B7280',
+    flex: 1,
+    lineHeight: 19,
+  },
+  cardDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginVertical: 12,
+  },
+  cardMidRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'flex-start' as const,
+    marginBottom: 14,
+  },
+  cardMidLeft: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: 14,
+    flex: 1,
+  },
+  cardLinkBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+  },
+  cardLinkText: {
+    fontSize: 13,
+    color: '#2563EB',
+    fontWeight: '600' as const,
+  },
+  cardCreatedText: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    flexShrink: 0,
+    marginLeft: 8,
+  },
+  cardCreatedValue: {
+    color: '#059669',
+    fontWeight: '700' as const,
+  },
+  cardSuggestionRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    marginTop: 2,
+    marginBottom: 10,
+    backgroundColor: '#FAFAFF',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#7C3AED',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  cardSuggestionText: {
+    fontSize: 13,
+    color: '#6D28D9',
+    flex: 1,
+    lineHeight: 19,
+  },
+  cardSuggestionLabel: {
+    fontWeight: '700' as const,
+    color: '#6D28D9',
+  },
+  cardActions: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    gap: 6,
+    marginTop: 14,
+  },
+  cardActionBtn: {
+    flexBasis: '23%' as const,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingVertical: 9,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  cardActionBtnSmall: {
+    flexBasis: '30%' as const,
+  },
+  cardActionText: {
+    fontSize: 11,
+    color: '#374151',
+    fontWeight: '500' as const,
+  },
+  cardActionOutlineBlue: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#2563EB',
+  },
+  cardActionOutlineGray: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#D1D5DB',
+  },
+  cardActionOutlineOrange: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#EA580C',
+  },
+  cardActionSolidGreen: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  cardActionSolidBlue: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  cardActionSolidPurple: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#7C3AED',
+  },
+  cardActionSolidOrange: {
+    backgroundColor: '#EA580C',
+    borderColor: '#EA580C',
+  },
+  cardActionYellow: {
+    backgroundColor: '#EAB308',
+    borderColor: '#EAB308',
+  },
+  moreMenu: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginTop: 4,
+    marginHorizontal: -16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    overflow: 'hidden' as const,
+  },
+  moreMenuItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F9FAFB',
+  },
+  moreMenuItemText: {
+    fontSize: 13,
+    color: '#374151',
+  },
   clientRow: {
     backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: 10,
-    marginBottom: 12,
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 14,
     borderLeftWidth: 3,
     borderLeftColor: '#2563EB',
     shadowColor: '#000',
@@ -4702,8 +4792,8 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   clientName: {
-    fontSize: 16,
-    fontWeight: '600' as const,
+    fontSize: 17,
+    fontWeight: '700' as const,
     color: '#1F2937',
   },
   followUpStatusBadge: {

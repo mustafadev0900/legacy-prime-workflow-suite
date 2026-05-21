@@ -328,11 +328,15 @@ export default function SettingsScreen() {
               )}
 
               <TouchableOpacity
-                style={styles.requestButton}
-                onPress={() => setShowRateChangeModal(true)}
+                style={[styles.requestButton, currentUser?.isActive === false && styles.requestButtonDisabled]}
+                onPress={currentUser?.isActive === false ? undefined : () => setShowRateChangeModal(true)}
+                disabled={currentUser?.isActive === false}
               >
                 <Text style={styles.requestButtonText}>Request Rate Change</Text>
               </TouchableOpacity>
+              {currentUser?.isActive === false && (
+                <Text style={styles.pendingApprovalHint}>Available after admin approves your account</Text>
+              )}
             </View>
           </View>
 
@@ -1905,6 +1909,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
     color: '#FFFFFF',
+  },
+  requestButtonDisabled: {
+    opacity: 0.4,
+  },
+  pendingApprovalHint: {
+    fontSize: 12,
+    color: '#92400E',
+    marginTop: 8,
+    textAlign: 'center' as const,
   },
   currentRateDisplay: {
     fontSize: 16,
