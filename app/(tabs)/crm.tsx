@@ -115,6 +115,7 @@ export default function CRMScreen() {
   const { clients, addClient, addProject, updateClient, updateProject, deleteClient, estimates, updateEstimate, callLogs, addCallLog, deleteCallLog, setCallLogs, company, user, refreshClients, refreshEstimates, projects, priceListItems, isLoading, isCompanyReloading, companyUsers, appointments, addAppointment, updateAppointment, deleteAppointment } = useApp();
   const { width: screenWidth } = useWindowDimensions();
   const isSmallScreen = screenWidth < 500;
+  const isTablet = screenWidth >= 500 && screenWidth < 1100;
   const router = useRouter();
   const { sendSingleSMS, sendBulkSMSMessages, isLoading: isSendingSMS } = useTwilioSMS();
   const { initiateCall, isLoadingCall } = useTwilioCalls();
@@ -1584,27 +1585,53 @@ export default function CRMScreen() {
 
         <View style={styles.sidebar}>
           <View style={styles.statsSection}>
-            <View style={styles.statRow}>
-              <Text style={styles.statsTitle}>Stats</Text>
-              <View style={[styles.statItem, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
-                <Text style={[styles.statLabel, { color: '#1D4ED8' }]}>Google</Text>
-                <View style={[styles.statBadge, { backgroundColor: '#2563EB' }]}>
-                  <Text style={styles.statBadgeText}>{leadsByGoogle}</Text>
+            {isSmallScreen ? (
+              <>
+                <Text style={styles.statsTitleMobile}>Stats</Text>
+                <View style={styles.statRowMobile}>
+                  <View style={[styles.statItemMobile, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+                    <Text style={[styles.statLabelMobile, { color: '#1D4ED8' }]}>Google</Text>
+                    <View style={[styles.statBadgeMobile, { backgroundColor: '#2563EB' }]}>
+                      <Text style={styles.statBadgeTextMobile}>{leadsByGoogle}</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.statItemMobile, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                    <Text style={[styles.statLabelMobile, { color: '#15803D' }]}>Referral</Text>
+                    <View style={[styles.statBadgeMobile, { backgroundColor: '#16A34A' }]}>
+                      <Text style={styles.statBadgeTextMobile}>{leadsByReferral}</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.statItemMobile, { backgroundColor: '#FAF5FF', borderColor: '#DDD6FE' }]}>
+                    <Text style={[styles.statLabelMobile, { color: '#6D28D9' }]}>Ad</Text>
+                    <View style={[styles.statBadgeMobile, { backgroundColor: '#7C3AED' }]}>
+                      <Text style={styles.statBadgeTextMobile}>{leadsByAd}</Text>
+                    </View>
+                  </View>
+                </View>
+              </>
+            ) : (
+              <View style={styles.statRow}>
+                <Text style={styles.statsTitle}>Stats</Text>
+                <View style={[styles.statItem, { backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' }]}>
+                  <Text style={[styles.statLabel, { color: '#1D4ED8' }]}>Google</Text>
+                  <View style={[styles.statBadge, { backgroundColor: '#2563EB' }]}>
+                    <Text style={styles.statBadgeText}>{leadsByGoogle}</Text>
+                  </View>
+                </View>
+                <View style={[styles.statItem, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                  <Text style={[styles.statLabel, { color: '#15803D' }]}>Referral</Text>
+                  <View style={[styles.statBadge, { backgroundColor: '#16A34A' }]}>
+                    <Text style={styles.statBadgeText}>{leadsByReferral}</Text>
+                  </View>
+                </View>
+                <View style={[styles.statItem, { backgroundColor: '#FAF5FF', borderColor: '#DDD6FE' }]}>
+                  <Text style={[styles.statLabel, { color: '#6D28D9' }]}>Ad</Text>
+                  <View style={[styles.statBadge, { backgroundColor: '#7C3AED' }]}>
+                    <Text style={styles.statBadgeText}>{leadsByAd}</Text>
+                  </View>
                 </View>
               </View>
-              <View style={[styles.statItem, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
-                <Text style={[styles.statLabel, { color: '#15803D' }]}>Referral</Text>
-                <View style={[styles.statBadge, { backgroundColor: '#16A34A' }]}>
-                  <Text style={styles.statBadgeText}>{leadsByReferral}</Text>
-                </View>
-              </View>
-              <View style={[styles.statItem, { backgroundColor: '#FAF5FF', borderColor: '#DDD6FE' }]}>
-                <Text style={[styles.statLabel, { color: '#6D28D9' }]}>Ad</Text>
-                <View style={[styles.statBadge, { backgroundColor: '#7C3AED' }]}>
-                  <Text style={styles.statBadgeText}>{leadsByAd}</Text>
-                </View>
-              </View>
-            </View>
+            )}
           </View>
         </View>
 
@@ -1693,9 +1720,9 @@ export default function CRMScreen() {
           </ScrollView>
 
           {(isLoading || isCompanyReloading) && clients.length === 0 && (
-            <View style={!isSmallScreen ? styles.clientGrid : undefined}>
+            <View style={screenWidth >= 1100 ? styles.clientGrid : undefined}>
               {[0, 1, 2, 3].map(i => (
-                <View key={i} style={!isSmallScreen ? [styles.clientGridCell, i % 2 === 0 ? { paddingRight: 10 } : { paddingLeft: 10 }] : undefined}>
+                <View key={i} style={screenWidth >= 1100 ? [styles.clientGridCell, i % 2 === 0 ? { paddingRight: 10 } : { paddingLeft: 10 }] : undefined}>
                   <View style={{ padding: 16, marginBottom: 8, backgroundColor: '#F9FAFB', borderRadius: 12 }}>
                     <SkeletonBox width="60%" height={16} borderRadius={4} />
                     <SkeletonBox width="45%" height={13} borderRadius={4} style={{ marginTop: 8 }} />
@@ -1711,7 +1738,7 @@ export default function CRMScreen() {
             </View>
           )}
 
-          <View style={!isSmallScreen ? styles.clientGrid : undefined}>
+          <View style={screenWidth >= 1100 ? styles.clientGrid : undefined}>
           {[...clients]
             .filter(c => c.status !== 'Cold Lead' && (activeStatusFilter === 'All' || c.status === activeStatusFilter) && (user?.role !== 'salesperson' || c.assignedRep === user?.id))
             .sort((a, b) => {
@@ -1721,7 +1748,7 @@ export default function CRMScreen() {
             }).map((client, index) => {
             const linkedProject = projects.find(p => p.clientId === client.id);
             return (
-            <View key={client.id} style={!isSmallScreen ? [styles.clientGridCell, index % 2 === 0 ? { paddingRight: 10 } : { paddingLeft: 10 }] : undefined}>
+            <View key={client.id} style={screenWidth >= 1100 ? [styles.clientGridCell, index % 2 === 0 ? { paddingRight: 10 } : { paddingLeft: 10 }] : undefined}>
             <View style={styles.clientRow}>
 
               {/* ── Header row ─────────────────────────────────────── */}
@@ -1754,13 +1781,13 @@ export default function CRMScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* ── 2-column info grid ──────────────────────────────── */}
-              <View style={styles.cardInfoGrid}>
-                <View style={styles.cardInfoCol}>
+              {/* ── Info grid — 2-col on desktop, single col on mobile ── */}
+              {isSmallScreen ? (
+                <View style={[styles.cardInfoGrid, { flexDirection: 'column', gap: 10 }]}>
                   {client.address && !client.address.startsWith('[AI Call]') && (
                     <View style={styles.cardInfoRow}>
                       <MapPin size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
-                      <Text style={styles.cardInfoText} numberOfLines={2}>{client.address}</Text>
+                      <Text style={styles.cardInfoText} numberOfLines={1}>{client.address}</Text>
                     </View>
                   )}
                   {client.address?.startsWith('[AI Call]') && (() => {
@@ -1772,6 +1799,12 @@ export default function CRMScreen() {
                       </View>
                     );
                   })()}
+                  {!!client.email && (
+                    <View style={styles.cardInfoRow}>
+                      <Mail size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                      <Text style={styles.cardInfoText} numberOfLines={1}>{client.email}</Text>
+                    </View>
+                  )}
                   {(client.lastContactDate || client.lastContacted) && (
                     <View style={styles.cardInfoRow}>
                       <Clock size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
@@ -1779,6 +1812,14 @@ export default function CRMScreen() {
                         Contact: {client.lastContactDate
                           ? new Date(client.lastContactDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                           : client.lastContacted}
+                      </Text>
+                    </View>
+                  )}
+                  {(client.source || client.phone) && (
+                    <View style={styles.cardInfoRow}>
+                      <Building2 size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                      <Text style={styles.cardInfoText} numberOfLines={2}>
+                        {[client.source && `Source: ${client.source}`, client.phone && `Phone: ${client.phone}`].filter(Boolean).join(' • ')}
                       </Text>
                     </View>
                   )}
@@ -1795,23 +1836,65 @@ export default function CRMScreen() {
                     } catch (e) { return null; }
                   })()}
                 </View>
-                <View style={styles.cardInfoCol}>
-                  {!!client.email && (
-                    <View style={styles.cardInfoRow}>
-                      <Mail size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
-                      <Text style={styles.cardInfoText} numberOfLines={1}>{client.email}</Text>
-                    </View>
-                  )}
-                  {(client.source || client.phone) && (
-                    <View style={styles.cardInfoRow}>
-                      <Building2 size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
-                      <Text style={styles.cardInfoText} numberOfLines={2}>
-                        {[client.source && `Source: ${client.source}`, client.phone && `Phone: ${client.phone}`].filter(Boolean).join(' • ')}
-                      </Text>
-                    </View>
-                  )}
+              ) : (
+                <View style={styles.cardInfoGrid}>
+                  <View style={styles.cardInfoCol}>
+                    {client.address && !client.address.startsWith('[AI Call]') && (
+                      <View style={styles.cardInfoRow}>
+                        <MapPin size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                        <Text style={styles.cardInfoText} numberOfLines={2}>{client.address}</Text>
+                      </View>
+                    )}
+                    {client.address?.startsWith('[AI Call]') && (() => {
+                      const lines = client.address.replace(/^\[AI Call\]\n?/, '').split('\n').filter(Boolean);
+                      return (
+                        <View style={styles.cardInfoRow}>
+                          <View style={styles.aiCallBadge}><Text style={styles.aiCallBadgeText}>AI Call</Text></View>
+                          <Text style={styles.cardInfoText} numberOfLines={2}>{lines[0] || ''}</Text>
+                        </View>
+                      );
+                    })()}
+                    {(client.lastContactDate || client.lastContacted) && (
+                      <View style={styles.cardInfoRow}>
+                        <Clock size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                        <Text style={styles.cardInfoText}>
+                          Contact: {client.lastContactDate
+                            ? new Date(client.lastContactDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : client.lastContacted}
+                        </Text>
+                      </View>
+                    )}
+                    {client.nextFollowUpDate && client.nextFollowUpDate.trim() !== '' && (() => {
+                      try {
+                        const d = new Date(client.nextFollowUpDate + 'T00:00:00');
+                        if (isNaN(d.getTime())) return null;
+                        return (
+                          <View style={styles.cardInfoRow}>
+                            <Calendar size={12} color="#2563EB" style={{ marginTop: 1, flexShrink: 0 }} />
+                            <Text style={[styles.cardInfoText, { color: '#2563EB' }]}>Follow-Up: {d.toLocaleDateString()}</Text>
+                          </View>
+                        );
+                      } catch (e) { return null; }
+                    })()}
+                  </View>
+                  <View style={styles.cardInfoCol}>
+                    {!!client.email && (
+                      <View style={styles.cardInfoRow}>
+                        <Mail size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                        <Text style={styles.cardInfoText} numberOfLines={1}>{client.email}</Text>
+                      </View>
+                    )}
+                    {(client.source || client.phone) && (
+                      <View style={styles.cardInfoRow}>
+                        <Building2 size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                        <Text style={styles.cardInfoText} numberOfLines={2}>
+                          {[client.source && `Source: ${client.source}`, client.phone && `Phone: ${client.phone}`].filter(Boolean).join(' • ')}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
-              </View>
+              )}
 
               {/* ── Divider ─────────────────────────────────────────── */}
               <View style={styles.cardDivider} />
@@ -1985,66 +2068,66 @@ export default function CRMScreen() {
               {/* ── Action buttons (3 per row) ───────────────────── */}
               <View style={styles.cardActions}>
                 {/* outlined — blue */}
-                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineBlue]} onPress={() => openMessageModal('email', client.id)}>
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, styles.cardActionOutlineBlue]} onPress={() => openMessageModal('email', client.id)}>
                   <Mail size={13} color="#2563EB" />
                   <Text style={[styles.cardActionText, { color: '#2563EB' }]}>Email</Text>
                 </TouchableOpacity>
                 {/* outlined — gray */}
-                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineGray]} onPress={() => openMessageModal('sms', client.id)}>
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, styles.cardActionOutlineGray]} onPress={() => openMessageModal('sms', client.id)}>
                   <MessageSquare size={13} color="#374151" />
                   <Text style={[styles.cardActionText, { color: '#374151' }]}>SMS</Text>
                 </TouchableOpacity>
                 {/* solid — green */}
-                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionSolidGreen]} onPress={() => { updateClient(client.id, { lastContacted: new Date().toLocaleDateString(), lastContactDate: new Date().toISOString() }); Alert.alert('Success', 'Follow-up recorded!'); }}>
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, styles.cardActionSolidGreen]} onPress={() => { updateClient(client.id, { lastContacted: new Date().toLocaleDateString(), lastContactDate: new Date().toISOString() }); Alert.alert('Success', 'Follow-up recorded!'); }}>
                   <CheckCircle size={13} color="#FFFFFF" />
                   <Text style={[styles.cardActionText, { color: '#FFFFFF' }]}>Follow Up</Text>
                 </TouchableOpacity>
                 {/* outlined — blue */}
-                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineBlue]} onPress={() => openFollowUpDatePicker(client.id)}>
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, styles.cardActionOutlineBlue]} onPress={() => openFollowUpDatePicker(client.id)}>
                   <Calendar size={13} color="#2563EB" />
                   <Text style={[styles.cardActionText, { color: '#2563EB' }]}>Set Follow-Up</Text>
                 </TouchableOpacity>
                 {/* solid — blue */}
-                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionSolidBlue]} onPress={() => createEstimateForClient(client.id)}>
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, styles.cardActionSolidBlue]} onPress={() => createEstimateForClient(client.id)}>
                   <Calculator size={13} color="#FFFFFF" />
                   <Text style={[styles.cardActionText, { color: '#FFFFFF' }]}>Create Estimate</Text>
                 </TouchableOpacity>
                 {/* solid — purple */}
-                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionSolidPurple]} onPress={() => sendInspectionLink(client.id)}>
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, styles.cardActionSolidPurple]} onPress={() => sendInspectionLink(client.id)}>
                   <Camera size={13} color="#FFFFFF" />
                   <Text style={[styles.cardActionText, { color: '#FFFFFF' }]}>Inspection Link</Text>
                 </TouchableOpacity>
                 {/* outlined — gray */}
-                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineGray]} onPress={() => openEstimateActions(client.id)}>
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, styles.cardActionOutlineGray]} onPress={() => openEstimateActions(client.id)}>
                   <FileText size={13} color="#374151" />
                   <Text style={[styles.cardActionText, { color: '#374151' }]}>Estimates</Text>
                 </TouchableOpacity>
                 {/* light yellow — payment */}
                 {(client.status === 'Lead' || client.status === 'Project') && (
-                  <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionYellow]} onPress={() => requestPayment(client.id)}>
+                  <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, styles.cardActionYellow]} onPress={() => requestPayment(client.id)}>
                     <CreditCard size={13} color="#FFFFFF" />
                     <Text style={[styles.cardActionText, { color: '#FFFFFF' }]}>Request Payment</Text>
                   </TouchableOpacity>
                 )}
                 {/* outlined — gray */}
-                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineGray]} onPress={() => openEditClientModal(client)}>
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, styles.cardActionOutlineGray]} onPress={() => openEditClientModal(client)}>
                   <Pencil size={13} color="#374151" />
                   <Text style={[styles.cardActionText, { color: '#374151' }]}>Edit Info</Text>
                 </TouchableOpacity>
                 {/* outlined — gray */}
-                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionOutlineGray]} onPress={() => handleMarkColdLead(client)}>
+                <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, styles.cardActionOutlineGray]} onPress={() => handleMarkColdLead(client)}>
                   <Snowflake size={13} color="#374151" />
                   <Text style={[styles.cardActionText, { color: '#374151' }]}>Cold Lead</Text>
                 </TouchableOpacity>
                 {client.status === 'Lead' && (
-                  <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, styles.cardActionSolidGreen]} onPress={() => convertLeadToProject(client.id)}>
+                  <TouchableOpacity style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, styles.cardActionSolidGreen]} onPress={() => convertLeadToProject(client.id)}>
                     <CheckCircle size={13} color="#FFFFFF" />
                     <Text style={[styles.cardActionText, { color: '#FFFFFF' }]}>To Project</Text>
                   </TouchableOpacity>
                 )}
                 {client.status === 'Project' && linkedProject && (
                   <TouchableOpacity
-                    style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, linkedProject.status === 'on-hold' ? styles.cardActionSolidGreen : styles.cardActionOutlineOrange]}
+                    style={[styles.cardActionBtn, isSmallScreen && styles.cardActionBtnSmall, isTablet && styles.cardActionBtnTablet, linkedProject.status === 'on-hold' ? styles.cardActionSolidGreen : styles.cardActionOutlineOrange]}
                     onPress={() => updateProject(linkedProject.id, { status: linkedProject.status === 'on-hold' ? 'active' : 'on-hold' })}
                   >
                     {linkedProject.status === 'on-hold' ? <PlayCircle size={13} color="#FFFFFF" /> : <PauseCircle size={13} color="#EA580C" />}
@@ -4528,11 +4611,23 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: '#1F2937',
   },
+  statsTitleMobile: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: '#1F2937',
+    marginBottom: 6,
+  },
   statRow: {
     flexDirection: 'row' as const,
     flexWrap: 'wrap' as const,
     alignItems: 'center' as const,
     gap: 8,
+  },
+  statRowMobile: {
+    flexDirection: 'row' as const,
+    flexWrap: 'wrap' as const,
+    alignItems: 'center' as const,
+    gap: 6,
   },
   statItem: {
     flexDirection: 'row' as const,
@@ -4543,8 +4638,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
+  statItemMobile: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
   statLabel: {
     fontSize: 13,
+    fontWeight: '600' as const,
+  },
+  statLabelMobile: {
+    fontSize: 11,
     fontWeight: '600' as const,
   },
   statBadge: {
@@ -4554,8 +4662,20 @@ const styles = StyleSheet.create({
     minWidth: 26,
     alignItems: 'center' as const,
   },
+  statBadgeMobile: {
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    minWidth: 18,
+    alignItems: 'center' as const,
+  },
   statBadgeText: {
     fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#FFFFFF',
+  },
+  statBadgeTextMobile: {
+    fontSize: 10,
     fontWeight: '700' as const,
     color: '#FFFFFF',
   },
@@ -4697,7 +4817,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   cardActionBtnSmall: {
-    flexBasis: '30%' as const,
+    flexBasis: '48%' as const,
+  },
+  cardActionBtnTablet: {
+    flexBasis: '31%' as const,
   },
   cardActionText: {
     fontSize: 11,

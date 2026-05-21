@@ -12,6 +12,16 @@ import { ArrowLeft, X, Scan, Image as ImageIcon, ChevronDown, Receipt, Upload, F
 import { generateImageHash, generateOCRFingerprint, getBase64ByteSize } from '@/lib/receipt-duplicate-detection';
 import DocumentScannerModal, { DocumentScanResult } from '@/components/DocumentScannerModal';
 
+const EXPENSE_TYPE_OPTIONS = [
+  'Materials', 'Labor', 'Equipment', 'Subcontractor', 'Gas / Fuel',
+  'Office', 'Insurance', 'Workers Comp', 'Bond', 'Permit', 'Overhead',
+  'Rent / Lease', 'Vehicle / Car Payment', 'Electronics / Tech', 'Office Supplies',
+  'Utilities', 'Phone / Internet', 'Software / Subscriptions', 'Marketing / Advertising',
+  'Accounting / CPA', 'Legal Fee', 'Payroll Taxes', 'Training / Certifications',
+  'Tools', 'Maintenance / Repairs', 'Travel / Lodging', 'Meals / Coffee',
+  'Uniform / Safety Gear', 'Waste / Dumpster', 'Storage', 'Miscellaneous',
+];
+
 export default function ProjectExpensesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -1075,7 +1085,7 @@ export default function ProjectExpensesScreen() {
               <ScrollView style={styles.categoryList}
           keyboardDismissMode="on-drag"
         >
-                {['Subcontractor', 'Labor', 'Material', 'Office', 'Others'].map((type) => (
+                {EXPENSE_TYPE_OPTIONS.map((type) => (
                   <TouchableOpacity
                     key={type}
                     style={[
