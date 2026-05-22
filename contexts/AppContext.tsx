@@ -1371,6 +1371,21 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
           });
         }
       )
+      .on(
+        'broadcast',
+        { event: 'activation-update' },
+        (payload) => {
+          const isActive: boolean = payload.payload?.isActive;
+          if (isActive === undefined) return;
+          console.log('[Realtime] Activation broadcast received:', isActive);
+          setUserState(prev => {
+            if (!prev) return prev;
+            const next = { ...prev, isActive };
+            AsyncStorage.setItem('user', JSON.stringify(next)).catch(() => {});
+            return next;
+          });
+        }
+      )
       .subscribe((status) => {
         console.log('[Realtime] User-permissions channel status:', status);
       });
@@ -1392,6 +1407,26 @@ export const [AppProvider, useApp] = createContextHook<AppState>(() => {
 
     const channel = supabase
       .channel(`user-deleted:${user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'users',
+          filter: `id=eq.${user.id}`,
+        },
+        (payload) => {
+          const newIsActive: boolean = (payload.new as any)?.is_active;
+          if (newIsActive === undefined || newIsActive === user?.isActive) return;
+          console.log('[Realtime] User is_active changed:', newIsActive);
+          setUserState(prev => {
+            if (!prev) return prev;
+            const next = { ...prev, isActive: newIsActive };
+            AsyncStorage.setItem('user', JSON.stringify(next)).catch(() => {});
+            return next;
+          });
+        }
+      )
       .on(
         'postgres_changes',
         {

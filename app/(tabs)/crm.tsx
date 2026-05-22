@@ -111,6 +111,8 @@ const promotionTemplates: MessageTemplate[] = [
   },
 ];
 
+const PAGE_SIZE = 12;
+
 export default function CRMScreen() {
   const { clients, addClient, addProject, updateClient, updateProject, deleteClient, estimates, updateEstimate, callLogs, addCallLog, deleteCallLog, setCallLogs, company, user, refreshClients, refreshEstimates, projects, priceListItems, isLoading, isCompanyReloading, companyUsers, appointments, addAppointment, updateAppointment, deleteAppointment } = useApp();
   const { width: screenWidth } = useWindowDimensions();
@@ -133,6 +135,8 @@ export default function CRMScreen() {
   };
   useEffect(() => { fetchInspectionVideos(); }, [company?.id]);
   const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
 
   // Load estimates from database when component mounts
   useEffect(() => {
@@ -387,6 +391,7 @@ export default function CRMScreen() {
   const [coldLeadConfirmClient, setColdLeadConfirmClient] = useState<import('@/types').Client | null>(null);
   const [coldLeadDoneClient, setColdLeadDoneClient] = useState<import('@/types').Client | null>(null);
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>('All');
+  useEffect(() => { setVisibleCount(PAGE_SIZE); setIsLoadingMore(false); }, [activeStatusFilter]);
   const [showCalendarModal, setShowCalendarModal] = useState<boolean>(false);
   const [calendarExpanded, setCalendarExpanded] = useState<boolean>(false);
   const [appointmentFormVisible, setAppointmentFormVisible] = useState<boolean>(false);
@@ -572,6 +577,18 @@ export default function CRMScreen() {
     setRefreshing(true);
     await refreshClients();
     setRefreshing(false);
+  };
+
+  const handleMainScroll = (e: any) => {
+    if (isLoadingMore) return;
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 200) {
+      setIsLoadingMore(true);
+      setTimeout(() => {
+        setVisibleCount(prev => prev + PAGE_SIZE);
+        setIsLoadingMore(false);
+      }, 600);
+    }
   };
 
   const leadsByGoogle = clients.filter(c => c.source === 'Google' && c.status === 'Lead').length;
@@ -1540,6 +1557,8 @@ export default function CRMScreen() {
         keyboardShouldPersistTaps="always"
         automaticallyAdjustKeyboardInsets={true}
         contentContainerStyle={{ paddingBottom: 40 }}
+        onScroll={handleMainScroll}
+        scrollEventThrottle={300}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
@@ -1839,14 +1858,20 @@ export default function CRMScreen() {
             </View>
           )}
 
+          {(() => {
+            const sortedFilteredClients = [...clients]
+              .filter(c => c.status !== 'Cold Lead' && (activeStatusFilter === 'All' || c.status === activeStatusFilter) && (user?.role !== 'salesperson' || c.assignedRep === user?.id))
+              .sort((a, b) => {
+                const dateA = new Date(a.createdAt || a.lastContactDate || a.lastContacted).getTime();
+                const dateB = new Date(b.createdAt || b.lastContactDate || b.lastContacted).getTime();
+                return dateB - dateA;
+              });
+            const visibleClients = sortedFilteredClients.slice(0, visibleCount);
+            const hasMore = visibleClients.length < sortedFilteredClients.length;
+            return (
+              <>
           <View style={screenWidth >= 1100 ? styles.clientGrid : undefined}>
-          {[...clients]
-            .filter(c => c.status !== 'Cold Lead' && (activeStatusFilter === 'All' || c.status === activeStatusFilter) && (user?.role !== 'salesperson' || c.assignedRep === user?.id))
-            .sort((a, b) => {
-              const dateA = new Date(a.createdAt || a.lastContactDate || a.lastContacted).getTime();
-              const dateB = new Date(b.createdAt || b.lastContactDate || b.lastContacted).getTime();
-              return dateB - dateA;
-            }).map((client, index) => {
+          {visibleClients.map((client, index) => {
             const linkedProject = projects.find(p => p.clientId === client.id);
             return (
             <View key={client.id} style={screenWidth >= 1100 ? [styles.clientGridCell, index % 2 === 0 ? { paddingRight: 10 } : { paddingLeft: 10 }] : undefined}>
@@ -2206,6 +2231,15 @@ export default function CRMScreen() {
             </View>
           ); })}
           </View>
+          {(hasMore || isLoadingMore) && (
+            <View style={{ paddingVertical: 20, alignItems: 'center', gap: 6 }}>
+              <ActivityIndicator size="small" color="#2563EB" />
+              <Text style={{ fontSize: 12, color: '#6B7280' }}>Loading more clients…</Text>
+            </View>
+          )}
+              </>
+            );
+          })()}
 
         </View>
       </ScrollView>

@@ -78,6 +78,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('[Approve User] Success. Total time:', Date.now() - startTime, 'ms');
 
+    // Broadcast instant activation to the employee's live session
+    try {
+      await supabase.channel(`user-permissions:${data.id}`).send({
+        type: 'broadcast',
+        event: 'activation-update',
+        payload: { isActive: true },
+      });
+      console.log('[Approve User] Activation broadcast sent to user:', data.id);
+    } catch (e) {
+      console.warn('[Approve User] Activation broadcast failed (non-fatal):', e);
+    }
+
     // Notify the approved employee their account is now active
     try {
       await sendNotification(supabase, {
