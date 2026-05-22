@@ -280,7 +280,7 @@ export default function ProjectExpensesScreen() {
         }
       }
 
-      addExpense({
+      await addExpense({
         id: Date.now().toString(),
         projectId: id as string,
         type: expenseType,

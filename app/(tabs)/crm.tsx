@@ -120,6 +120,7 @@ export default function CRMScreen() {
   const { sendSingleSMS, sendBulkSMSMessages, isLoading: isSendingSMS } = useTwilioSMS();
   const { initiateCall, isLoadingCall } = useTwilioCalls();
   const [inspectionVideos, setInspectionVideos] = useState<any[]>([]);
+  const [inspectionVideosModalClientId, setInspectionVideosModalClientId] = useState<string | null>(null);
   const fetchInspectionVideos = () => {
     if (!company?.id) return;
     supabase.from('inspection_videos').select('*').eq('company_id', company.id)
@@ -1666,6 +1667,106 @@ export default function CRMScreen() {
             )}
           </View>
 
+          <View style={styles.metricsWidget}>
+            <TouchableOpacity
+              style={styles.metricsHeader}
+              onPress={() => setShowMetricsWidget(!showMetricsWidget)}
+            >
+              <View style={styles.metricsHeaderLeft}>
+                <TrendingUp size={20} color="#2563EB" />
+                <Text style={styles.metricsHeaderTitle}>CRM Metrics</Text>
+              </View>
+              {showMetricsWidget ? (
+                <ChevronUp size={20} color="#6B7280" />
+              ) : (
+                <ChevronDown size={20} color="#6B7280" />
+              )}
+            </TouchableOpacity>
+
+            {showMetricsWidget && (
+              <View style={styles.metricsContent}>
+                <View style={styles.metricsGrid}>
+                  <View style={styles.metricCard}>
+                    <View style={styles.metricIconContainer}>
+                      <Users size={24} color="#10B981" />
+                    </View>
+                    <Text style={styles.metricValue}>{conversionRate}%</Text>
+                    <Text style={styles.metricLabel}>Conversion Rate</Text>
+                    <Text style={styles.metricSubtext}>
+                      {totalProjects} of {totalLeads + totalProjects} leads converted
+                    </Text>
+                  </View>
+
+                  <View style={styles.metricCard}>
+                    <View style={styles.metricIconContainer}>
+                      <Clock size={24} color="#F59E0B" />
+                    </View>
+                    <Text style={styles.metricValue}>{averageResponseTime}d</Text>
+                    <Text style={styles.metricLabel}>Avg Response Time</Text>
+                    <Text style={styles.metricSubtext}>
+                      Days since last contact
+                    </Text>
+                  </View>
+
+                  <View style={styles.metricCard}>
+                    <View style={styles.metricIconContainer}>
+                      <FileCheck size={24} color="#8B5CF6" />
+                    </View>
+                    <Text style={styles.metricValue}>{totalEstimatesSent}</Text>
+                    <Text style={styles.metricLabel}>Estimates Sent</Text>
+                    <Text style={styles.metricSubtext}>
+                      {estimates.filter(e => e.status === 'approved').length} approved
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.revenueSection}>
+                  <Text style={styles.revenueSectionTitle}>Revenue by Lead Source</Text>
+                  <View style={styles.revenueGrid}>
+                    <View style={styles.revenueCard}>
+                      <View style={styles.revenueCardHeader}>
+                        <View style={[styles.revenueSourceBadge, { backgroundColor: '#DBEAFE' }]}>
+                          <Text style={[styles.revenueSourceText, { color: '#1E40AF' }]}>Google</Text>
+                        </View>
+                        <DollarSignIcon size={18} color="#2563EB" />
+                      </View>
+                      <Text style={styles.revenueAmount}>${revenueBySource.Google.toLocaleString()}</Text>
+                      <Text style={styles.revenueSubtext}>
+                        {leadsByGoogle} active leads
+                      </Text>
+                    </View>
+
+                    <View style={styles.revenueCard}>
+                      <View style={styles.revenueCardHeader}>
+                        <View style={[styles.revenueSourceBadge, { backgroundColor: '#D1FAE5' }]}>
+                          <Text style={[styles.revenueSourceText, { color: '#047857' }]}>Referral</Text>
+                        </View>
+                        <DollarSignIcon size={18} color="#10B981" />
+                      </View>
+                      <Text style={styles.revenueAmount}>${revenueBySource.Referral.toLocaleString()}</Text>
+                      <Text style={styles.revenueSubtext}>
+                        {leadsByReferral} active leads
+                      </Text>
+                    </View>
+
+                    <View style={styles.revenueCard}>
+                      <View style={styles.revenueCardHeader}>
+                        <View style={[styles.revenueSourceBadge, { backgroundColor: '#FEF3C7' }]}>
+                          <Text style={[styles.revenueSourceText, { color: '#92400E' }]}>Ad</Text>
+                        </View>
+                        <DollarSignIcon size={18} color="#F59E0B" />
+                      </View>
+                      <Text style={styles.revenueAmount}>${revenueBySource.Ad.toLocaleString()}</Text>
+                      <Text style={styles.revenueSubtext}>
+                        {leadsByAd} active leads
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+
           <View style={styles.clientListHeader}>
             <View style={styles.leftActions}>
               <Text style={styles.sectionTitle}>Client List</Text>
@@ -2001,68 +2102,34 @@ export default function CRMScreen() {
                 );
               })()}
 
-              {/* Inspection videos */}
+              {/* Inspection videos — compact button */}
               {(() => {
                 const clientVideos = inspectionVideos.filter((v: any) => v.clientId === client.id);
                 if (!clientVideos.length) return null;
+                const completedCount = clientVideos.filter((v: any) => v.status === 'completed').length;
+                const pendingCount = clientVideos.length - completedCount;
                 return (
-                  <View style={styles.inspectionVideosContainer}>
-                    <View style={styles.inspectionVideosHeader}>
-                      <Camera size={14} color="#8B5CF6" />
-                      <Text style={styles.inspectionVideosTitle}>Inspection Videos ({clientVideos.length})</Text>
-                    </View>
-                    {clientVideos.map((video) => (
-                      <View key={video.id} style={styles.inspectionVideoItem}>
-                        <View style={styles.videoInfo}>
-                          <Text style={styles.videoStatus}>
-                            {video.status === 'completed' ? '✅' : '⏳'} {video.status === 'completed' ? 'Completed' : 'Pending'}
-                          </Text>
-                          <Text style={styles.videoDate}>
-                            {new Date(video.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </Text>
-                          {video.status === 'completed' && video.videoDuration && (
-                            <Text style={styles.videoDuration}>
-                              Duration: {Math.floor(video.videoDuration / 60)}:{(video.videoDuration % 60).toString().padStart(2, '0')}
-                            </Text>
-                          )}
-                        </View>
-                        {video.status === 'completed' && video.videoUrl && (
-                          <TouchableOpacity
-                            style={styles.viewVideoButton}
-                            onPress={async () => {
-                              try {
-                                console.log('[CRM] Getting video view URL for:', video.videoUrl);
-                                const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
-                                const response = await fetch(`${apiUrl}/api/get-video-view-url?videoKey=${encodeURIComponent(video.videoUrl)}`);
-
-                                if (!response.ok) {
-                                  throw new Error('Failed to get video URL');
-                                }
-
-                                const result = await response.json();
-                                console.log('[CRM] Got video view URL');
-
-                                if (result.viewUrl) {
-                                      Linking.openURL(result.viewUrl);
-                                    }
-                                  } catch (error: any) {
-                                    console.error('[CRM] Error loading video:', error);
-                                    Alert.alert('Error', error.message || 'Failed to load video');
-                                  }
-                                }}
-                              >
-                                <Text style={styles.viewVideoButtonText}>▶ View Video</Text>
-                              </TouchableOpacity>
-                            )}
-                            {video.status === 'pending' && (
-                              <Text style={styles.pendingText}>
-                                Expires: {new Date(video.expiresAt).toLocaleDateString()}
-                              </Text>
-                            )}
-                          </View>
-                        ))}
+                  <TouchableOpacity
+                    style={styles.inspectionVideosBtn}
+                    onPress={() => setInspectionVideosModalClientId(client.id)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.inspectionVideosBtnLeft}>
+                      <Camera size={15} color="#8B5CF6" />
+                      <View>
+                        <Text style={styles.inspectionVideosBtnTitle}>Align Inspection</Text>
+                        <Text style={styles.inspectionVideosBtnSub}>
+                          {clientVideos.length} {clientVideos.length === 1 ? 'video' : 'videos'}
+                          {completedCount > 0 ? ` · ${completedCount} completed` : ''}
+                          {pendingCount > 0 ? ` · ${pendingCount} pending` : ''}
+                        </Text>
                       </View>
-                  );
+                    </View>
+                    <View style={styles.inspectionVideosBtnRight}>
+                      <Text style={styles.inspectionVideosBtnViewAll}>View All</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
               })()}
 
               {/* ── Action buttons (3 per row) ───────────────────── */}
@@ -2138,106 +2205,6 @@ export default function CRMScreen() {
             </View>
             </View>
           ); })}
-          </View>
-
-          <View style={styles.metricsWidget}>
-            <TouchableOpacity 
-              style={styles.metricsHeader}
-              onPress={() => setShowMetricsWidget(!showMetricsWidget)}
-            >
-              <View style={styles.metricsHeaderLeft}>
-                <TrendingUp size={20} color="#2563EB" />
-                <Text style={styles.metricsHeaderTitle}>CRM Metrics</Text>
-              </View>
-              {showMetricsWidget ? (
-                <ChevronUp size={20} color="#6B7280" />
-              ) : (
-                <ChevronDown size={20} color="#6B7280" />
-              )}
-            </TouchableOpacity>
-
-            {showMetricsWidget && (
-              <View style={styles.metricsContent}>
-                <View style={styles.metricsGrid}>
-                  <View style={styles.metricCard}>
-                    <View style={styles.metricIconContainer}>
-                      <Users size={24} color="#10B981" />
-                    </View>
-                    <Text style={styles.metricValue}>{conversionRate}%</Text>
-                    <Text style={styles.metricLabel}>Conversion Rate</Text>
-                    <Text style={styles.metricSubtext}>
-                      {totalProjects} of {totalLeads + totalProjects} leads converted
-                    </Text>
-                  </View>
-
-                  <View style={styles.metricCard}>
-                    <View style={styles.metricIconContainer}>
-                      <Clock size={24} color="#F59E0B" />
-                    </View>
-                    <Text style={styles.metricValue}>{averageResponseTime}d</Text>
-                    <Text style={styles.metricLabel}>Avg Response Time</Text>
-                    <Text style={styles.metricSubtext}>
-                      Days since last contact
-                    </Text>
-                  </View>
-
-                  <View style={styles.metricCard}>
-                    <View style={styles.metricIconContainer}>
-                      <FileCheck size={24} color="#8B5CF6" />
-                    </View>
-                    <Text style={styles.metricValue}>{totalEstimatesSent}</Text>
-                    <Text style={styles.metricLabel}>Estimates Sent</Text>
-                    <Text style={styles.metricSubtext}>
-                      {estimates.filter(e => e.status === 'approved').length} approved
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.revenueSection}>
-                  <Text style={styles.revenueSectionTitle}>Revenue by Lead Source</Text>
-                  <View style={styles.revenueGrid}>
-                    <View style={styles.revenueCard}>
-                      <View style={styles.revenueCardHeader}>
-                        <View style={[styles.revenueSourceBadge, { backgroundColor: '#DBEAFE' }]}>
-                          <Text style={[styles.revenueSourceText, { color: '#1E40AF' }]}>Google</Text>
-                        </View>
-                        <DollarSignIcon size={18} color="#2563EB" />
-                      </View>
-                      <Text style={styles.revenueAmount}>${revenueBySource.Google.toLocaleString()}</Text>
-                      <Text style={styles.revenueSubtext}>
-                        {leadsByGoogle} active leads
-                      </Text>
-                    </View>
-
-                    <View style={styles.revenueCard}>
-                      <View style={styles.revenueCardHeader}>
-                        <View style={[styles.revenueSourceBadge, { backgroundColor: '#D1FAE5' }]}>
-                          <Text style={[styles.revenueSourceText, { color: '#047857' }]}>Referral</Text>
-                        </View>
-                        <DollarSignIcon size={18} color="#10B981" />
-                      </View>
-                      <Text style={styles.revenueAmount}>${revenueBySource.Referral.toLocaleString()}</Text>
-                      <Text style={styles.revenueSubtext}>
-                        {leadsByReferral} active leads
-                      </Text>
-                    </View>
-
-                    <View style={styles.revenueCard}>
-                      <View style={styles.revenueCardHeader}>
-                        <View style={[styles.revenueSourceBadge, { backgroundColor: '#FEF3C7' }]}>
-                          <Text style={[styles.revenueSourceText, { color: '#92400E' }]}>Ad</Text>
-                        </View>
-                        <DollarSignIcon size={18} color="#F59E0B" />
-                      </View>
-                      <Text style={styles.revenueAmount}>${revenueBySource.Ad.toLocaleString()}</Text>
-                      <Text style={styles.revenueSubtext}>
-                        {leadsByAd} active leads
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-            )}
           </View>
 
         </View>
@@ -4347,6 +4314,89 @@ AI: Wonderful, John! I'm excited about your kitchen remodel project. One of our 
         createdBy={user?.id}
       />
 
+      {/* Inspection Videos Modal */}
+      <Modal
+        visible={inspectionVideosModalClientId !== null}
+        animationType="slide"
+        transparent={false}
+        onRequestClose={() => setInspectionVideosModalClientId(null)}
+      >
+        {(() => {
+          const modalVideos = inspectionVideos.filter((v: any) => v.clientId === inspectionVideosModalClientId);
+          const modalClient = clients.find(c => c.id === inspectionVideosModalClientId);
+          return (
+            <View style={{ flex: 1, backgroundColor: '#F9FAFB' }}>
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
+                backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <View style={{ backgroundColor: '#F3E8FF', borderRadius: 10, padding: 8 }}>
+                    <Camera size={20} color="#8B5CF6" />
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 18, fontWeight: '700', color: '#1F2937' }}>Align Inspection</Text>
+                    <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 1 }}>
+                      {modalClient?.name} · {modalVideos.length} {modalVideos.length === 1 ? 'video' : 'videos'}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={() => setInspectionVideosModalClientId(null)}
+                  style={{ backgroundColor: '#F3F4F6', borderRadius: 20, padding: 8 }}
+                >
+                  <X size={20} color="#374151" />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView contentContainerStyle={{ padding: 16 }} showsVerticalScrollIndicator={false}>
+                {modalVideos.map((video: any) => (
+                  <View key={video.id} style={styles.inspectionVideoItem}>
+                    <View style={styles.videoInfo}>
+                      <Text style={styles.videoStatus}>
+                        {video.status === 'completed' ? '✅' : '⏳'} {video.status === 'completed' ? 'Completed' : 'Pending'}
+                      </Text>
+                      <Text style={styles.videoDate}>
+                        {new Date(video.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                      {video.status === 'completed' && video.videoDuration && (
+                        <Text style={styles.videoDuration}>
+                          Duration: {Math.floor(video.videoDuration / 60)}:{(video.videoDuration % 60).toString().padStart(2, '0')}
+                        </Text>
+                      )}
+                    </View>
+                    {video.status === 'completed' && video.videoUrl && (
+                      <TouchableOpacity
+                        style={styles.viewVideoButton}
+                        onPress={async () => {
+                          try {
+                            const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+                            const response = await fetch(`${apiUrl}/api/get-video-view-url?videoKey=${encodeURIComponent(video.videoUrl)}`);
+                            if (!response.ok) throw new Error('Failed to get video URL');
+                            const result = await response.json();
+                            if (result.viewUrl) Linking.openURL(result.viewUrl);
+                          } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to load video');
+                          }
+                        }}
+                      >
+                        <Text style={styles.viewVideoButtonText}>▶ View Video</Text>
+                      </TouchableOpacity>
+                    )}
+                    {video.status === 'pending' && (
+                      <Text style={styles.pendingText}>
+                        Expires: {new Date(video.expiresAt).toLocaleDateString()}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          );
+        })()}
+      </Modal>
+
       {/* Appointment Success Modal */}
       <Modal visible={showApptSuccessModal} animationType="fade" transparent onRequestClose={() => setShowApptSuccessModal(false)}>
         <View style={styles.successModalOverlay}>
@@ -4815,6 +4865,11 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
     borderRadius: 10,
     backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 6,
+    elevation: 5,
   },
   cardActionBtnSmall: {
     flexBasis: '48%' as const,
@@ -4890,14 +4945,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     padding: 20,
     borderRadius: 12,
-    marginBottom: 14,
+    marginBottom: 24,
     borderLeftWidth: 3,
     borderLeftColor: '#2563EB',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 10,
     overflow: 'hidden' as const,
   },
   clientRowCold: {
@@ -6447,6 +6502,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#6B21A8',
     lineHeight: 16,
+  },
+  inspectionVideosBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#F5F3FF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  inspectionVideosBtnLeft: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 8,
+    flex: 1,
+  },
+  inspectionVideosBtnTitle: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#6D28D9',
+  },
+  inspectionVideosBtnSub: {
+    fontSize: 11,
+    color: '#8B5CF6',
+    marginTop: 1,
+  },
+  inspectionVideosBtnRight: {
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  inspectionVideosBtnViewAll: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
   },
   inspectionVideosContainer: {
     marginTop: 12,

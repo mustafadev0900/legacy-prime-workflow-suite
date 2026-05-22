@@ -115,6 +115,7 @@ export default function FilesNavigationScreen() {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [modalCategory, setModalCategory] = useState<string>('');
   const [photoViewMode, setPhotoViewMode] = useState<'grid' | 'list'>('grid');
+  const [folderViewMode, setFolderViewMode] = useState<'grid' | 'list'>('grid');
   const [s3ProjectFiles, setS3ProjectFiles] = useState<ProjectFile[]>([]);
   const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(true);
   const [isCreatingFolder, setIsCreatingFolder] = useState<boolean>(false);
@@ -962,48 +963,113 @@ export default function FilesNavigationScreen() {
     if (!selectedFolder) {
       return (
         <View style={styles.foldersContainer}>
-          <View style={styles.foldersGrid}>
-            {folders.map((folder) => {
-              const FolderIcon = Folder;
-              const isCustomFolder = !PREDEFINED_FOLDERS.find(f => f.type === folder.type);
-              
-              return (
-                <View key={folder.type} style={styles.folderWrapper}>
-                  <TouchableOpacity
-                    style={styles.folderCard}
-                    onPress={() => setSelectedFolder(folder.type)}
-                  >
-                    <View style={[styles.folderIconContainer, { backgroundColor: `${folder.color}20` }]}>
-                      <FolderIcon size={48} color={folder.color} />
-                    </View>
-                    <Text style={styles.folderName} numberOfLines={1}>{folder.name}</Text>
-                    <Text style={styles.folderCount}>
-                      {folder.count} {folder.count === 1 ? 'item' : 'items'}
-                    </Text>
-                  </TouchableOpacity>
-                  {isCustomFolder && (
-                    <TouchableOpacity
-                      style={styles.deleteFolderButton}
-                      onPress={() => handleDeleteFolder(folder.type)}
-                    >
-                      <X size={18} color="#FFFFFF" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-              );
-            })}
-            
-            <TouchableOpacity
-              style={[styles.folderCard, styles.addFolderCard]}
-              onPress={() => setNewFolderModalVisible(true)}
-            >
-              <View style={[styles.folderIconContainer, { backgroundColor: '#F3F4F620' }]}>
-                <Plus size={48} color="#9CA3AF" />
-              </View>
-              <Text style={[styles.folderName, { color: '#6B7280' }]}>{t('projects.files.createNewFolder')}</Text>
-              <Text style={styles.folderCount}>{t('projects.files.create')}</Text>
-            </TouchableOpacity>
+          {/* Folder view toggle bar */}
+          <View style={styles.folderViewHeader}>
+            <Text style={styles.folderViewTitle}>{folders.length} folders</Text>
+            <View style={styles.viewToggle}>
+              <TouchableOpacity
+                style={[styles.viewToggleBtn, folderViewMode === 'grid' && styles.viewToggleBtnActive]}
+                onPress={() => setFolderViewMode('grid')}
+              >
+                <LayoutGrid size={16} color={folderViewMode === 'grid' ? '#2563EB' : '#9CA3AF'} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.viewToggleBtn, folderViewMode === 'list' && styles.viewToggleBtnActive]}
+                onPress={() => setFolderViewMode('list')}
+              >
+                <LayoutList size={16} color={folderViewMode === 'list' ? '#2563EB' : '#9CA3AF'} />
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {folderViewMode === 'grid' ? (
+            <View style={styles.foldersGrid}>
+              {folders.map((folder) => {
+                const isCustomFolder = !PREDEFINED_FOLDERS.find(f => f.type === folder.type);
+                return (
+                  <View key={folder.type} style={styles.folderWrapper}>
+                    <TouchableOpacity
+                      style={styles.folderCard}
+                      onPress={() => setSelectedFolder(folder.type)}
+                    >
+                      <View style={[styles.folderIconContainer, { backgroundColor: `${folder.color}20` }]}>
+                        <Folder size={48} color={folder.color} />
+                      </View>
+                      <Text style={styles.folderName} numberOfLines={1}>{folder.name}</Text>
+                      <Text style={styles.folderCount}>
+                        {folder.count} {folder.count === 1 ? 'item' : 'items'}
+                      </Text>
+                    </TouchableOpacity>
+                    {isCustomFolder && (
+                      <TouchableOpacity
+                        style={styles.deleteFolderButton}
+                        onPress={() => handleDeleteFolder(folder.type)}
+                      >
+                        <X size={18} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+              <TouchableOpacity
+                style={[styles.folderCard, styles.addFolderCard]}
+                onPress={() => setNewFolderModalVisible(true)}
+              >
+                <View style={[styles.folderIconContainer, { backgroundColor: '#F3F4F620' }]}>
+                  <Plus size={48} color="#9CA3AF" />
+                </View>
+                <Text style={[styles.folderName, { color: '#6B7280' }]}>{t('projects.files.createNewFolder')}</Text>
+                <Text style={styles.folderCount}>{t('projects.files.create')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.folderListContainer}>
+              {folders.map((folder) => {
+                const isCustomFolder = !PREDEFINED_FOLDERS.find(f => f.type === folder.type);
+                return (
+                  <View key={folder.type} style={{ position: 'relative' }}>
+                    <TouchableOpacity
+                      style={styles.folderListCard}
+                      onPress={() => setSelectedFolder(folder.type)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[styles.folderListIcon, { backgroundColor: `${folder.color}20` }]}>
+                        <Folder size={26} color={folder.color} />
+                      </View>
+                      <View style={styles.folderListInfo}>
+                        <Text style={styles.folderListName} numberOfLines={1}>{folder.name}</Text>
+                        <Text style={styles.folderListCount}>
+                          {folder.count} {folder.count === 1 ? 'item' : 'items'}
+                        </Text>
+                      </View>
+                      <ChevronRight size={18} color="#9CA3AF" />
+                    </TouchableOpacity>
+                    {isCustomFolder && (
+                      <TouchableOpacity
+                        style={styles.folderListDeleteBtn}
+                        onPress={() => handleDeleteFolder(folder.type)}
+                      >
+                        <X size={15} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })}
+              <TouchableOpacity
+                style={[styles.folderListCard, { borderStyle: 'dashed', borderWidth: 1.5, borderColor: '#D1D5DB' }]}
+                onPress={() => setNewFolderModalVisible(true)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.folderListIcon, { backgroundColor: '#F3F4F6' }]}>
+                  <Plus size={24} color="#9CA3AF" />
+                </View>
+                <View style={styles.folderListInfo}>
+                  <Text style={[styles.folderListName, { color: '#6B7280' }]}>{t('projects.files.createNewFolder')}</Text>
+                  <Text style={styles.folderListCount}>{t('projects.files.create')}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       );
     }
@@ -1013,22 +1079,38 @@ export default function FilesNavigationScreen() {
 
     if (!selectedCategory) {
       const hasCategories = folder.categories.length > 0;
-      
+
       return (
         <View style={styles.categoriesView}>
           <View style={styles.categoriesHeader}>
             <Text style={styles.categoriesTitle}>{folder.name}</Text>
-            {folder.type !== 'videos' && folder.type !== 'receipts' && (
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => { setModalCategory(''); setUploadModalVisible(true); }}
-              >
-                <Plus size={20} color="#FFFFFF" />
-                <Text style={styles.addButtonText}>Add</Text>
-              </TouchableOpacity>
-            )}
+            <View style={styles.filesHeaderRight}>
+              <View style={styles.viewToggle}>
+                <TouchableOpacity
+                  style={[styles.viewToggleBtn, photoViewMode === 'grid' && styles.viewToggleBtnActive]}
+                  onPress={() => setPhotoViewMode('grid')}
+                >
+                  <LayoutGrid size={16} color={photoViewMode === 'grid' ? '#2563EB' : '#9CA3AF'} />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.viewToggleBtn, photoViewMode === 'list' && styles.viewToggleBtnActive]}
+                  onPress={() => setPhotoViewMode('list')}
+                >
+                  <LayoutList size={16} color={photoViewMode === 'list' ? '#2563EB' : '#9CA3AF'} />
+                </TouchableOpacity>
+              </View>
+              {folder.type !== 'videos' && folder.type !== 'receipts' && (
+                <TouchableOpacity
+                  style={styles.addButton}
+                  onPress={() => { setModalCategory(''); setUploadModalVisible(true); }}
+                >
+                  <Plus size={20} color="#FFFFFF" />
+                  <Text style={styles.addButtonText}>Add</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-          
+
           {!hasCategories ? (
             <View style={styles.emptyFolderState}>
               <Folder size={64} color="#D1D5DB" />
@@ -1037,6 +1119,30 @@ export default function FilesNavigationScreen() {
                 No files in this folder yet. Tap &quot;Add&quot; to get started.
               </Text>
             </View>
+          ) : photoViewMode === 'grid' ? (
+            <ScrollView style={styles.categoriesList} showsVerticalScrollIndicator={false} keyboardDismissMode="on-drag">
+              <View style={styles.categoryGrid}>
+                {folder.categories.map((category) => {
+                  const catFiles = getFilesForCategory(folder.type, category);
+                  return (
+                    <TouchableOpacity
+                      key={category}
+                      style={styles.categoryGridCard}
+                      onPress={() => setSelectedCategory(category)}
+                      activeOpacity={0.8}
+                    >
+                      <View style={[styles.categoryGridIcon, { backgroundColor: `${folder.color}20` }]}>
+                        <Folder size={32} color={folder.color} />
+                      </View>
+                      <Text style={styles.categoryGridName} numberOfLines={2}>{category}</Text>
+                      <Text style={styles.categoryGridCount}>
+                        {catFiles.length} {catFiles.length === 1 ? 'item' : 'items'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
           ) : (
             <ScrollView style={styles.categoriesList} showsVerticalScrollIndicator={false}
           keyboardDismissMode="on-drag"
@@ -1076,7 +1182,6 @@ export default function FilesNavigationScreen() {
             <Text style={styles.filesSubtitle}>{files.length} {files.length === 1 ? 'item' : 'items'}</Text>
           </View>
           <View style={styles.filesHeaderRight}>
-            {folder.type === 'photos' && (
               <View style={styles.viewToggle}>
                 <TouchableOpacity
                   style={[styles.viewToggleBtn, photoViewMode === 'grid' && styles.viewToggleBtnActive]}
@@ -1091,7 +1196,6 @@ export default function FilesNavigationScreen() {
                   <LayoutList size={16} color={photoViewMode === 'list' ? '#2563EB' : '#9CA3AF'} />
                 </TouchableOpacity>
               </View>
-            )}
             {folder.type !== 'videos' && folder.type !== 'receipts' && (
               <TouchableOpacity
                 style={styles.addButton}
@@ -1157,10 +1261,129 @@ export default function FilesNavigationScreen() {
               ))}
             </View>
           )}
+          {/* Receipts grid */}
+          {folder.type === 'receipts' && photoViewMode === 'grid' && (
+            <View style={styles.photoGrid}>
+              {displayedFiles.map((file: any) => {
+                const isPdfReceipt = !file.receiptUrl || file.receiptUrl.toLowerCase().includes('.pdf') || file.receiptUrl.toLowerCase().includes('application/pdf');
+                return (
+                  <View key={file.id} style={styles.photoGridItem}>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      style={styles.photoGridCard}
+                      onPress={() => {
+                        if (file.receiptUrl) {
+                          if (isPdfReceipt) {
+                            setViewingFile({ uri: file.receiptUrl, name: `${file.store} - $${file.amount.toFixed(2)}`, type: 'pdf' });
+                          } else {
+                            const imageReceipts = files.filter((e: any) => {
+                              const url = (e.receiptUrl || '').toLowerCase();
+                              return e.receiptUrl && !url.includes('.pdf') && !url.includes('application/pdf');
+                            });
+                            openImageFullScreen(expenseToViewable(file), imageReceipts.map(expenseToViewable));
+                          }
+                        } else {
+                          Alert.alert('No Receipt', 'This expense does not have a receipt image attached.');
+                        }
+                      }}
+                    >
+                      {!isPdfReceipt ? (
+                        <Image source={{ uri: file.receiptUrl }} style={styles.photoGridImage} contentFit="cover" />
+                      ) : (
+                        <View style={[styles.photoGridImage, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0FDF4' }]}>
+                          <Receipt size={36} color="#10B981" />
+                        </View>
+                      )}
+                      <View style={styles.photoGridOverlay}>
+                        <Text style={[styles.photoGridCategory, { color: '#10B981' }]} numberOfLines={1}>${file.amount.toLocaleString()}</Text>
+                        <Text style={styles.photoGridDate} numberOfLines={1}>{file.store}</Text>
+                      </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.photoGridDeleteBtn} onPress={() => handleDeleteExpenseFile(file.id)}>
+                      <Trash2 size={13} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+          {/* Videos grid */}
+          {folder.type === 'videos' && photoViewMode === 'grid' && (
+            <View style={styles.photoGrid}>
+              {displayedFiles.map((file: any) => (
+                <View key={file.id} style={styles.photoGridItem}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    style={styles.photoGridCard}
+                    onPress={async () => {
+                      try {
+                        const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
+                        const response = await fetch(`${apiUrl}/api/get-video-view-url?videoKey=${encodeURIComponent(file.videoUrl)}`);
+                        if (!response.ok) throw new Error('Failed to get video URL');
+                        const result = await response.json();
+                        if (result.viewUrl) Linking.openURL(result.viewUrl);
+                      } catch (error: any) {
+                        Alert.alert('Error', error.message || 'Failed to load video');
+                      }
+                    }}
+                  >
+                    <View style={[styles.photoGridImage, { alignItems: 'center', justifyContent: 'center', backgroundColor: '#FDF2F8' }]}>
+                      <Camera size={36} color="#EC4899" />
+                    </View>
+                    <View style={styles.photoGridOverlay}>
+                      <Text style={styles.photoGridCategory} numberOfLines={1}>{file.clientName}</Text>
+                      <Text style={styles.photoGridDate}>{new Date(file.completedAt || file.createdAt).toLocaleDateString()}</Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+          {/* Documents grid (permit-files, inspections, agreements, custom folders) */}
+          {!['photos', 'receipts', 'videos'].includes(folder.type) && photoViewMode === 'grid' && (
+            <View style={styles.photoGrid}>
+              {displayedFiles.map((file: any) => {
+                const isImage = file.fileType?.startsWith('image/');
+                return (
+                  <View key={file.id} style={styles.photoGridItem}>
+                    <TouchableOpacity
+                      activeOpacity={0.85}
+                      style={styles.photoGridCard}
+                      onPress={() => {
+                        if (isImage) {
+                          const imageFiles = files.filter((f: any) => f.fileType?.startsWith('image/'));
+                          openImageFullScreen(projectFileToViewable(file), imageFiles.map(projectFileToViewable));
+                        } else if (Platform.OS === 'web') {
+                          window.open(file.uri, '_blank');
+                        } else {
+                          Linking.openURL(file.uri).catch(() => Alert.alert('Cannot Open', 'Unable to open this file type on this device.'));
+                        }
+                      }}
+                    >
+                      {isImage ? (
+                        <Image source={{ uri: file.uri }} style={styles.photoGridImage} contentFit="cover" />
+                      ) : (
+                        <View style={[styles.photoGridImage, { alignItems: 'center', justifyContent: 'center', backgroundColor: `${folder.color}15` }]}>
+                          <FileIcon size={36} color={folder.color} />
+                        </View>
+                      )}
+                      <View style={styles.photoGridOverlay}>
+                        <Text style={styles.photoGridCategory} numberOfLines={1}>{file.name}</Text>
+                        <Text style={styles.photoGridDate}>{new Date(file.uploadDate).toLocaleDateString()}</Text>
+                      </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.photoGridDeleteBtn} onPress={() => handleDeleteDocument(file.id)}>
+                      <Trash2 size={13} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
           {displayedFiles.map((file: any) => {
-            if (folder.type === 'photos') {
-              return null;
-            } else if (folder.type === 'receipts') {
+            if (folder.type === 'photos') return null;
+            if (photoViewMode === 'grid') return null;
+            if (folder.type === 'receipts') {
               return (
                 <View key={file.id} style={[styles.expenseCard, { position: 'relative' }]}>
                   <TouchableOpacity
@@ -1760,11 +1983,82 @@ const styles = StyleSheet.create({
   foldersContainer: {
     flex: 1,
   },
+  folderViewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  folderViewTitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500' as const,
+  },
   foldersGrid: {
     padding: 16,
+    paddingTop: 8,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 16,
+  },
+  folderListContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    gap: 10,
+  },
+  folderListCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+    gap: 14,
+  },
+  folderListIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  folderListInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+  folderListName: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  folderListCount: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  folderListDeleteBtn: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#EF4444',
+    borderRadius: 18,
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   folderWrapper: {
     width: '47%',
@@ -1898,6 +2192,44 @@ const styles = StyleSheet.create({
   categoriesList: {
     flex: 1,
     padding: 16,
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 14,
+    paddingBottom: 8,
+  },
+  categoryGridCard: {
+    width: '47%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 18,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  categoryGridIcon: {
+    width: 60,
+    height: 60,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  categoryGridName: {
+    fontSize: 14,
+    fontWeight: '700' as const,
+    color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  categoryGridCount: {
+    fontSize: 12,
+    color: '#6B7280',
+    textAlign: 'center',
   },
   categoryCard: {
     flexDirection: 'row',
