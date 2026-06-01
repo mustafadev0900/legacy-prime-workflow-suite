@@ -69,6 +69,8 @@ export default function SettingsScreen() {
           if (!data) return;
           setUser({
             ...currentUser,
+            role: data.role ?? currentUser.role,
+            isActive: data.is_active ?? currentUser.isActive,
             hourlyRate: data.hourly_rate ?? undefined,
             rateChangeRequest: data.rate_change_request ?? undefined,
           });

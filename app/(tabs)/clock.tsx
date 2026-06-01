@@ -51,13 +51,15 @@ export default function ClockScreen() {
       if (!user?.id) return;
       supabase
         .from('users')
-        .select('hourly_rate, rate_change_request')
+        .select('hourly_rate, rate_change_request, role, is_active')
         .eq('id', user.id)
         .single()
         .then(({ data }) => {
           if (!data) return;
           setUser({
             ...user,
+            role: data.role ?? user.role,
+            isActive: data.is_active ?? user.isActive,
             hourlyRate: data.hourly_rate != null ? Number(data.hourly_rate) : undefined,
             rateChangeRequest: data.rate_change_request ?? undefined,
           });

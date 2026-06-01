@@ -137,6 +137,8 @@ export default function CRMScreen() {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState<number>(PAGE_SIZE);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const isLoadingMoreRef = useRef(false); // synchronous guard — prevents stale closure multi-fire
+  const filteredTotalRef = useRef(0);     // updated each render so handler knows when to stop
 
   // Load estimates from database when component mounts
   useEffect(() => {
@@ -391,7 +393,7 @@ export default function CRMScreen() {
   const [coldLeadConfirmClient, setColdLeadConfirmClient] = useState<import('@/types').Client | null>(null);
   const [coldLeadDoneClient, setColdLeadDoneClient] = useState<import('@/types').Client | null>(null);
   const [activeStatusFilter, setActiveStatusFilter] = useState<string>('All');
-  useEffect(() => { setVisibleCount(PAGE_SIZE); setIsLoadingMore(false); }, [activeStatusFilter]);
+  useEffect(() => { setVisibleCount(PAGE_SIZE); setIsLoadingMore(false); isLoadingMoreRef.current = false; }, [activeStatusFilter]);
   const [showCalendarModal, setShowCalendarModal] = useState<boolean>(false);
   const [calendarExpanded, setCalendarExpanded] = useState<boolean>(false);
   const [appointmentFormVisible, setAppointmentFormVisible] = useState<boolean>(false);
@@ -580,14 +582,19 @@ export default function CRMScreen() {
   };
 
   const handleMainScroll = (e: any) => {
-    if (isLoadingMore) return;
+    // Use ref (not state) — state check suffers stale closure and allows multiple firings
+    if (isLoadingMoreRef.current) return;
+    // Stop when all filtered items are already visible
+    if (visibleCount >= filteredTotalRef.current) return;
     const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
     if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 200) {
+      isLoadingMoreRef.current = true;
       setIsLoadingMore(true);
       setTimeout(() => {
         setVisibleCount(prev => prev + PAGE_SIZE);
+        isLoadingMoreRef.current = false;
         setIsLoadingMore(false);
-      }, 600);
+      }, 300);
     }
   };
 
@@ -1868,6 +1875,7 @@ export default function CRMScreen() {
               });
             const visibleClients = sortedFilteredClients.slice(0, visibleCount);
             const hasMore = visibleClients.length < sortedFilteredClients.length;
+            filteredTotalRef.current = sortedFilteredClients.length;
             return (
               <>
           <View style={screenWidth >= 1100 ? styles.clientGrid : undefined}>
@@ -1933,9 +1941,9 @@ export default function CRMScreen() {
                   )}
                   {(client.lastContactDate || client.lastContacted) && (
                     <View style={styles.cardInfoRow}>
-                      <Clock size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                      <Clock size={12} color="#9CA3AF" style={{ flexShrink: 0 }} />
                       <Text style={styles.cardInfoText}>
-                        Contact: {client.lastContactDate
+                        Last contacted: {client.lastContactDate
                           ? new Date(client.lastContactDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                           : client.lastContacted}
                       </Text>
@@ -1982,9 +1990,9 @@ export default function CRMScreen() {
                     })()}
                     {(client.lastContactDate || client.lastContacted) && (
                       <View style={styles.cardInfoRow}>
-                        <Clock size={12} color="#9CA3AF" style={{ marginTop: 1, flexShrink: 0 }} />
+                        <Clock size={12} color="#9CA3AF" style={{ flexShrink: 0 }} />
                         <Text style={styles.cardInfoText}>
-                          Contact: {client.lastContactDate
+                          Last contacted: {client.lastContactDate
                             ? new Date(client.lastContactDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                             : client.lastContacted}
                         </Text>
@@ -2231,7 +2239,7 @@ export default function CRMScreen() {
             </View>
           ); })}
           </View>
-          {(hasMore || isLoadingMore) && (
+          {isLoadingMore && (
             <View style={{ paddingVertical: 20, alignItems: 'center', gap: 6 }}>
               <ActivityIndicator size="small" color="#2563EB" />
               <Text style={{ fontSize: 12, color: '#6B7280' }}>Loading more clients…</Text>
@@ -4811,7 +4819,7 @@ const styles = StyleSheet.create({
   },
   cardInfoRow: {
     flexDirection: 'row' as const,
-    alignItems: 'flex-start' as const,
+    alignItems: 'center' as const,
     gap: 7,
   },
   cardInfoText: {
