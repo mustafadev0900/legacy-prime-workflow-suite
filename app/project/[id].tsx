@@ -567,10 +567,8 @@ export default function ProjectDetailScreen() {
   const totalLaborCost = useMemo(() => {
     return projectClockEntries.reduce((sum, entry) => {
       if (!entry.clockIn) return sum;
-      // Only count entries with a snapshotted rate. Legacy entries (hourlyRate = null)
-      // are excluded so a rate change never retroactively alters historical cost.
-      if (entry.hourlyRate == null) return sum;
-      const rate = entry.hourlyRate;
+      // Use snapshotted rate; fall back to current rate for legacy entries (hourlyRate = null)
+      const rate = entry.hourlyRate ?? userRatesMap.get(entry.employeeId) ?? 0;
       if (!rate) return sum;
       const clockInMs = new Date(entry.clockIn).getTime();
       const clockOutMs = entry.clockOut ? new Date(entry.clockOut).getTime() : nowMs;
@@ -596,9 +594,9 @@ export default function ProjectDetailScreen() {
 
   const totalLaborHours = useMemo(() => {
     return projectClockEntries.reduce((sum, entry) => {
-      if (!entry.clockOut || !entry.clockIn) return sum;
+      if (!entry.clockIn) return sum;
       const clockInMs = new Date(entry.clockIn).getTime();
-      const clockOutMs = new Date(entry.clockOut).getTime();
+      const clockOutMs = entry.clockOut ? new Date(entry.clockOut).getTime() : nowMs;
       if (isNaN(clockInMs) || isNaN(clockOutMs)) return sum;
       let totalMs = clockOutMs - clockInMs;
       if (entry.lunchBreaks) {
@@ -612,7 +610,7 @@ export default function ProjectDetailScreen() {
       }
       return sum + Math.max(0, totalMs / (1000 * 60 * 60));
     }, 0);
-  }, [projectClockEntries]);
+  }, [projectClockEntries, nowMs]);
 
   const laborHoursCost = useMemo(() => {
     if (!totalLaborHours || !isFinite(totalLaborHours)) return 0;
@@ -653,11 +651,9 @@ export default function ProjectDetailScreen() {
       }
       const hours = Math.max(0, ms / 3_600_000);
       const isLegacy = entry.hourlyRate == null;
-      // Skip legacy entries entirely — no rate snapshot means no cost contribution.
-      // This prevents a rate change from retroactively repricing historical hours.
-      if (isLegacy) return;
-      const rate = entry.hourlyRate;
-      const cost = rate ? hours * rate : 0;
+      // Fall back to current rate for legacy entries (no snapshot) — matches clock screen behaviour
+      const rate = entry.hourlyRate ?? userRatesMap.get(entry.employeeId) ?? 0;
+      const cost = hours * rate;
       const name = userNamesMap.get(entry.employeeId)
         || entry.employeeName
         || `Employee ${entry.employeeId.slice(0, 4)}`;
@@ -1592,7 +1588,7 @@ export default function ProjectDetailScreen() {
                 </View>
                 <View style={styles.laborTotalBadge}>
                   <Text style={styles.laborTotalBadgeText}>
-                    ${totalLaborCost.toLocaleString(undefined, { maximumFractionDigits: 0 })} total
+                    ${totalLaborCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total
                   </Text>
                 </View>
               </View>
@@ -1636,7 +1632,7 @@ export default function ProjectDetailScreen() {
 
                         {/* Hours */}
                         <Text style={[styles.laborColHours, styles.laborCellValue]}>
-                          {row.hours.toFixed(1)}h
+                          {row.hours.toFixed(2)}h
                         </Text>
 
                         {/* Rate — "Varies" when rate changed mid-project */}
@@ -1647,7 +1643,7 @@ export default function ProjectDetailScreen() {
 
                         {/* Cost */}
                         <Text style={[styles.laborColCost, styles.laborCellValue, row.cost > 0 ? styles.laborCostValue : styles.laborCellMuted]}>
-                          {row.cost > 0 ? `$${row.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'No rate'}
+                          {row.cost > 0 ? `$${row.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'No rate'}
                           {row.hasLegacyEntries ? '*' : ''}
                         </Text>
                       </View>
@@ -1659,7 +1655,7 @@ export default function ProjectDetailScreen() {
                             ↳ ${seg.rate.toFixed(0)}/h · {seg.hours.toFixed(1)}h
                           </Text>
                           <Text style={styles.laborSegmentCost}>
-                            ${seg.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            ${seg.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </Text>
                         </View>
                       ))}
@@ -1670,11 +1666,11 @@ export default function ProjectDetailScreen() {
                   <View style={styles.laborTotalsRow}>
                     <Text style={[{ flex: 1 }, styles.laborTotalLabel]}>Total</Text>
                     <Text style={[styles.laborColHours, styles.laborTotalLabel]}>
-                      {totalLaborHours.toFixed(1)}h
+                      {totalLaborHours.toFixed(2)}h
                     </Text>
                     <Text style={styles.laborColRate} />
                     <Text style={[styles.laborColCost, styles.laborTotalCost]}>
-                      ${totalLaborCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      ${totalLaborCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Text>
                   </View>
 
