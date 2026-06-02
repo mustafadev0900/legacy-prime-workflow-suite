@@ -1,7 +1,7 @@
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, Linking } from 'react-native';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, Check } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTranslation } from 'react-i18next';
@@ -58,6 +58,7 @@ export default function SignupScreen() {
   const { setUser, setCompany } = useApp();
 
   const [isCreatingAccount, setIsCreatingAccount] = useState<boolean>(false);
+  const [smsOptIn, setSmsOptIn] = useState<boolean>(false);
 
 
 
@@ -135,6 +136,11 @@ export default function SignupScreen() {
       const empAddrErr = validateAddress(address);
       if (empAddrErr) {
         showAlert('Error', empAddrErr);
+        return;
+      }
+
+      if (!smsOptIn) {
+        showAlert('SMS Consent Required', 'Please agree to receive SMS messages to continue. This is required to receive project updates and important notifications.');
         return;
       }
     }
@@ -607,6 +613,34 @@ export default function SignupScreen() {
             </>
           )}
 
+          <View style={styles.smsOptInContainer}>
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => setSmsOptIn(!smsOptIn)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.checkbox, smsOptIn && styles.checkboxChecked]}>
+                {smsOptIn && <Check size={12} color="#FFFFFF" strokeWidth={3} />}
+              </View>
+              <Text style={styles.smsOptInText}>
+                I agree to receive SMS messages from Legacy Prime regarding project updates, appointment reminders, and important notifications.
+                {accountType === 'employee' && <Text style={styles.smsRequired}> *</Text>}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.smsDisclosure}>
+              Msg frequency varies. Msg & data rates may apply. Reply STOP to unsubscribe, HELP for help.
+            </Text>
+            <View style={styles.smsLinks}>
+              <TouchableOpacity onPress={() => Linking.openURL('https://legacy-prime-workflow-suite.vercel.app/privacy')}>
+                <Text style={styles.smsLink}>Privacy Policy</Text>
+              </TouchableOpacity>
+              <Text style={styles.smsPipe}> | </Text>
+              <TouchableOpacity onPress={() => Linking.openURL('https://legacy-prime-workflow-suite.vercel.app/terms')}>
+                <Text style={styles.smsLink}>Terms of Service</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <TouchableOpacity
             style={[styles.signupButton, isCreatingAccount && styles.signupButtonDisabled]}
             onPress={handleSignup}
@@ -767,6 +801,66 @@ const styles = StyleSheet.create({
   },
   bottomLinks: {
     gap: 8,
+  },
+  smsOptInContainer: {
+    backgroundColor: '#F8FAFF',
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    marginTop: 4,
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 8,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#2563EB',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  checkboxChecked: {
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
+  },
+  smsOptInText: {
+    fontSize: 13,
+    color: '#374151',
+    flex: 1,
+    lineHeight: 19,
+  },
+  smsRequired: {
+    color: '#DC2626',
+    fontWeight: '700' as const,
+  },
+  smsDisclosure: {
+    fontSize: 11,
+    color: '#6B7280',
+    lineHeight: 16,
+    marginBottom: 6,
+  },
+  smsLinks: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  smsLink: {
+    fontSize: 11,
+    color: '#2563EB',
+    textDecorationLine: 'underline' as const,
+  },
+  smsPipe: {
+    fontSize: 11,
+    color: '#9CA3AF',
   },
   backToTypeText: {
     fontSize: 14,

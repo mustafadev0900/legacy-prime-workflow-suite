@@ -184,6 +184,9 @@ export default function PhoneLoginScreen() {
             >
               {isLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.buttonText}>Send Code</Text>}
             </TouchableOpacity>
+            <Text style={styles.smsNotice}>
+              By tapping "Send Code", you consent to receive a one-time SMS verification code. Msg & data rates may apply.
+            </Text>
           </>
         ) : (
           <>
@@ -233,4 +236,5 @@ const styles = StyleSheet.create({
   buttonText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
   resendButton: { alignItems: 'center', marginBottom: 20 },
   resendText: { fontSize: 14, fontWeight: '500', color: '#2563EB' },
+  smsNotice: { fontSize: 11, color: '#9CA3AF', textAlign: 'center', lineHeight: 16, marginTop: -8 },
 });
