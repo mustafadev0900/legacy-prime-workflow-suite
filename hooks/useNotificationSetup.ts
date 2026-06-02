@@ -339,8 +339,64 @@ export function useNotificationSetup(
         // Store cleanup function
         (setup as any)._unsubscribeTokenRefresh = unsubscribeTokenRefresh;
 
+        // ── FCM tap handlers (react-native-firebase) ───────────────────────
+        // expo-notifications' responseListener does NOT reliably catch FCM taps.
+        // Firebase messaging provides two dedicated APIs for this:
+        //   • getInitialNotification — app was KILLED, notification tap launched it
+        //   • onNotificationOpenedApp — app was BACKGROUNDED, tap brings it forward
+
+        // Killed-state tap: longer delay so auth guard & initial navigation settle
+        const initialNotif = await messagingInstance.getInitialNotification();
+        if (initialNotif?.data && mounted) {
+          console.log('[Notifications] FCM cold-start tap:', initialNotif.data?.type);
+          setTimeout(() => routeFromFcmData(initialNotif.data), 600);
+        }
+
+        // Background tap
+        const unsubscribeOpened = messagingInstance.onNotificationOpenedApp((remoteMessage) => {
+          if (!remoteMessage?.data) return;
+          console.log('[Notifications] FCM background tap:', remoteMessage.data?.type);
+          setTimeout(() => routeFromFcmData(remoteMessage.data), 100);
+        });
+        (setup as any)._unsubscribeOpened = unsubscribeOpened;
+
       } catch (err) {
         console.warn('[Notifications] Setup error (non-fatal):', err);
+      }
+    }
+
+    // Shared FCM tap router — used by both cold-start and background-tap handlers
+    function routeFromFcmData(data: Record<string, any> | undefined) {
+      if (!data) return;
+      switch (data.type) {
+        case 'chat':
+          if (data.conversationId) {
+            router.push({ pathname: '/(tabs)/chat', params: { conversationId: data.conversationId } } as any);
+          } else {
+            router.push('/(tabs)/chat');
+          }
+          break;
+        case 'task-reminder':
+          router.push('/(tabs)/dashboard');
+          break;
+        case 'task-assigned':
+          router.push('/(tabs)/schedule');
+          break;
+        case 'estimate-received':
+        case 'proposal-submitted':
+          router.push('/(tabs)/subcontractors');
+          break;
+        case 'payment-received':
+          router.push(data.projectId ? `/project/${data.projectId}` as any : '/(tabs)/expenses');
+          break;
+        case 'change-order':
+          router.push(data.projectId ? `/project/${data.projectId}` as any : '/(tabs)/dashboard');
+          break;
+        case 'general':
+          router.push('/(tabs)/dashboard');
+          break;
+        default:
+          router.push('/notifications');
       }
     }
 
@@ -423,6 +479,7 @@ export function useNotificationSetup(
       notificationListener.current?.remove();
       responseListener.current?.remove();
       (setup as any)._unsubscribeTokenRefresh?.();
+      (setup as any)._unsubscribeOpened?.();
     };
   }, [user?.id, company?.id]);
 }
