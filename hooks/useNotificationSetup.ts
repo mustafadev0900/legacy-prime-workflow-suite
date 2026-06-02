@@ -234,20 +234,19 @@ export function useNotificationSetup(
         }
 
         // Request permissions via expo-notifications.
-        // On real iOS, requestPermissionsAsync always resolves to 'granted' or 'denied'
-        // after showing/checking the system dialog — 'undetermined' is never returned
-        // after the call completes.
-        // On Mac Catalyst, expo-notifications can return 'undetermined' even when
-        // System Settings shows notifications as enabled. Blocking on 'denied' only
-        // (not '!== granted') lets Mac Catalyst through without needing platform detection,
-        // while preserving correct behavior on real iOS and Android.
+        // Do NOT use allowProvisional:true — provisional auth silently bypasses the
+        // system dialog and delivers only to Notification Center (no banners/sound)
+        // until the user manually upgrades in Settings. Always show the real dialog.
+        // Block only on 'denied' (not '!== granted') so Mac Catalyst, where
+        // expo-notifications may return 'undetermined' even when the OS grant is
+        // present, still proceeds to token registration.
         const { status: existingStatus } = await Notifications.getPermissionsAsync();
         let finalStatus = existingStatus;
         console.log('[Notifications] existingStatus:', existingStatus);
 
         if (existingStatus !== 'granted') {
           const permOptions = Platform.OS === 'ios'
-            ? { ios: { allowAlert: true, allowBadge: true, allowSound: true, allowProvisional: true } }
+            ? { ios: { allowAlert: true, allowBadge: true, allowSound: true } }
             : {};
           const { status } = await Notifications.requestPermissionsAsync(permOptions);
           finalStatus = status;
