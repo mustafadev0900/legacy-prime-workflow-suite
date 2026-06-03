@@ -27,6 +27,27 @@ function formatTimeAgo(dateString: string): string {
   return `${days}d ago`;
 }
 
+// Renders message text with bold support for **...** markers and Nsec tokens
+function renderMessage(message: string, baseStyle: object) {
+  const parts = message.split(/(\*\*[^*]+\*\*|\d+sec)/);
+  if (parts.length === 1) {
+    return <Text style={baseStyle} numberOfLines={4}>{message}</Text>;
+  }
+  return (
+    <Text style={baseStyle} numberOfLines={4}>
+      {parts.map((part, i) => {
+        if (/^\*\*[^*]+\*\*$/.test(part)) {
+          return <Text key={i} style={{ fontWeight: '700', color: '#374151' }}>{part.slice(2, -2)}</Text>;
+        }
+        if (/^\d+sec$/.test(part)) {
+          return <Text key={i} style={{ fontWeight: '700' }}>{part}</Text>;
+        }
+        return part;
+      })}
+    </Text>
+  );
+}
+
 const TYPE_COLORS: Record<Notification['type'], string> = {
   'task-reminder':     '#F59E0B',
   'estimate-received': '#3B82F6',
@@ -65,9 +86,7 @@ function NotificationRow({ notification, onPress }: NotificationRowProps) {
             <Text style={styles.rowTime}>{formatTimeAgo(notification.createdAt)}</Text>
           </View>
         </View>
-        <Text style={styles.rowMessage} numberOfLines={4}>
-          {notification.message}
-        </Text>
+        {renderMessage(notification.message, styles.rowMessage)}
       </View>
     </TouchableOpacity>
   );

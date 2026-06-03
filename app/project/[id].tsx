@@ -32,6 +32,72 @@ import WorkerLocationMap, { type WorkerPin } from '@/components/WorkerLocationMa
 
 type TabType = 'overview' | 'schedule' | 'estimate' | 'change-orders' | 'clock' | 'expenses' | 'photos' | 'videos' | 'files' | 'reports';
 
+const CANONICAL_EXPENSE_TYPES = [
+  'Materials', 'Labor', 'Equipment', 'Subcontractor', 'Gas / Fuel',
+  'Office', 'Insurance', 'Workers Comp', 'Bond', 'Permit', 'Overhead',
+  'Rent / Lease', 'Vehicle / Car Payment', 'Electronics / Tech', 'Office Supplies',
+  'Utilities', 'Phone / Internet', 'Software / Subscriptions', 'Marketing / Advertising',
+  'Accounting / CPA', 'Legal Fee', 'Payroll Taxes', 'Training / Certifications',
+  'Tools', 'Maintenance / Repairs', 'Travel / Lodging', 'Meals / Coffee',
+  'Uniform / Safety Gear', 'Waste / Dumpster', 'Storage', 'Miscellaneous',
+];
+
+function normalizeExpenseType(type: string): string {
+  if (!type) return type;
+  if (CANONICAL_EXPENSE_TYPES.includes(type)) return type;
+  const lower = type.toLowerCase().trim();
+  // Case-insensitive exact match
+  const exact = CANONICAL_EXPENSE_TYPES.find(t => t.toLowerCase() === lower);
+  if (exact) return exact;
+  // Singular/plural normalization (e.g. "Material" → "Materials", "Subcontractors" → "Subcontractor")
+  const strippedLower = lower.endsWith('s') ? lower.slice(0, -1) : lower + 's';
+  const fuzzy = CANONICAL_EXPENSE_TYPES.find(t => t.toLowerCase() === strippedLower);
+  if (fuzzy) return fuzzy;
+  return type;
+}
+
+const EXPENSE_CATEGORY_CONFIG: Record<string, { bg: string; color: string }> = {
+  'Subcontractor':             { bg: '#FEE2E2', color: '#EF4444' },
+  'Labor':                     { bg: '#DBEAFE', color: '#2563EB' },
+  'Materials':                 { bg: '#FEF3C7', color: '#D97706' },
+  'Equipment':                 { bg: '#D1FAE5', color: '#059669' },
+  'Gas / Fuel':                { bg: '#FEF9C3', color: '#CA8A04' },
+  'Office':                    { bg: '#E0F2FE', color: '#0284C7' },
+  'Insurance':                 { bg: '#EDE9FE', color: '#7C3AED' },
+  'Workers Comp':              { bg: '#FCE7F3', color: '#DB2777' },
+  'Bond':                      { bg: '#FEF3C7', color: '#B45309' },
+  'Permit':                    { bg: '#ECFDF5', color: '#065F46' },
+  'Overhead':                  { bg: '#F3F4F6', color: '#6B7280' },
+  'Rent / Lease':              { bg: '#FFF7ED', color: '#C2410C' },
+  'Vehicle / Car Payment':     { bg: '#FEE2E2', color: '#B91C1C' },
+  'Electronics / Tech':        { bg: '#EFF6FF', color: '#1D4ED8' },
+  'Office Supplies':           { bg: '#F0FDF4', color: '#15803D' },
+  'Utilities':                 { bg: '#F0F9FF', color: '#0369A1' },
+  'Phone / Internet':          { bg: '#EFF6FF', color: '#2563EB' },
+  'Software / Subscriptions':  { bg: '#F5F3FF', color: '#7C3AED' },
+  'Marketing / Advertising':   { bg: '#FFF1F2', color: '#E11D48' },
+  'Accounting / CPA':          { bg: '#ECFDF5', color: '#059669' },
+  'Legal Fee':                 { bg: '#FEF2F2', color: '#DC2626' },
+  'Payroll Taxes':             { bg: '#FFF7ED', color: '#EA580C' },
+  'Training / Certifications': { bg: '#F0FDF4', color: '#16A34A' },
+  'Tools':                     { bg: '#FEF3C7', color: '#D97706' },
+  'Maintenance / Repairs':     { bg: '#FEF9C3', color: '#A16207' },
+  'Travel / Lodging':          { bg: '#EFF6FF', color: '#3B82F6' },
+  'Meals / Coffee':            { bg: '#FFF7ED', color: '#F97316' },
+  'Uniform / Safety Gear':     { bg: '#F0FDF4', color: '#22C55E' },
+  'Waste / Dumpster':          { bg: '#FEF2F2', color: '#EF4444' },
+  'Storage':                   { bg: '#F5F3FF', color: '#8B5CF6' },
+  'Miscellaneous':             { bg: '#F9FAFB', color: '#6B7280' },
+};
+
+const FALLBACK_CATEGORY_COLORS = [
+  { bg: '#E9D5FF', color: '#9333EA' },
+  { bg: '#CFFAFE', color: '#0891B2' },
+  { bg: '#FCE7F3', color: '#DB2777' },
+  { bg: '#D1FAE5', color: '#10B981' },
+  { bg: '#FEF3C7', color: '#F59E0B' },
+];
+
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
@@ -48,6 +114,7 @@ export default function ProjectDetailScreen() {
   const TAB_PAGE_SIZE = 20;
   const [videosVisibleCount, setVideosVisibleCount] = useState(TAB_PAGE_SIZE);
   const [reportsVisibleCount, setReportsVisibleCount] = useState(TAB_PAGE_SIZE);
+  const [showInspectionVideosModal, setShowInspectionVideosModal] = useState(false);
 
   const fetchPayments = useCallback(() => {
     if (!id) return;
@@ -245,11 +312,18 @@ export default function ProjectDetailScreen() {
   const expensesByType = useMemo(() => {
     const byType: { [key: string]: number } = {};
     projectExpenses.forEach(expense => {
-      const type = expense.type;
+      const type = normalizeExpenseType(expense.type);
       byType[type] = (byType[type] || 0) + expense.amount;
     });
     return byType;
   }, [projectExpenses]);
+
+  const costBreakdownItems = useMemo(() =>
+    Object.entries(expensesByType)
+      .filter(([, amount]) => amount > 0)
+      .sort((a, b) => b[1] - a[1]),
+    [expensesByType]
+  );
 
   const totalJobCost = useMemo(() => {
     return projectExpenses.reduce((sum, expense) => sum + expense.amount, 0);
@@ -493,10 +567,8 @@ export default function ProjectDetailScreen() {
   const totalLaborCost = useMemo(() => {
     return projectClockEntries.reduce((sum, entry) => {
       if (!entry.clockIn) return sum;
-      // Only count entries with a snapshotted rate. Legacy entries (hourlyRate = null)
-      // are excluded so a rate change never retroactively alters historical cost.
-      if (entry.hourlyRate == null) return sum;
-      const rate = entry.hourlyRate;
+      // Use snapshotted rate; fall back to current rate for legacy entries (hourlyRate = null)
+      const rate = entry.hourlyRate ?? userRatesMap.get(entry.employeeId) ?? 0;
       if (!rate) return sum;
       const clockInMs = new Date(entry.clockIn).getTime();
       const clockOutMs = entry.clockOut ? new Date(entry.clockOut).getTime() : nowMs;
@@ -522,9 +594,9 @@ export default function ProjectDetailScreen() {
 
   const totalLaborHours = useMemo(() => {
     return projectClockEntries.reduce((sum, entry) => {
-      if (!entry.clockOut || !entry.clockIn) return sum;
+      if (!entry.clockIn) return sum;
       const clockInMs = new Date(entry.clockIn).getTime();
-      const clockOutMs = new Date(entry.clockOut).getTime();
+      const clockOutMs = entry.clockOut ? new Date(entry.clockOut).getTime() : nowMs;
       if (isNaN(clockInMs) || isNaN(clockOutMs)) return sum;
       let totalMs = clockOutMs - clockInMs;
       if (entry.lunchBreaks) {
@@ -538,7 +610,7 @@ export default function ProjectDetailScreen() {
       }
       return sum + Math.max(0, totalMs / (1000 * 60 * 60));
     }, 0);
-  }, [projectClockEntries]);
+  }, [projectClockEntries, nowMs]);
 
   const laborHoursCost = useMemo(() => {
     if (!totalLaborHours || !isFinite(totalLaborHours)) return 0;
@@ -579,11 +651,9 @@ export default function ProjectDetailScreen() {
       }
       const hours = Math.max(0, ms / 3_600_000);
       const isLegacy = entry.hourlyRate == null;
-      // Skip legacy entries entirely — no rate snapshot means no cost contribution.
-      // This prevents a rate change from retroactively repricing historical hours.
-      if (isLegacy) return;
-      const rate = entry.hourlyRate;
-      const cost = rate ? hours * rate : 0;
+      // Fall back to current rate for legacy entries (no snapshot) — matches clock screen behaviour
+      const rate = entry.hourlyRate ?? userRatesMap.get(entry.employeeId) ?? 0;
+      const cost = hours * rate;
       const name = userNamesMap.get(entry.employeeId)
         || entry.employeeName
         || `Employee ${entry.employeeId.slice(0, 4)}`;
@@ -1212,14 +1282,7 @@ export default function ProjectDetailScreen() {
 
                 <Text style={styles.sectionSubtitle}>Cost Breakdown</Text>
                 <View style={styles.balancesGrid}>
-                  <View style={styles.balanceItem}>
-                    <View style={[styles.balanceIconContainer, { backgroundColor: '#FEE2E2' }]}>
-                      <Users size={15} color="#EF4444" />
-                    </View>
-                    <Text style={styles.balanceLabel}>Subcontractors</Text>
-                    <Text style={[styles.balanceValue, { color: '#EF4444' }]}>${totalSubcontractorCost.toLocaleString()}</Text>
-                  </View>
-
+                  {/* Labor from clock entries */}
                   <View style={styles.balanceItem}>
                     <View style={[styles.balanceIconContainer, { backgroundColor: '#DBEAFE' }]}>
                       <UserCheck size={15} color="#2563EB" />
@@ -1231,21 +1294,26 @@ export default function ProjectDetailScreen() {
                     <Text style={[styles.balanceValue, { color: '#2563EB' }]}>${totalLaborCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
                   </View>
 
-                  <View style={styles.balanceItem}>
-                    <View style={[styles.balanceIconContainer, { backgroundColor: '#FEF3C7' }]}>
-                      <FileText size={15} color="#F59E0B" />
-                    </View>
-                    <Text style={styles.balanceLabel}>Materials</Text>
-                    <Text style={[styles.balanceValue, { color: '#F59E0B' }]}>${totalMaterialCost.toLocaleString()}</Text>
-                  </View>
+                  {/* Dynamic expense categories */}
+                  {costBreakdownItems.map(([type, amount], index) => {
+                    const cfg = EXPENSE_CATEGORY_CONFIG[type] ?? FALLBACK_CATEGORY_COLORS[index % FALLBACK_CATEGORY_COLORS.length];
+                    const isLast = index === costBreakdownItems.length - 1;
+                    return (
+                      <View key={type} style={[styles.balanceItem, isLast && { borderBottomWidth: 0 }]}>
+                        <View style={[styles.balanceIconContainer, { backgroundColor: cfg.bg }]}>
+                          <DollarSign size={15} color={cfg.color} />
+                        </View>
+                        <Text style={styles.balanceLabel}>{type}</Text>
+                        <Text style={[styles.balanceValue, { color: cfg.color }]}>${amount.toLocaleString()}</Text>
+                      </View>
+                    );
+                  })}
 
-                  <View style={[styles.balanceItem, { borderBottomWidth: 0 }]}>
-                    <View style={[styles.balanceIconContainer, { backgroundColor: '#E9D5FF' }]}>
-                      <DollarSign size={15} color="#9333EA" />
+                  {costBreakdownItems.length === 0 && (
+                    <View style={[styles.balanceItem, { borderBottomWidth: 0 }]}>
+                      <Text style={[styles.balanceLabel, { color: '#9CA3AF', fontStyle: 'italic' }]}>No expenses recorded</Text>
                     </View>
-                    <Text style={styles.balanceLabel}>Other Costs</Text>
-                    <Text style={[styles.balanceValue, { color: '#9333EA' }]}>${Math.max(0, totalJobCost - totalSubcontractorCost - totalLaborCost - totalMaterialCost).toLocaleString()}</Text>
-                  </View>
+                  )}
                 </View>
 
                 <View style={styles.divider} />
@@ -1520,7 +1588,7 @@ export default function ProjectDetailScreen() {
                 </View>
                 <View style={styles.laborTotalBadge}>
                   <Text style={styles.laborTotalBadgeText}>
-                    ${totalLaborCost.toLocaleString(undefined, { maximumFractionDigits: 0 })} total
+                    ${totalLaborCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} total
                   </Text>
                 </View>
               </View>
@@ -1564,7 +1632,7 @@ export default function ProjectDetailScreen() {
 
                         {/* Hours */}
                         <Text style={[styles.laborColHours, styles.laborCellValue]}>
-                          {row.hours.toFixed(1)}h
+                          {row.hours.toFixed(2)}h
                         </Text>
 
                         {/* Rate — "Varies" when rate changed mid-project */}
@@ -1575,7 +1643,7 @@ export default function ProjectDetailScreen() {
 
                         {/* Cost */}
                         <Text style={[styles.laborColCost, styles.laborCellValue, row.cost > 0 ? styles.laborCostValue : styles.laborCellMuted]}>
-                          {row.cost > 0 ? `$${row.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : 'No rate'}
+                          {row.cost > 0 ? `$${row.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'No rate'}
                           {row.hasLegacyEntries ? '*' : ''}
                         </Text>
                       </View>
@@ -1587,7 +1655,7 @@ export default function ProjectDetailScreen() {
                             ↳ ${seg.rate.toFixed(0)}/h · {seg.hours.toFixed(1)}h
                           </Text>
                           <Text style={styles.laborSegmentCost}>
-                            ${seg.cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            ${seg.cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </Text>
                         </View>
                       ))}
@@ -1598,11 +1666,11 @@ export default function ProjectDetailScreen() {
                   <View style={styles.laborTotalsRow}>
                     <Text style={[{ flex: 1 }, styles.laborTotalLabel]}>Total</Text>
                     <Text style={[styles.laborColHours, styles.laborTotalLabel]}>
-                      {totalLaborHours.toFixed(1)}h
+                      {totalLaborHours.toFixed(2)}h
                     </Text>
                     <Text style={styles.laborColRate} />
                     <Text style={[styles.laborColCost, styles.laborTotalCost]}>
-                      ${totalLaborCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      ${totalLaborCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </Text>
                   </View>
 
@@ -1941,36 +2009,38 @@ export default function ProjectDetailScreen() {
                 <View style={styles.divider} />
                 <Text style={styles.sectionSubtitle}>Cost Breakdown</Text>
                 <View style={styles.balancesGrid}>
-                  <View style={styles.balanceItem}>
-                    <View style={[styles.balanceIconContainer, { backgroundColor: '#FEE2E2' }]}>
-                      <Users size={15} color="#EF4444" />
-                    </View>
-                    <Text style={styles.balanceLabel}>Subcontractors</Text>
-                    <Text style={[styles.balanceValue, { color: '#EF4444' }]}>${totalSubcontractorCost.toLocaleString()}</Text>
-                  </View>
+                  {/* Labor from clock entries */}
                   <View style={styles.balanceItem}>
                     <View style={[styles.balanceIconContainer, { backgroundColor: '#DBEAFE' }]}>
                       <UserCheck size={15} color="#2563EB" />
                     </View>
-                    <Text style={styles.balanceLabel}>Labor</Text>
-                    <Text style={[styles.balanceValue, { color: '#2563EB' }]}>${totalLaborCost.toLocaleString()}</Text>
-                  </View>
-                  <View style={styles.balanceItem}>
-                    <View style={[styles.balanceIconContainer, { backgroundColor: '#FEF3C7' }]}>
-                      <FileText size={15} color="#F59E0B" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.balanceLabel, { flex: 0 }]}>Labor</Text>
+                      <Text style={{ fontSize: 10, color: '#9CA3AF', marginTop: 1 }}>See breakdown ↓</Text>
                     </View>
-                    <Text style={styles.balanceLabel}>Materials</Text>
-                    <Text style={[styles.balanceValue, { color: '#F59E0B' }]}>${totalMaterialCost.toLocaleString()}</Text>
+                    <Text style={[styles.balanceValue, { color: '#2563EB' }]}>${totalLaborCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</Text>
                   </View>
-                  <View style={[styles.balanceItem, { borderBottomWidth: 0 }]}>
-                    <View style={[styles.balanceIconContainer, { backgroundColor: '#E9D5FF' }]}>
-                      <DollarSign size={15} color="#9333EA" />
+
+                  {/* Dynamic expense categories */}
+                  {costBreakdownItems.map(([type, amount], index) => {
+                    const cfg = EXPENSE_CATEGORY_CONFIG[type] ?? FALLBACK_CATEGORY_COLORS[index % FALLBACK_CATEGORY_COLORS.length];
+                    const isLast = index === costBreakdownItems.length - 1;
+                    return (
+                      <View key={type} style={[styles.balanceItem, isLast && { borderBottomWidth: 0 }]}>
+                        <View style={[styles.balanceIconContainer, { backgroundColor: cfg.bg }]}>
+                          <DollarSign size={15} color={cfg.color} />
+                        </View>
+                        <Text style={styles.balanceLabel}>{type}</Text>
+                        <Text style={[styles.balanceValue, { color: cfg.color }]}>${amount.toLocaleString()}</Text>
+                      </View>
+                    );
+                  })}
+
+                  {costBreakdownItems.length === 0 && (
+                    <View style={[styles.balanceItem, { borderBottomWidth: 0 }]}>
+                      <Text style={[styles.balanceLabel, { color: '#9CA3AF', fontStyle: 'italic' }]}>No expenses recorded</Text>
                     </View>
-                    <Text style={styles.balanceLabel}>Other Costs</Text>
-                    <Text style={[styles.balanceValue, { color: '#9333EA' }]}>
-                      ${Math.max(0, totalJobCost - totalSubcontractorCost - totalLaborCost - totalMaterialCost).toLocaleString()}
-                    </Text>
-                  </View>
+                  )}
                 </View>
 
                 {/* Payment & Profit */}
@@ -3358,13 +3428,9 @@ export default function ProjectDetailScreen() {
           </View>
         );
 
-      case 'videos':
+      case 'videos': {
         const allInspectionVideos = inspectionVideosData;
-
-        // Extract client name from project name (format: "Client Name - Estimate Name")
         const projectClientName = project.name.split(' - ')[0].trim();
-
-        // Filter videos to only show those belonging to this project's client
         const clientVideos = allInspectionVideos.filter(v =>
           v.clientName.toLowerCase() === projectClientName.toLowerCase() &&
           v.status === 'completed' &&
@@ -3395,11 +3461,7 @@ export default function ProjectDetailScreen() {
                 </View>
               </View>
 
-              {false ? (
-                <View style={styles.emptyState}>
-                  <Text style={styles.loadingText}>Loading videos...</Text>
-                </View>
-              ) : clientVideos.length === 0 ? (
+              {clientVideos.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Camera size={48} color="#9CA3AF" />
                   <Text style={styles.emptyStateTitle}>No inspection videos yet</Text>
@@ -3410,48 +3472,36 @@ export default function ProjectDetailScreen() {
               ) : (
                 <View style={styles.photosGallery}>
                   <Text style={styles.photosGalleryTitle}>Client Videos</Text>
-                  <View style={styles.videosGalleryGrid}>
+
+                  <View style={styles.videoListContainer}>
                     {displayedVideos.map((video) => (
                       <TouchableOpacity
                         key={video.id}
-                        style={styles.videoGalleryItem}
+                        style={styles.videoListItem}
+                        activeOpacity={0.7}
                         onPress={async () => {
                           try {
-                            console.log('[Videos] Getting video view URL for:', video.videoUrl);
                             const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
                             const response = await fetch(`${apiUrl}/api/get-video-view-url?videoKey=${encodeURIComponent(video.videoUrl)}`);
-
-                            if (!response.ok) {
-                              throw new Error('Failed to get video URL');
-                            }
-
+                            if (!response.ok) throw new Error('Failed to get video URL');
                             const result = await response.json();
-                            console.log('[Videos] Got video view URL');
-
-                            if (result.viewUrl) {
-                              Linking.openURL(result.viewUrl);
-                            }
+                            if (result.viewUrl) Linking.openURL(result.viewUrl);
                           } catch (error: any) {
-                            console.error('[Videos] Error loading video:', error);
                             Alert.alert('Error', error.message || 'Failed to load video');
                           }
                         }}
                       >
-                        <View style={styles.videoGalleryThumbnail}>
-                          <Camera size={40} color="#FFFFFF" />
-                          <View style={styles.videoPlayOverlay}>
-                            <View style={styles.videoPlayButton}>
-                              <Text style={styles.videoPlayIcon}>▶</Text>
-                            </View>
+                        <View style={styles.videoListThumbnail}>
+                          <Camera size={24} color="#FFFFFF" />
+                          <View style={styles.videoListPlayBtn}>
+                            <Text style={styles.videoPlayIcon}>▶</Text>
                           </View>
                         </View>
-                        <View style={styles.videoGalleryInfo}>
-                          <Text style={styles.videoGalleryClient}>{video.clientName}</Text>
+                        <View style={styles.videoListInfo}>
+                          <Text style={styles.videoGalleryClient} numberOfLines={1}>{video.clientName}</Text>
                           <Text style={styles.videoGalleryDate}>
                             {new Date(video.completedAt || video.createdAt).toLocaleDateString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric'
+                              month: 'short', day: 'numeric', year: 'numeric'
                             })}
                           </Text>
                           {video.videoSize && (
@@ -3460,6 +3510,7 @@ export default function ProjectDetailScreen() {
                             </Text>
                           )}
                         </View>
+                        <ChevronRight size={18} color="#9CA3AF" />
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -3480,6 +3531,7 @@ export default function ProjectDetailScreen() {
             </ScrollView>
           </View>
         );
+      }
 
       case 'reports':
         const handleGenerateProjectReport = (type: 'administrative' | 'expenses' | 'time-tracking' | 'daily-logs') => {
@@ -6408,6 +6460,46 @@ const styles = StyleSheet.create({
   videoGallerySize: {
     fontSize: 11,
     color: '#9CA3AF',
+  },
+  videoListContainer: {
+    gap: 10,
+  },
+  videoListItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    gap: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  videoListThumbnail: {
+    width: 64,
+    height: 64,
+    borderRadius: 10,
+    backgroundColor: '#2563EB',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexShrink: 0,
+    position: 'relative' as const,
+  },
+  videoListPlayBtn: {
+    position: 'absolute' as const,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  videoListInfo: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   pendingVideosList: {
     gap: 12,

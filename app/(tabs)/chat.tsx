@@ -1781,8 +1781,9 @@ export default function ChatScreen() {
             ]}
           >
             <TouchableOpacity
-              style={styles.newChatButton}
-              onPress={() => setShowNewChatModal(true)}
+              style={[styles.newChatButton, user?.isActive === false && styles.newChatButtonDisabled]}
+              onPress={user?.isActive === false ? undefined : () => setShowNewChatModal(true)}
+              disabled={user?.isActive === false}
             >
               <Text style={styles.newChatButtonText}>Start New Chat</Text>
             </TouchableOpacity>
@@ -2663,6 +2664,9 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "600" as const,
+  },
+  newChatButtonDisabled: {
+    opacity: 0.4,
   },
   searchContainer: {
     flexDirection: "row",

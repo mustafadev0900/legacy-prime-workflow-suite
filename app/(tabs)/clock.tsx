@@ -51,13 +51,15 @@ export default function ClockScreen() {
       if (!user?.id) return;
       supabase
         .from('users')
-        .select('hourly_rate, rate_change_request')
+        .select('hourly_rate, rate_change_request, role, is_active')
         .eq('id', user.id)
         .single()
         .then(({ data }) => {
           if (!data) return;
           setUser({
             ...user,
+            role: data.role ?? user.role,
+            isActive: data.is_active ?? user.isActive,
             hourlyRate: data.hourly_rate != null ? Number(data.hourly_rate) : undefined,
             rateChangeRequest: data.rate_change_request ?? undefined,
           });
@@ -70,6 +72,8 @@ export default function ClockScreen() {
       setSelectedProjectId(params.projectId);
     }
   }, [params.projectId]);
+
+  const isPending = user != null && user.isActive === false;
 
   const activeProjects = projects.filter(p => p.status === 'active');
   const selectedProject = selectedProjectId ? projects.find(p => p.id === selectedProjectId) : null;
@@ -275,6 +279,7 @@ export default function ClockScreen() {
                   projectId={effectiveProject?.id}
                   projectName={effectiveProject?.name}
                   officeRole={effectiveOfficeRole ?? undefined}
+                  isPending={isPending}
                 />
               </View>
             </View>
@@ -284,6 +289,7 @@ export default function ClockScreen() {
                 projectId={effectiveProject?.id}
                 projectName={effectiveProject?.name}
                 officeRole={effectiveOfficeRole ?? undefined}
+                isPending={isPending}
               />
             </View>
           )}

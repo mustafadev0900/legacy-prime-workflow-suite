@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { sendNotification } from './lib/sendNotification.js';
 import { notifyCompanyAdmins } from './lib/notifyAdmins.js';
 import { applyCors } from './lib/cors.js';
+import { realtimeBroadcast } from './lib/realtimeBroadcast.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
@@ -77,6 +78,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     console.log('[Approve User] Success. Total time:', Date.now() - startTime, 'ms');
+
+    // Broadcast instant activation to the employee's live session via REST
+    // (channel.send() without subscribe() has no open WebSocket in serverless)
+    try {
+      await realtimeBroadcast(supabaseUrl, supabaseKey, `user-permissions:${data.id}`, 'activation-update', { isActive: true });
+      console.log('[Approve User] Activation broadcast sent to user:', data.id);
+    } catch (e) {
+      console.warn('[Approve User] Activation broadcast failed (non-fatal):', e);
+    }
 
     // Notify the approved employee their account is now active
     try {

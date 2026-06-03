@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from './lib/auth-helper.js';
+import { realtimeBroadcast } from './lib/realtimeBroadcast.js';
 
 export const config = {
   maxDuration: 15,
@@ -113,14 +114,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // postgres_changes requires the table to be in the supabase_realtime
     // publication. Broadcast is publication-free and fires immediately.
     try {
-      await supabase.channel(`user-permissions:${userId}`).send({
-        type: 'broadcast',
-        event: 'permission-update',
-        payload: { customPermissions: data.custom_permissions },
-      });
+      await realtimeBroadcast(supabaseUrl, supabaseServiceKey, `user-permissions:${userId}`, 'permission-update', { customPermissions: data.custom_permissions });
       console.log('[Update Permissions] Broadcast sent to user:', userId);
     } catch (broadcastErr) {
-      // Non-fatal — the employee will get the updated permissions on next login
       console.warn('[Update Permissions] Broadcast failed (non-fatal):', broadcastErr);
     }
 

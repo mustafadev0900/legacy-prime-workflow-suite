@@ -136,7 +136,7 @@ export default function LaborScreen() {
 
   const [period, setPeriod] = useState<Period>('all');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
-  const [rawEntries, setRawEntries] = useState<(ClockEntryRaw & { employeeName: string })[]>([]);
+  const [rawEntries, setRawEntries] = useState<(ClockEntryRaw & { employeeName: string; currentRate: number | null })[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -150,7 +150,7 @@ export default function LaborScreen() {
         .select('*')
         .eq('project_id', id as string)
         .order('clock_in', { ascending: false }),
-      supabase.from('users').select('id, name'),
+      supabase.from('users').select('id, name, hourly_rate'),
     ]).then(([{ data: clockData, error: clockErr }, { data: usersData, error: usersErr }]) => {
       if (clockErr || usersErr) {
         setFetchError((clockErr || usersErr)!.message);
@@ -158,10 +158,15 @@ export default function LaborScreen() {
         return;
       }
       const namesMap = new Map<string, string>();
-      (usersData || []).forEach((u: { id: string; name: string }) => namesMap.set(u.id, u.name));
+      const ratesMap = new Map<string, number>();
+      (usersData || []).forEach((u: { id: string; name: string; hourly_rate: number | null }) => {
+        namesMap.set(u.id, u.name);
+        if (u.hourly_rate != null) ratesMap.set(u.id, u.hourly_rate);
+      });
       const enriched = (clockData || []).map((e: ClockEntryRaw) => ({
         ...e,
         employeeName: namesMap.get(e.employee_id) || 'Unknown',
+        currentRate: ratesMap.get(e.employee_id) ?? null,
       }));
       setRawEntries(enriched);
       setLoading(false);
@@ -183,7 +188,8 @@ export default function LaborScreen() {
     filteredEntries.forEach(entry => {
       const isActive = !entry.clock_out && new Date(entry.clock_in).getTime() > twentyFourHoursAgo;
       const netHours = calcNetHours(entry);
-      const rate = entry.hourly_rate;
+      // Fall back to current user rate for legacy entries (no snapshot) — matches clock screen
+      const rate = entry.hourly_rate ?? entry.currentRate ?? null;
       const cost = rate != null ? netHours * rate : 0;
 
       const session: Session = {
@@ -487,7 +493,7 @@ export default function LaborScreen() {
                 <Clock size={18} color="#10B981" />
                 <View style={{ marginLeft: 8 }}>
                   <Text style={[styles.summaryStripValue, { color: '#10B981' }]}>
-                    {grandTotalHours.toFixed(1)}h
+                    {grandTotalHours.toFixed(2)}h
                   </Text>
                   <Text style={styles.summaryStripLabel}>Total Hours</Text>
                 </View>
@@ -497,7 +503,7 @@ export default function LaborScreen() {
                 <DollarSign size={18} color="#F59E0B" />
                 <View style={{ marginLeft: 8 }}>
                   <Text style={[styles.summaryStripValue, { color: '#F59E0B' }]}>
-                    ${grandTotalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    ${grandTotalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </Text>
                   <Text style={styles.summaryStripLabel}>Total Cost</Text>
                 </View>
@@ -532,13 +538,13 @@ export default function LaborScreen() {
                         <Text style={styles.empCardName} numberOfLines={1}>{emp.name}</Text>
                         <Text style={styles.empCardCost}>
                           {emp.totalCost > 0
-                            ? `$${emp.totalCost.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                            ? `$${emp.totalCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                             : '—'}
                         </Text>
                       </View>
                       <View style={styles.empCardBottom}>
                         <Text style={styles.empCardMeta}>
-                          {emp.totalHours.toFixed(1)}h
+                          {emp.totalHours.toFixed(2)}h
                           {' · '}
                           {emp.sessionCount} session{emp.sessionCount !== 1 ? 's' : ''}
                         </Text>
@@ -602,8 +608,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
   },
   backButton: {
     marginRight: 12,
@@ -627,6 +631,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 12,
     gap: 8,
     borderBottomWidth: 1,

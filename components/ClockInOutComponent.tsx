@@ -51,6 +51,7 @@ function fmtSec(sec: number): string {
   return `${m}m`;
 }
 import {
+  AlertTriangle,
   Clock,
   CheckCircle,
   Coffee,
@@ -175,6 +176,7 @@ interface ClockInOutComponentProps {
   projectName?: string;
   officeRole?: string;
   compact?: boolean;
+  isPending?: boolean;
 }
 
 export default function ClockInOutComponent({
@@ -182,6 +184,7 @@ export default function ClockInOutComponent({
   projectName,
   officeRole,
   compact = false,
+  isPending = false,
 }: ClockInOutComponentProps) {
   const isOfficeMode = !!officeRole;
   const {
@@ -1053,8 +1056,9 @@ export default function ClockInOutComponent({
                 </TouchableOpacity>
               )}
               <TouchableOpacity
-                style={styles.clockOutButtonCompact}
-                onPress={handleClockOut}
+                style={[styles.clockOutButtonCompact, isPending && styles.buttonDisabled]}
+                onPress={isPending ? undefined : handleClockOut}
+                disabled={isPending}
               >
                 <Text style={styles.clockOutButtonText}>Clock Out</Text>
               </TouchableOpacity>
@@ -1062,8 +1066,9 @@ export default function ClockInOutComponent({
           </View>
         ) : (
           <TouchableOpacity
-            style={styles.clockInButtonCompact}
-            onPress={handleClockIn}
+            style={[styles.clockInButtonCompact, isPending && styles.buttonDisabled]}
+            onPress={isPending ? undefined : handleClockIn}
+            disabled={isPending}
           >
             <Text style={styles.clockInButtonText}>Clock In</Text>
           </TouchableOpacity>
@@ -1514,8 +1519,9 @@ export default function ClockInOutComponent({
               </TouchableOpacity>
             )}
             <TouchableOpacity
-              style={styles.clockOutButton}
-              onPress={handleClockOut}
+              style={[styles.clockOutButton, isPending && styles.buttonDisabled]}
+              onPress={isPending ? undefined : handleClockOut}
+              disabled={isPending}
             >
               <CheckCircle size={20} color="#FFFFFF" />
               <Text style={styles.clockOutButtonText}>Clock Out</Text>
@@ -1523,10 +1529,24 @@ export default function ClockInOutComponent({
           </View>
         </View>
       ) : (
-        <TouchableOpacity style={styles.clockInButton} onPress={handleClockIn}>
-          <Clock size={24} color="#FFFFFF" />
-          <Text style={styles.clockInButtonText}>Clock In</Text>
-        </TouchableOpacity>
+        <>
+          {isPending && (
+            <View style={styles.pendingBanner}>
+              <AlertTriangle size={16} color="#92400E" style={{ marginRight: 8, flexShrink: 0 }} />
+              <Text style={styles.pendingBannerText}>
+                Account pending admin approval. Actions will be enabled once approved.
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={[styles.clockInButton, isPending && styles.buttonDisabled]}
+            onPress={isPending ? undefined : handleClockIn}
+            disabled={isPending}
+          >
+            <Clock size={24} color="#FFFFFF" />
+            <Text style={styles.clockInButtonText}>Clock In</Text>
+          </TouchableOpacity>
+        </>
       )}
 
       <View style={styles.statsCard}>
@@ -2694,5 +2714,24 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "800" as const,
     color: "#2563EB",
+  },
+  buttonDisabled: {
+    opacity: 0.4,
+  },
+  pendingBanner: {
+    flexDirection: "row" as const,
+    alignItems: "flex-start" as const,
+    backgroundColor: "#FEF3C7",
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: "#F59E0B",
+  },
+  pendingBannerText: {
+    flex: 1,
+    fontSize: 13,
+    color: "#92400E",
+    lineHeight: 18,
   },
 });
