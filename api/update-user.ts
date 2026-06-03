@@ -2,6 +2,15 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { applyCors } from './lib/cors.js';
 import { realtimeBroadcast } from './lib/realtimeBroadcast.js';
+import { sendNotification } from './lib/sendNotification.js';
+
+const ROLE_DISPLAY: Record<string, string> = {
+  'super-admin': 'Super Admin',
+  'admin': 'Admin',
+  'salesperson': 'Salesperson',
+  'field-employee': 'Field Employee',
+  'employee': 'Employee',
+};
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
@@ -93,6 +102,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('[Update User] Role broadcast sent to user:', userId);
       } catch (e) {
         console.warn('[Update User] Role broadcast failed (non-fatal):', e);
+      }
+
+      // Send push + in-app notification to the employee about their new role
+      try {
+        const roleName = ROLE_DISPLAY[data.role] ?? data.role;
+        await sendNotification(supabase, {
+          userId,
+          companyId: data.company_id,
+          type: 'general',
+          title: 'Your role has been updated',
+          message: `Your account role has been changed to ${roleName}.`,
+          data: { role: data.role },
+        });
+        console.log('[Update User] Role notification sent to user:', userId);
+      } catch (e) {
+        console.warn('[Update User] Role notification failed (non-fatal):', e);
       }
     }
 

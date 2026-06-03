@@ -1,7 +1,10 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
-import { getActorName, notifyCompanyAdmins } from '../backend/lib/notifyAdmins.js';
-import { applyCors } from './lib/cors.js';
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { createClient } from "@supabase/supabase-js";
+import {
+  getActorName,
+  notifyCompanyAdmins,
+} from "../backend/lib/notifyAdmins.js";
+import { applyCors } from "./lib/cors.js";
 
 export const config = {
   maxDuration: 30,
@@ -9,26 +12,36 @@ export const config = {
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (applyCors(req, res)) return;
-  console.log('[ClockOut] ===== API ROUTE STARTED =====');
-  console.log('[ClockOut] Method:', req.method);
+  console.log("[ClockOut] ===== API ROUTE STARTED =====");
+  console.log("[ClockOut] Method:", req.method);
 
   // Only allow POST
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const { entryId, workPerformed, lunchBreaks, category, clockOutLocation, clockOut } = req.body;
+    const {
+      entryId,
+      workPerformed,
+      lunchBreaks,
+      category,
+      clockOutLocation,
+      clockOut,
+    } = req.body;
 
-    console.log('[ClockOut] Clocking out entry:', entryId);
-    console.log('[ClockOut] clockOutLocation received:', clockOutLocation
-      ? `lat=${clockOutLocation.latitude ?? clockOutLocation.lat}, lng=${clockOutLocation.longitude ?? clockOutLocation.lng}`
-      : 'NOT PROVIDED');
+    console.log("[ClockOut] Clocking out entry:", entryId);
+    console.log(
+      "[ClockOut] clockOutLocation received:",
+      clockOutLocation
+        ? `lat=${clockOutLocation.latitude ?? clockOutLocation.lat}, lng=${clockOutLocation.longitude ?? clockOutLocation.lng}`
+        : "NOT PROVIDED",
+    );
 
     // Validate required fields
     if (!entryId) {
-      console.log('[ClockOut] Missing required field: entryId');
-      return res.status(400).json({ error: 'Missing required field: entryId' });
+      console.log("[ClockOut] Missing required field: entryId");
+      return res.status(400).json({ error: "Missing required field: entryId" });
     }
 
     // Initialize Supabase client
@@ -36,13 +49,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      console.error('[ClockOut] Missing Supabase credentials');
-      return res.status(500).json({ error: 'Server configuration error' });
+      console.error("[ClockOut] Missing Supabase credentials");
+      return res.status(500).json({ error: "Server configuration error" });
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    console.log('[ClockOut] Updating database...');
+    console.log("[ClockOut] Updating database...");
     const updateStart = Date.now();
 
     const updateData: any = {
@@ -68,15 +81,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const lng = clockOutLocation?.longitude ?? clockOutLocation?.lng ?? 0;
     if (clockOutLocation && (lat !== 0 || lng !== 0)) {
       updateData.clock_out_location = { latitude: lat, longitude: lng };
-      console.log('[ClockOut] Storing clock_out_location:', lat, lng);
+      console.log("[ClockOut] Storing clock_out_location:", lat, lng);
     } else {
-      console.warn('[ClockOut] clock_out_location NOT stored — location is (0,0) or missing. lat:', lat, 'lng:', lng);
+      console.warn(
+        "[ClockOut] clock_out_location NOT stored — location is (0,0) or missing. lat:",
+        lat,
+        "lng:",
+        lng,
+      );
     }
 
     const { data, error } = await supabase
-      .from('clock_entries')
+      .from("clock_entries")
       .update(updateData)
-      .eq('id', entryId)
+      .eq("id", entryId)
       .select()
       .single();
 
@@ -84,41 +102,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[ClockOut] Database UPDATE completed in ${updateDuration}ms`);
 
     if (error) {
-      console.error('[ClockOut] Database error:', error);
+      console.error("[ClockOut] Database error:", error);
       return res.status(500).json({ error: error.message });
     }
 
     if (!data) {
-      return res.status(404).json({ error: 'Clock entry not found' });
+      return res.status(404).json({ error: "Clock entry not found" });
     }
 
-    console.log('[ClockOut] ===== API ROUTE COMPLETED =====');
-    console.log('[ClockOut] Clock entry updated:', data.id);
+    console.log("[ClockOut] ===== API ROUTE COMPLETED =====");
+    console.log("[ClockOut] Clock entry updated:", data.id);
 
     // Remove live location row so the employee disappears from project maps immediately.
-    await supabase.from('worker_live_locations').delete().eq('employee_id', data.employee_id);
+    await supabase
+      .from("worker_live_locations")
+      .delete()
+      .eq("employee_id", data.employee_id);
 
     // Notify admins — must complete BEFORE responding (Vercel freezes after res.json)
     try {
       const clockInMs = new Date(data.clock_in).getTime();
       const clockOutMs = new Date(data.clock_out).getTime();
-      const hoursWorked = ((clockOutMs - clockInMs) / (1000 * 60 * 60)).toFixed(1);
+      const totalSeconds = Math.floor((clockOutMs - clockInMs) / 1000);
+      const secs = totalSeconds % 60;
+      const totalMins = Math.floor(totalSeconds / 60);
+      const mins = totalMins % 60;
+      const hrs = Math.floor(totalMins / 60);
+      const hoursWorked = hrs > 0
+        ? `${hrs}h ${mins}m`
+        : mins > 0
+          ? `${mins}m ${secs}sec`
+          : `${secs}sec`;
 
-      const [name, projectRes] = await Promise.all([
-        getActorName(supabase, data.employee_id),
-        supabase.from('projects').select('name').eq('id', data.project_id).single(),
-      ]);
-      const projectName = projectRes.data?.name ?? 'a project';
+      const name = await getActorName(supabase, data.employee_id);
+      let clockOutMessage: string;
+      if (data.office_role) {
+        clockOutMessage = `${name} clocked out as **${data.office_role}** after ${hoursWorked}`;
+      } else if (data.project_id) {
+        const projectRes = await supabase
+          .from("projects")
+          .select("name")
+          .eq("id", data.project_id)
+          .single();
+        const projectName = projectRes.data?.name ?? "a project";
+        clockOutMessage = `${name} clocked out from **${projectName} project** after ${hoursWorked}`;
+      } else {
+        clockOutMessage = `${name} clocked out after ${hoursWorked}`;
+      }
       await notifyCompanyAdmins(supabase, {
         companyId: data.company_id,
         actorId: data.employee_id,
-        type: 'general',
-        title: 'Employee Clocked Out',
-        message: `${name} clocked out of ${projectName} after ${hoursWorked}h`,
-        data: { projectId: data.project_id, clockEntryId: data.id },
+        type: "general",
+        title: "Employee Clocked Out",
+        message: clockOutMessage,
+        data: {
+          projectId: data.project_id || null,
+          officeRole: data.office_role || null,
+          clockEntryId: data.id,
+        },
       });
     } catch (e) {
-      console.warn('[ClockOut] Admin notify failed (non-fatal):', e);
+      console.warn("[ClockOut] Admin notify failed (non-fatal):", e);
     }
 
     return res.status(200).json({
@@ -138,9 +182,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updateDuration,
     });
   } catch (error: any) {
-    console.error('[ClockOut] Unexpected error:', error);
+    console.error("[ClockOut] Unexpected error:", error);
     return res.status(500).json({
-      error: error.message || 'Unknown error',
+      error: error.message || "Unknown error",
     });
   }
 }
