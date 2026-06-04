@@ -1,16 +1,19 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated, Dimensions, Platform } from 'react-native';
-import Logo from './Logo';
+import React, { useEffect, useRef } from "react";
+import { View, StyleSheet, Animated, Dimensions, Platform } from "react-native";
+import Logo from "./Logo";
 
-const { width, height } = Dimensions.get('window');
+const { width, height } = Dimensions.get("window");
 
 interface AnimatedSplashScreenProps {
   onAnimationComplete?: () => void;
 }
 
-export default function AnimatedSplashScreen({ onAnimationComplete }: AnimatedSplashScreenProps) {
+export default function AnimatedSplashScreen({
+  onAnimationComplete,
+}: AnimatedSplashScreenProps) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.3)).current;
+  //first
 
   useEffect(() => {
     // Sequence: Fade in + Scale up
@@ -18,13 +21,13 @@ export default function AnimatedSplashScreen({ onAnimationComplete }: AnimatedSp
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 800,
-        useNativeDriver: Platform.OS !== 'web',
+        useNativeDriver: Platform.OS !== "web",
       }),
       Animated.spring(scaleAnim, {
         toValue: 1,
         tension: 50,
         friction: 7,
-        useNativeDriver: Platform.OS !== 'web',
+        useNativeDriver: Platform.OS !== "web",
       }),
     ]).start(() => {
       // Wait a bit then call completion
@@ -54,12 +57,12 @@ export default function AnimatedSplashScreen({ onAnimationComplete }: AnimatedSp
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
   },
   logoContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
