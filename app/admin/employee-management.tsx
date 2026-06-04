@@ -3,7 +3,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Stack, router, useFocusEffect } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
 import { User, ClockEntry } from '@/types';
-import { Clock, DollarSign, CheckCircle, XCircle, FileText, Edit2, Download, HardHat, ClipboardList, Send, Megaphone, Phone, Users, Building2, Monitor, Truck, MoreHorizontal, ChevronDown, Calendar, Tag } from 'lucide-react-native';
+import { Clock, DollarSign, CheckCircle, XCircle, FileText, Edit2, Download, HardHat, ClipboardList, Send, Megaphone, Phone, Users, Building2, Monitor, Truck, MoreHorizontal, ChevronDown, ChevronLeft, Calendar, Tag } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -626,7 +626,7 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
           <XCircle size={48} color="#EF4444" />
           <Text style={styles.errorTitle}>Access Denied</Text>
           <Text style={styles.errorText}>You don&apos;t have permission to access this page.</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/settings')}>
             <Text style={styles.backButtonText}>Go Back</Text>
           </TouchableOpacity>
         </View>
@@ -640,8 +640,8 @@ ${processedRows.some(r => r.isEstimatedRate) ? `<p style="font-size:10px;color:#
         title: 'Employee Management',
         headerShown: true,
         headerLeft: () => (
-          <TouchableOpacity onPress={() => router.back()} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
-            <Text style={{ fontSize: 16, color: '#2563EB' }}>‹ Back</Text>
+          <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.replace('/(tabs)/settings')} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
+            <ChevronLeft size={24} color="#2563EB" />
           </TouchableOpacity>
         ),
       }} />
