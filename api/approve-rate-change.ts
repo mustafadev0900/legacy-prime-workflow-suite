@@ -82,7 +82,7 @@ export default async function handler(req: any, res: any) {
     await sendNotification(supabase, {
       userId: employeeId,
       companyId: userRow.company_id,
-      type: 'general',
+      type: 'rate-change',
       title: approve ? 'Hourly Rate Updated' : 'Rate Change Rejected',
       message: approve
         ? `Your hourly rate has been set to $${Number(newRate).toFixed(2)}/hr`

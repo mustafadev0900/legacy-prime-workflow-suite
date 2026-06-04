@@ -392,6 +392,9 @@ export function useNotificationSetup(
         case 'change-order':
           router.push(data.projectId ? `/project/${data.projectId}` as any : '/(tabs)/dashboard');
           break;
+        case 'rate-change':
+          router.push('/(tabs)/settings');
+          break;
         case 'general':
           router.push('/(tabs)/dashboard');
           break;
@@ -463,6 +466,9 @@ export function useNotificationSetup(
             break;
           case 'change-order':
             router.push(data?.projectId ? `/project/${data.projectId}` as any : '/(tabs)/dashboard');
+            break;
+          case 'rate-change':
+            router.push('/(tabs)/settings');
             break;
           case 'general':
             router.push('/(tabs)/dashboard');
