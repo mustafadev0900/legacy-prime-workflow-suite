@@ -8,7 +8,8 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useState, useRef, useEffect, useCallback } from 'react';
 // Removed Rork AI dependency - using OpenAI directly
 import { AudioModule, useAudioRecorder, createAudioPlayer, RecordingPresets, CompatAudioPlayer as AudioPlayer } from '@/lib/expo-audio-compat';
-import { usePathname, useRouter } from 'expo-router';
+import { usePathname } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useApp } from '@/contexts/AppContext';
 import { usePermissions } from '@/hooks/usePermissions';
 // Removed tRPC dependency - using OpenAI API directly
@@ -784,7 +785,7 @@ export default function GlobalAIChatSimple({ currentPageContext, inline = false 
     items?: string;
   } | null>(null);
   const pathname = usePathname();
-  const router = useRouter();
+  const router = useSafeRouter();
   const isOnChatScreen = pathname === '/chat';
   const isOnAuthScreen = pathname?.includes('/login') || pathname?.includes('/subscription') || pathname?.includes('/signup');
   const { user } = useApp();

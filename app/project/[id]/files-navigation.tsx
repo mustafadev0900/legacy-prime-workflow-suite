@@ -1,5 +1,6 @@
 import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useApp } from '@/contexts/AppContext';
 import { Folder, Image as ImageIcon, Receipt, FileText, FileCheck, FileSignature, File as FileIcon, ArrowLeft, Plus, Upload, X, Camera, Trash2, ChevronRight, ChevronLeft, LayoutGrid, LayoutList, Monitor, Download, ZoomIn, ZoomOut } from 'lucide-react-native';
@@ -93,7 +94,7 @@ type ViewableImageItem = {
 export default function FilesNavigationScreen() {
   const { t } = useTranslation();
   const { id } = useLocalSearchParams();
-  const router = useRouter();
+  const router = useSafeRouter();
   const { projects, projectFiles, photos, expenses, addProjectFile, addPhoto, addExpense, deletePhoto, deleteExpense, deleteProjectFile, photoCategories, company } = useApp();
 
   const [inspectionVideos, setInspectionVideos] = useState<any[]>([]);

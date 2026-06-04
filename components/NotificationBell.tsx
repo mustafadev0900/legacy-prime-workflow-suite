@@ -1,10 +1,10 @@
 import { Bell } from 'lucide-react-native';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 
 export default function NotificationBell() {
-  const router = useRouter();
+  const router = useSafeRouter();
   const { getNotifications } = useApp();
   const unreadCount = getNotifications(true).length;
 

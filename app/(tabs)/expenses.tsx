@@ -1,7 +1,8 @@
 import { ActivityIndicator, Alert, InputAccessoryView, Keyboard, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import SkeletonBox from '@/components/SkeletonBox';
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useApp } from '@/contexts/AppContext';
 // priceListCategories now comes from AppContext
 import * as ImagePicker from 'expo-image-picker';
@@ -17,7 +18,7 @@ const KEYBOARD_ACCESSORY_ID = 'expenses-keyboard-done';
 
 export default function ExpensesScreen() {
   const { expenses, addExpense, projects, user, refreshExpenses, priceListCategories, isLoading, isCompanyReloading } = useApp();
-  const router = useRouter();
+  const router = useSafeRouter();
 
   // Field employees must submit expenses via their project screen, not this dashboard tab.
   useEffect(() => {

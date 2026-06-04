@@ -1,11 +1,11 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
-import { useRouter } from 'expo-router';
 import { useApp } from '@/contexts/AppContext';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 
 export default function UserAvatar() {
   const { user } = useApp();
-  const router = useRouter();
+  const router = useSafeRouter();
 
   if (!user) {
     return null;

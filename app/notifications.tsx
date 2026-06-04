@@ -9,7 +9,8 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { ArrowLeft, Bell, BellOff, CheckCheck } from 'lucide-react-native';
 import { useApp } from '@/contexts/AppContext';
 import type { Notification } from '@/types';
@@ -95,7 +96,7 @@ function NotificationRow({ notification, onPress }: NotificationRowProps) {
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function NotificationsScreen() {
-  const router = useRouter();
+  const router = useSafeRouter();
   const { getNotifications, markNotificationRead, markAllNotificationsRead, refreshNotifications, loadMoreNotifications, hasMoreNotifications, projects } = useApp();
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);

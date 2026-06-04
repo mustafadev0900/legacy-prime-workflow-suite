@@ -1,4 +1,5 @@
-import { Tabs, useRouter, useSegments } from "expo-router";
+import { Tabs, useSegments } from "expo-router";
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { LayoutDashboard, Users, Clock, DollarSign, Camera, Calendar, MessageSquare, Settings, HardHat, Menu, ArrowLeft } from "lucide-react-native";
 import React, { useEffect } from "react";
 import { useTranslation } from 'react-i18next';
@@ -11,7 +12,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 
 // Back button component for hidden tab screens
 function BackButton() {
-  const router = useRouter();
+  const router = useSafeRouter();
   return (
     <TouchableOpacity
       onPress={() => {
@@ -44,7 +45,7 @@ export default function TabLayout() {
   const { t } = useTranslation();
   const { user, isLoading } = useApp();
   const { hasFeatureAccess } = usePermissions();
-  const router = useRouter();
+  const router = useSafeRouter();
   const segments = useSegments();
   const [navigationReady, setNavigationReady] = React.useState(false);
 

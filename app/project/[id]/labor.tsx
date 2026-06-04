@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { ArrowLeft, Clock, DollarSign, Users, ChevronRight } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useApp } from '@/contexts/AppContext';
@@ -128,7 +129,7 @@ const PERIOD_LABELS: Record<Period, string> = {
 
 export default function LaborScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const router = useSafeRouter();
   const insets = useSafeAreaInsets();
   const { projects } = useApp();
 

@@ -62,7 +62,7 @@ import {
   LogOut,
 } from "lucide-react-native";
 import * as Location from "expo-location";
-import { useRouter } from "expo-router";
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 
 /** Fetches the user's current GPS position at the moment it is called.
  *  Tries up to two attempts before giving up so transient failures don't
@@ -196,7 +196,7 @@ export default function ClockInOutComponent({
     addExpense,
     expenses,
   } = useApp();
-  const router = useRouter();
+  const router = useSafeRouter();
   const [currentEntry, setCurrentEntry] = useState<ClockEntry | null>(null);
   const [showClockOutModal, setShowClockOutModal] = useState<boolean>(false);
   const [isClockingOut, setIsClockingOut] = useState(false);

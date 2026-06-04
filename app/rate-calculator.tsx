@@ -1,6 +1,6 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, Platform } from 'react-native';
 import { useApp } from '@/contexts/AppContext';
-import { useRouter } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -26,7 +26,7 @@ const DEFAULT_SETTINGS: RateCalcSettings = {
 
 export default function RateCalculatorScreen() {
   const { expenses, company } = useApp();
-  const router = useRouter();
+  const router = useSafeRouter();
   const insets = useSafeAreaInsets();
 
   // Rate calculator settings

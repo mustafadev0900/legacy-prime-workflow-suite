@@ -12,7 +12,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { uriToBase64 } from '@/lib/upload-utils';
 import * as Print from 'expo-print';
 import * as MailComposer from 'expo-mail-composer';
-import { useRouter } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { createRorkTool, useRorkAgent } from '@rork-ai/toolkit-sdk';
 import { sendEstimate as sendEstimateUtil } from '@/utils/sendEstimate';
 import { z } from 'zod';
@@ -118,7 +118,7 @@ export default function CRMScreen() {
   const { width: screenWidth } = useWindowDimensions();
   const isSmallScreen = screenWidth < 500;
   const isTablet = screenWidth >= 500 && screenWidth < 1100;
-  const router = useRouter();
+  const router = useSafeRouter();
   const { sendSingleSMS, sendBulkSMSMessages, isLoading: isSendingSMS } = useTwilioSMS();
   const { initiateCall, isLoadingCall } = useTwilioCalls();
   const [inspectionVideos, setInspectionVideos] = useState<any[]>([]);

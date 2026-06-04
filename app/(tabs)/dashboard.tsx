@@ -33,7 +33,7 @@ import {
   Coffee,
 } from "lucide-react-native";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import Svg, { Circle, G } from "react-native-svg";
@@ -76,7 +76,7 @@ export default function DashboardScreen() {
     isLoading,
     isCompanyReloading,
   } = useApp();
-  const router = useRouter();
+  const router = useSafeRouter();
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     if (refreshing) return;

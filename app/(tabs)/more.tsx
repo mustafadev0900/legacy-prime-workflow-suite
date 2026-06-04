@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { DollarSign, Calendar, MessageSquare, HardHat, Settings, ChevronRight } from 'lucide-react-native';
@@ -16,7 +16,7 @@ interface MenuItem {
 }
 
 export default function MoreScreen() {
-  const router = useRouter();
+  const router = useSafeRouter();
   const insets = useSafeAreaInsets();
   const { t } = useTranslation();
   const { hasFeatureAccess } = usePermissions();

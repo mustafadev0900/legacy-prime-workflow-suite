@@ -3,7 +3,8 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 import { ActivityIndicator, Alert, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useApp } from '@/contexts/AppContext';
 import { ArrowLeft, Upload, Plus, Trash2, Check, X, Ruler, Square, MapPin, Save, Sparkles, Tag, ZoomIn, ZoomOut, Download, Settings, Grid3x3, Edit3, Circle as CircleIcon, FileText, Table } from 'lucide-react-native';
 import { Image } from 'expo-image';
@@ -57,7 +58,7 @@ const ARCHITECTURAL_SCALES = [
 
 export default function TakeoffScreen() {
   const { id, clientId: clientIdParam } = useLocalSearchParams();
-  const router = useRouter();
+  const router = useSafeRouter();
   const { projects, clients, addEstimate, priceListItems, priceListCategories, addCustomPriceListItem } = useApp();
   const insets = useSafeAreaInsets();
 

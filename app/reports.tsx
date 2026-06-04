@@ -1,7 +1,8 @@
 import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useApp } from '@/contexts/AppContext';
 import { FileText, Calendar, Trash2, X, BarChart, Folder, Download, FileSpreadsheet, ArrowLeft, Home } from 'lucide-react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useState, useEffect } from 'react';
 import { Report, DailyLog } from '@/types';
 import { File, Paths } from 'expo-file-system';
@@ -16,7 +17,7 @@ export default function ReportsScreen() {
       refreshReports();
     }
   }, [company?.id]);
-  const router = useRouter();
+  const router = useSafeRouter();
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState<boolean>(false);

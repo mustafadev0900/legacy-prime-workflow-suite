@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ActivityIndicator, Alert, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as WebBrowser from 'expo-web-browser';
@@ -16,7 +17,7 @@ import { useTranslation } from 'react-i18next';
 export default function ProfileScreen() {
   const { user, company, setUser, logout } = useApp();
   const { t } = useTranslation();
-  const router = useRouter();
+  const router = useSafeRouter();
   const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
   // Local data: URI for instant preview — shown immediately after pick.
   // Avoids depending on S3 public-read access for same-session display.

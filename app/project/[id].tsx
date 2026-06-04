@@ -1,5 +1,6 @@
 import { ActivityIndicator, Alert, Dimensions, FlatList, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/contexts/AppContext';
 import DailyTasksButton from '@/components/DailyTasksButton';
@@ -100,7 +101,7 @@ const FALLBACK_CATEGORY_COLORS = [
 
 export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams();
-  const router = useRouter();
+  const router = useSafeRouter();
   const { projects, archiveProject, deleteProject, user, company, clockEntries, expenses, estimates, projectFiles, addProjectFile, deleteProjectFile, photos, addPhoto, deletePhoto, reports, addReport, refreshReports, dailyLogs = [], scheduledTasks, loadScheduledTasks, updateProject, addNotification, refreshClockEntries, companyUsers } = useApp();
 
   const [changeOrdersData, setChangeOrdersData] = useState<ChangeOrder[]>([]);

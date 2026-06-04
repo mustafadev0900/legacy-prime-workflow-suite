@@ -2,7 +2,8 @@ import { ActivityIndicator, Alert, Dimensions, FlatList, Image, Keyboard, Keyboa
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useApp } from '@/contexts/AppContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ArrowLeft, Plus, Trash2, Check, Edit2, Send, FileSignature, Eye, EyeOff, Sparkles, Camera, Mic, Paperclip, Search, X, Square, Image as ImageIcon, GripVertical } from 'lucide-react-native';
@@ -23,7 +24,7 @@ import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-nativ
 // change redeploy
 export default function EstimateScreen() {
   const { id, estimateId, clientId: clientIdParam } = useLocalSearchParams();
-  const router = useRouter();
+  const router = useSafeRouter();
   const { projects, clients, addEstimate, estimates, updateEstimate, priceListItems, priceListCategories, addCustomPriceListItem, updateCustomPriceListItem, customCategories, addCustomCategory, deleteCustomCategory, addProjectFile, company } = useApp();
   const insets = useSafeAreaInsets();
   const screenWidth = Dimensions.get('window').width;

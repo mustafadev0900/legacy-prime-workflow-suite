@@ -1,6 +1,6 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Pressable, Platform, Linking, useWindowDimensions } from 'react-native';
 import { useApp } from '@/contexts/AppContext';
-import { useRouter } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Stack, useFocusEffect } from 'expo-router';
@@ -46,7 +46,7 @@ function getWeekBounds(d: Date): [Date, Date] {
 
 export default function BusinessCostsScreen() {
   const { expenses, clockEntries, company, refreshClockEntries, refreshExpenses } = useApp();
-  const router = useRouter();
+  const router = useSafeRouter();
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
   const isTablet = screenWidth >= 768;

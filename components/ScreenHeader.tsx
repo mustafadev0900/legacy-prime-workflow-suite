@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ScreenHeaderProps {
@@ -17,7 +17,7 @@ export default function ScreenHeader({
   rightComponent,
   showBackButton = true
 }: ScreenHeaderProps) {
-  const router = useRouter();
+  const router = useSafeRouter();
   const insets = useSafeAreaInsets();
 
   const handleBack = () => {

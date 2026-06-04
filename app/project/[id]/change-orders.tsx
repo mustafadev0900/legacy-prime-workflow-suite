@@ -1,5 +1,6 @@
 import { Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowLeft, Plus, X, DollarSign, FileText, Clock, CheckCircle, XCircle, AlertCircle, Download, History } from 'lucide-react-native';
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -14,7 +15,7 @@ import { generateUUID } from '@/utils/uuid';
 
 export default function ChangeOrdersScreen() {
   const { id } = useLocalSearchParams();
-  const router = useRouter();
+  const router = useSafeRouter();
   const insets = useSafeAreaInsets();
   const { company, projects, clients, updateProject, user, addNotification } = useApp();
 

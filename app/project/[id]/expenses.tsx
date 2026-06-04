@@ -1,6 +1,7 @@
 import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useApp } from '@/contexts/AppContext';
 // priceListCategories now comes from AppContext
 import * as ImagePicker from 'expo-image-picker';
@@ -24,7 +25,7 @@ const EXPENSE_TYPE_OPTIONS = [
 
 export default function ProjectExpensesScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const router = useSafeRouter();
   const { expenses, addExpense, projects, user, company, priceListCategories, refreshExpenses } = useApp();
   const [expenseType, setExpenseType] = useState<string>('');
   const [category, setCategory] = useState<string>('');

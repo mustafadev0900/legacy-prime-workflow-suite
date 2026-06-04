@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { ArrowLeft, DollarSign, Clock, Users, Receipt } from 'lucide-react-native';
 import { supabase } from '@/lib/supabase';
 import { useApp } from '@/contexts/AppContext';
@@ -7,7 +8,7 @@ import { useMemo, useState, useEffect } from 'react';
 
 export default function ProjectCostsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
+  const router = useSafeRouter();
   const { projects } = useApp();
 
   const project = useMemo(() =>

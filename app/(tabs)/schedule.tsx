@@ -7,7 +7,8 @@ import { Calendar, X, BookOpen, Plus, Trash2, Check, Users, History, Download, C
 import { ScheduledTask, DailyLog, DailyLogTask, DailyLogPhoto, DailyTaskReminder } from '@/types';
 import * as Clipboard from 'expo-clipboard';
 import { Gesture, GestureDetector, ScrollView as GHScrollView } from 'react-native-gesture-handler';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 
 const SMS_API_BASE = process.env.EXPO_PUBLIC_API_URL || 'https://legacy-prime-workflow-suite.vercel.app';
 
@@ -187,7 +188,7 @@ const ZOOM_STEP = 0.1;
 
 export default function ScheduleScreen() {
   const { user, projects, dailyLogs, addDailyLog, loadScheduledTasks, addDailyTaskReminder, updateDailyTaskReminder, deleteDailyTaskReminder, getDailyTaskReminders, generateShareLink, disableShareLink, regenerateShareLink, getShareLinkByProject, updateScheduledTasks, scheduledTasks: contextScheduledTasks, subcontractors, company } = useApp();
-  const router = useRouter();
+  const router = useSafeRouter();
   const { projectId: paramProjectId } = useLocalSearchParams<{ projectId?: string }>();
   const insets = useSafeAreaInsets();
 

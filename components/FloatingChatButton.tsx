@@ -1,10 +1,11 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { MessageCircle } from 'lucide-react-native';
-import { useRouter, usePathname } from 'expo-router';
+import { usePathname } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useApp } from '@/contexts/AppContext';
 
 export default function FloatingChatButton() {
-  const router = useRouter();
+  const router = useSafeRouter();
   const pathname = usePathname();
   const { unreadChatCount, user } = useApp();
 

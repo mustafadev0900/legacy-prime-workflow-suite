@@ -1,10 +1,11 @@
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
-import { useRouter, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { ArrowLeft, CheckCircle, XCircle, AlertCircle } from 'lucide-react-native';
 import { useState } from 'react';
 
 export default function ApiTestScreen() {
-  const router = useRouter();
+  const router = useSafeRouter();
   const [testResults, setTestResults] = useState<{
     test: string;
     status: 'success' | 'error' | 'pending';

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Platform, NativeModules, AppState, AppStateStatus, Alert, Linking } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import { useRouter } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import type { Notification } from '@/types';
 
 // Track which conversation is currently open so foreground chat notifications
@@ -103,7 +103,7 @@ export function useNotificationSetup(
   company: NotificationSetupCompany | null,
   onNotificationReceived?: (notification: Notification) => void
 ) {
-  const router = useRouter();
+  const router = useSafeRouter();
   const notificationListener = useRef<Notifications.EventSubscription | null>(null);
   const responseListener     = useRef<Notifications.EventSubscription | null>(null);
 

@@ -10,7 +10,8 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
+import { useSafeRouter } from '@/hooks/useSafeRouter';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/contexts/AppContext';
 import { ScheduledTask, User } from '@/types';
@@ -64,7 +65,7 @@ function formatTaskDate(dateStr: string): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CrewScheduleScreen() {
-  const router = useRouter();
+  const router = useSafeRouter();
   const insets = useSafeAreaInsets();
   const { user, projects, company, scheduledTasks: contextTasks } = useApp();
 
